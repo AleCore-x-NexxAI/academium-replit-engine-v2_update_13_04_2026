@@ -1,0 +1,47 @@
+# SIMULEARN Engine Build Prompt for AI Agents
+
+## Your Mission
+You are building the SIMULEARN multi-agent simulation engine. I have uploaded **five specification documents** that define the entire system. **Read all of them completely before writing any code.** Reference them throughout the build to ensure consistency and completeness.
+
+## The Five Documents (Read All First)
+
+1. **01_System_Architecture.md** - High-level blueprint, tech stack, infrastructure, and deployment strategy.
+2. **02_Multi_Agent_Logic.md** - Agent definitions, prompts, roles, and orchestration patterns.
+3. **03_Backend_API_Schema.md** - REST endpoints, database schema (Drizzle ORM), and API contracts.
+4. **04_Frontend_UI_UX.md** - React component architecture, state management (Zustand), and UI structure.
+5. **05_Business_Domain_Rules.md** - KPIs, cause-and-effect logic, NPC personas, and simulation mechanics.
+
+## Build Principles
+
+- **Consistency First:** Every component must align with the architecture defined in Doc 1 and 3.
+- **Agent Fidelity:** Implement agents exactly as specified in Doc 2, including their prompts and interaction patterns.
+- **UI Coherence:** Build the frontend strictly following the component hierarchy in Doc 4.
+- **Domain Authenticity:** Embed the business rules from Doc 5 into the simulation logic—this is what makes it feel real.
+- **No Shortcuts:** If a spec says "implement X," implement it fully. Placeholders are not acceptable.
+
+## Build Order
+
+1. **Phase 1:** Scaffold the project structure and database schema (Docs 1 & 3).
+2. **Phase 2:** Implement the Python Agent Service and LangChain orchestration (Docs 1 & 2).
+3. **Phase 3:** Build the backend API endpoints (Doc 3).
+4. **Phase 4:** Create the React frontend components (Doc 4).
+5. **Phase 5:** Integrate business domain logic and refine agent prompts (Doc 5).
+
+## Key Constraints
+
+- Use the exact tech stack specified in Doc 1 (no substitutions).
+- Follow the database schema in Doc 3 precisely—no schema drift.
+- Implement all endpoints listed in Doc 3; do not omit any.
+- Use the exact agent names, roles, and prompts from Doc 2.
+- Embed the KPIs and cause-and-effect rules from Doc 5 into the simulation engine.
+
+## Success Criteria
+
+- All five documents are fully implemented and integrated.
+- No conflicts between documents; all specs are reconciled.
+- The system is production-ready and fully tested.
+- The simulation feels authentic and responsive to student decisions.
+
+---
+
+**Start by reading all five documents. Then ask clarifying questions if needed. Then build.**
