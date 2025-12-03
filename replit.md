@@ -166,4 +166,26 @@ The multi-agent system is implemented in JavaScript/TypeScript within the Expres
 
 ### File Storage
 
-Google Cloud Storage integration via `@google-cloud/storage` for potential document uploads (PDFs, case materials). Uses Replit sidecar authentication endpoint for credential exchange.
+Google Cloud Storage integration via `@google-cloud/storage` for PDF case study uploads in the Authoring Studio. Uses Replit sidecar authentication endpoint for credential exchange.
+
+## Recent Changes
+
+### December 2025
+- Added seed data system (3 sample business scenarios) for immediate testing
+- Implemented SessionResults page with final KPIs, competency radar chart, and decision replay
+- Added PDF upload functionality to Authoring Studio with Object Storage integration
+- Created Analytics Dashboard for professors with session metrics and competency heatmaps
+- Fixed API response parsing in mutations (apiRequest returns Response, needs .json())
+- Fixed router configuration (separate Switch blocks for auth/unauth states)
+- Fixed p-retry AbortError import (named export instead of pRetry.AbortError)
+
+## Key Routes
+
+| Route | Component | Access |
+|-------|-----------|--------|
+| `/` | Home | Authenticated |
+| `/simulation/start/:scenarioId` | SimulationStart | Authenticated |
+| `/simulation/:sessionId` | Simulation | Authenticated |
+| `/simulation/:sessionId/results` | SessionResults | Authenticated |
+| `/studio` | Studio | Professors only |
+| `/analytics` | Analytics | Professors only |
