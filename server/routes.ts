@@ -369,6 +369,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/users/role", isAuthenticated, async (req: any, res) => {
     try {
+      if (process.env.NODE_ENV !== "development") {
+        return res.status(403).json({ message: "Role switching is only available in development mode" });
+      }
+      
       const userId = req.user.claims.sub;
       
       const parseResult = updateRoleSchema.safeParse(req.body);
