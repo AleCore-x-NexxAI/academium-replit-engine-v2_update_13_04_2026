@@ -69,9 +69,25 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
   const intentCheck = await validateIntent(context.studentInput);
 
   if (!intentCheck.isValid) {
+    const clarificationText = intentCheck.clarificationNeeded || "Could you please clarify your intended action? I need to understand what decision you'd like to make.";
+    
+    const updatedHistory: HistoryEntry[] = [
+      ...context.history as HistoryEntry[],
+      {
+        role: "user",
+        content: context.studentInput,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        role: "system",
+        content: clarificationText,
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    
     return {
       narrative: {
-        text: intentCheck.clarificationNeeded || "Could you please clarify your intended action? I need to understand what decision you'd like to make.",
+        text: clarificationText,
         mood: "neutral",
       },
       kpiUpdates: {},
@@ -83,7 +99,7 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
       updatedState: {
         turnCount: context.turnCount,
         kpis: context.currentKpis,
-        history: context.history as HistoryEntry[],
+        history: updatedHistory,
         flags: [],
         rubricScores: {},
       },

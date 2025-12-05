@@ -241,6 +241,7 @@ export default function Simulation() {
             isProcessing={isProcessing}
             isGameOver={isGameOver}
             onViewResults={() => navigate(`/simulation/${sessionId}/results`)}
+            rubric={session.scenario?.rubric || undefined}
           />
         </main>
 

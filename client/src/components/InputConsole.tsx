@@ -4,6 +4,21 @@ import { Send, Lightbulb, BookOpen, Loader2, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+
+interface RubricCriterion {
+  name: string;
+  description: string;
+  weight: number;
+}
 
 interface InputConsoleProps {
   onSubmit: (text: string) => void;
@@ -12,6 +27,7 @@ interface InputConsoleProps {
   isProcessing: boolean;
   isGameOver: boolean;
   onViewResults?: () => void;
+  rubric?: { criteria: RubricCriterion[] };
 }
 
 export function InputConsole({
@@ -21,6 +37,7 @@ export function InputConsole({
   isProcessing,
   isGameOver,
   onViewResults,
+  rubric,
 }: InputConsoleProps) {
   const [input, setInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,16 +145,49 @@ export function InputConsole({
             )}
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isDisabled}
-            className="text-xs"
-            data-testid="button-review-rubric"
-          >
-            <BookOpen className="w-3 h-3 mr-1" />
-            Rubric
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                data-testid="button-review-rubric"
+              >
+                <BookOpen className="w-3 h-3 mr-1" />
+                Rubric
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Scoring Rubric</DialogTitle>
+                <DialogDescription>
+                  Your decisions will be evaluated on these criteria
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                {rubric?.criteria?.length ? (
+                  rubric.criteria.map((criterion, index) => (
+                    <div key={index} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{criterion.name}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {criterion.weight}%
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {criterion.description}
+                      </p>
+                      <Progress value={criterion.weight} className="h-1" />
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No rubric criteria available for this scenario.
+                  </p>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
