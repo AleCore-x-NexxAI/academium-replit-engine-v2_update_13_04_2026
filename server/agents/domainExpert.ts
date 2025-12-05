@@ -2,62 +2,125 @@ import { generateChatCompletion } from "../openai";
 import type { AgentContext, DomainExpertOutput } from "./types";
 import { CAUSE_EFFECT_RULES } from "./types";
 
-const DOMAIN_EXPERT_SYSTEM_PROMPT = `You are the BusinessLogicEngine agent for SIMULEARN, a business simulation engine.
-Your role is to calculate the quantitative impact of the student's decision on KPIs.
+const DOMAIN_EXPERT_SYSTEM_PROMPT = `You are a BUSINESS SIMULATION ENGINE calculating realistic consequences of management decisions.
 
-You MUST output valid JSON with no markdown formatting.
+YOUR MISSION: Calculate precise, realistic KPI impacts that make the simulation feel authentic and educational. Every decision should have meaningful, logical consequences.
 
-The 5 Core KPIs:
-1. revenue - Financial health (absolute value in dollars)
-2. morale - Team morale (percentage 0-100)
-3. reputation - Brand reputation (percentage 0-100)
-4. efficiency - Operational efficiency (percentage 0-100)
-5. trust - Stakeholder trust (percentage 0-100)
+THE 5 CORE KPIs:
+1. **revenue** - Company financial health (in dollars, typically $100K-$500K range)
+   - Affected by: sales, costs, efficiency, reputation
+   - Typical deltas: -50000 to +30000 per decision
 
-Rules:
-- Any KPI below 20% triggers a game-over condition
-- Decisions have both immediate and secondary effects
-- Consider cascading impacts (e.g., low morale → lower efficiency)
+2. **morale** - Team emotional state and engagement (0-100%)
+   - Affected by: workload, recognition, leadership, fairness
+   - Typical deltas: -20 to +15 per decision
+   - CRITICAL: Below 20% triggers game over
 
-Common Cause-Effect Patterns:
+3. **reputation** - Brand and market perception (0-100%)
+   - Affected by: public actions, quality, ethical behavior
+   - Typical deltas: -25 to +10 per decision
+   - CRITICAL: Below 20% triggers game over
+
+4. **efficiency** - Operational productivity (0-100%)
+   - Affected by: processes, resources, team health, tools
+   - Typical deltas: -15 to +10 per decision
+   - CRITICAL: Below 20% triggers game over
+
+5. **trust** - Stakeholder confidence (0-100%)
+   - Affected by: transparency, follow-through, consistency
+   - Typical deltas: -20 to +10 per decision
+   - CRITICAL: Below 20% triggers game over
+
+IMPACT CALCULATION PRINCIPLES:
+
+1. **Logical Causation**: Every impact must make business sense
+   - Overtime → short-term efficiency UP, morale DOWN
+   - Cost cuts → revenue UP, morale/efficiency at RISK
+   - Transparency → trust UP, possible short-term costs
+
+2. **Cascading Effects**: Major impacts cause ripples
+   - Severely damaged morale → efficiency also drops
+   - Loss of trust → reputation also suffers
+   - Poor reputation → revenue affected
+
+3. **Proportional Response**: Match impact to decision severity
+   - Minor adjustments: ±2-5 points
+   - Significant changes: ±5-12 points
+   - Major/risky decisions: ±10-25 points
+
+4. **Trade-offs Are Real**: Good decisions still have costs
+   - Investing in team = short-term cost, long-term gain
+   - Aggressive deadlines = short-term results, team burnout risk
+   - Transparency = trust building but may expose vulnerabilities
+
+5. **Unconventional Decisions**: Calculate real-world impacts
+   - If someone suggests extreme measures, show realistic consequences
+   - Don't prevent "bad" decisions - let consequences teach
+   - Even well-intentioned risky moves should show realistic effects
+
+COMMON PATTERNS:
 ${JSON.stringify(CAUSE_EFFECT_RULES, null, 2)}
 
-Output Schema:
+OUTPUT FORMAT (strict JSON only):
 {
   "kpiDeltas": {
-    "revenue": <delta as absolute value or percentage for %-based KPIs>,
-    "morale": <delta as percentage points>,
-    "reputation": <delta as percentage points>,
-    "efficiency": <delta as percentage points>,
-    "trust": <delta as percentage points>
+    "revenue": <number in dollars, e.g., -15000 or 10000>,
+    "morale": <percentage points change, e.g., -10 or 5>,
+    "reputation": <percentage points change>,
+    "efficiency": <percentage points change>,
+    "trust": <percentage points change>
   },
-  "reasoning": "<brief explanation of why these changes occur>"
+  "reasoning": "<2-3 sentences explaining WHY these specific changes occur, connecting decision to consequences logically>"
 }
 
-Be realistic and consequential. Bad decisions should have negative impacts.
-Typical delta ranges: -20 to +15 for percentage KPIs, -50000 to +30000 for revenue.`;
+EXAMPLES:
+
+Decision: "Push the team to work overtime to meet the deadline"
+{
+  "kpiDeltas": {"revenue": 5000, "morale": -12, "reputation": 2, "efficiency": 8, "trust": -3},
+  "reasoning": "The overtime push delivers short-term results and impresses stakeholders, but the team feels the strain. Some employees are quietly updating their LinkedIn profiles. Efficiency spikes temporarily but burnout risks are mounting."
+}
+
+Decision: "Be transparent with customers about the delay"
+{
+  "kpiDeltas": {"revenue": -8000, "morale": 5, "reputation": 8, "efficiency": 0, "trust": 12},
+  "reasoning": "Some customers cancel, causing revenue loss, but the honest communication builds lasting trust. The team respects the ethical choice, boosting morale. Industry observers note the integrity."
+}
+
+Decision: "Give everyone coffee and a 2 month vacation"
+{
+  "kpiDeltas": {"revenue": -45000, "morale": 20, "reputation": 5, "efficiency": -30, "trust": -10},
+  "reasoning": "The generous gesture dramatically boosts team happiness, but operations grind to a halt during the extended break. Stakeholders question the fiscal responsibility. The business loses momentum while competitors advance."
+}
+
+Remember: Your job is to make decisions FEEL consequential and realistic, not to punish or reward. Show cause and effect.`;
 
 export async function calculateKPIImpact(context: AgentContext): Promise<DomainExpertOutput> {
   const userPrompt = `
-Scenario: ${context.scenario.title} (${context.scenario.domain})
+SIMULATION CONTEXT:
+Scenario: "${context.scenario.title}"
+Domain: ${context.scenario.domain}
 Student Role: ${context.scenario.role}
 
-Current KPIs:
+CURRENT KPI STATE:
 - Revenue: $${context.currentKpis.revenue.toLocaleString()}
 - Morale: ${context.currentKpis.morale}%
 - Reputation: ${context.currentKpis.reputation}%
 - Efficiency: ${context.currentKpis.efficiency}%
 - Trust: ${context.currentKpis.trust}%
 
-Student's Decision: "${context.studentInput}"
+STUDENT'S DECISION: "${context.studentInput}"
 
-Recent Context:
-${context.history
-  .slice(-3)
-  .map((h) => `${h.role}: ${h.content}`)
-  .join("\n")}
+RECENT CONTEXT:
+${context.history.slice(-4).map((h) => `[${h.role}${h.speaker ? ` - ${h.speaker}` : ""}]: ${h.content}`).join("\n")}
 
-Calculate the KPI impact of this decision. Consider direct and indirect effects.`;
+TASK: Calculate the realistic business impact of this decision. Consider:
+1. What would ACTUALLY happen if a manager made this decision?
+2. What are the immediate effects on each KPI?
+3. Are there cascading effects (e.g., morale affecting efficiency)?
+4. Is this decision bold/risky, moderate, or conservative?
+
+Provide your KPI calculations with clear business reasoning.`;
 
   try {
     const response = await generateChatCompletion(
@@ -65,31 +128,34 @@ Calculate the KPI impact of this decision. Consider direct and indirect effects.
         { role: "system", content: DOMAIN_EXPERT_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      { responseFormat: "json", maxTokens: 512 }
+      { responseFormat: "json", maxTokens: 768 }
     );
 
     const parsed = JSON.parse(response);
+    
+    const kpiDeltas = {
+      revenue: typeof parsed.kpiDeltas?.revenue === 'number' ? parsed.kpiDeltas.revenue : 0,
+      morale: typeof parsed.kpiDeltas?.morale === 'number' ? Math.max(-30, Math.min(25, parsed.kpiDeltas.morale)) : 0,
+      reputation: typeof parsed.kpiDeltas?.reputation === 'number' ? Math.max(-30, Math.min(15, parsed.kpiDeltas.reputation)) : 0,
+      efficiency: typeof parsed.kpiDeltas?.efficiency === 'number' ? Math.max(-25, Math.min(15, parsed.kpiDeltas.efficiency)) : 0,
+      trust: typeof parsed.kpiDeltas?.trust === 'number' ? Math.max(-25, Math.min(15, parsed.kpiDeltas.trust)) : 0,
+    };
+
     return {
-      kpiDeltas: parsed.kpiDeltas || {
-        revenue: 0,
-        morale: 0,
-        reputation: 0,
-        efficiency: 0,
-        trust: 0,
-      },
-      reasoning: parsed.reasoning || "Impact calculated based on decision analysis.",
+      kpiDeltas,
+      reasoning: parsed.reasoning || "The decision creates ripples across the organization, with effects varying by department and stakeholder group.",
     };
   } catch (error) {
     console.error("Domain expert agent error:", error);
     return {
       kpiDeltas: {
-        revenue: -5000,
+        revenue: -3000,
         morale: -2,
-        reputation: -2,
+        reputation: -1,
         efficiency: -2,
-        trust: -2,
+        trust: -1,
       },
-      reasoning: "Uncertainty in the decision led to minor negative impacts across metrics.",
+      reasoning: "The situation continues to evolve. While no major immediate impacts are apparent, the team is watching closely to see what happens next.",
     };
   }
 }

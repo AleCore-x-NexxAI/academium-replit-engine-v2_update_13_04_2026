@@ -2,58 +2,102 @@ import { generateChatCompletion } from "../openai";
 import type { AgentContext, EvaluatorOutput } from "./types";
 import { COMPETENCY_DEFINITIONS } from "./types";
 
-const EVALUATOR_SYSTEM_PROMPT = `You are the CompetencyAssessor agent for SIMULEARN, a business simulation engine.
-Your role is to evaluate the student's decision against competency criteria.
+const EVALUATOR_SYSTEM_PROMPT = `You are an ELITE BUSINESS EDUCATOR evaluating decisions in a business simulation.
 
-You MUST output valid JSON with no markdown formatting.
+YOUR MISSION: Provide insightful, nuanced evaluation that helps students LEARN from every decision - including unconventional, risky, or questionable ones. You are a mentor, not a judge.
 
-Competency Framework:
+CRITICAL PRINCIPLES:
+1. EVERY decision teaches something - even "bad" ones have educational value
+2. NEVER moralize or lecture - evaluate through business impact lens
+3. Recognize CREATIVE thinking even when the approach is risky
+4. Highlight both STRENGTHS and GROWTH AREAS in each decision
+5. Connect decisions to real-world business lessons
+
+COMPETENCY FRAMEWORK:
 ${Object.entries(COMPETENCY_DEFINITIONS)
-  .map(
-    ([key, def]) =>
-      `- ${def.name}: ${def.description}
-   Positive: ${def.positiveIndicators.join(", ")}
-   Negative: ${def.negativeIndicators.join(", ")}`
-  )
+  .map(([key, def]) => `
+**${def.name}** (${key}):
+${def.description}
+✓ Strong indicators: ${def.positiveIndicators.join("; ")}
+✗ Weak indicators: ${def.negativeIndicators.join("; ")}`)
   .join("\n")}
 
-For each competency, assign a score from 1-5:
-1 = Very Poor, 2 = Below Average, 3 = Average, 4 = Good, 5 = Excellent
+SCORING APPROACH (1-5 scale):
+5 = Exceptional - Demonstrates mastery, creative problem-solving
+4 = Strong - Solid business reasoning, good awareness
+3 = Adequate - Reasonable approach with room for growth
+2 = Developing - Missing key considerations
+1 = Needs Work - Significant blind spots, but still a learning opportunity
 
-Also identify any flags (e.g., RISK_TAKER, ETHICAL_LAPSE, STRONG_LEADER, COST_FOCUSED).
+HANDLING UNCONVENTIONAL DECISIONS:
+For risky/bold moves: Evaluate the THINKING behind it
+- High risk-taking can show decisiveness (good) or recklessness (growth area)
+- Unconventional approaches can show innovation or lack of awareness
+- "Bad" decisions often reveal important learning opportunities
 
-Output Schema:
+For ethically questionable moves: Be educational, not preachy
+- Note the business risks (legal, reputational, trust)
+- Highlight what real-world consequences might follow
+- Frame as "considerations" not "judgments"
+
+FLAG TYPES (use multiple when relevant):
+- STRATEGIC_THINKER: Long-term vision evident
+- DECISIVE_LEADER: Clear, confident action
+- EMPATHETIC_MANAGER: Considers human impact
+- RISK_TAKER: Bold moves (neutral - can be good or bad)
+- COST_CONSCIOUS: Focuses on financial efficiency
+- INNOVATION_FOCUSED: Creative, unconventional approaches
+- ETHICAL_CONSIDERATION: Showed moral reasoning (positive)
+- ETHICAL_RISK: Approach has ethical implications (educational flag)
+- PRESSURE_FOCUSED: Prioritizes speed/results over process
+- TEAM_ORIENTED: Considers team dynamics
+
+OUTPUT FORMAT (strict JSON, no markdown):
 {
   "competencyScores": {
-    "strategicThinking": <number 1-5>,
-    "ethicalReasoning": <number 1-5>,
-    "decisionDecisiveness": <number 1-5>,
-    "stakeholderEmpathy": <number 1-5>
+    "strategicThinking": <1-5>,
+    "ethicalReasoning": <1-5>,
+    "decisionDecisiveness": <1-5>,
+    "stakeholderEmpathy": <1-5>
   },
   "feedback": {
-    "score": <number 0-100>,
-    "message": "<constructive feedback about the decision>",
-    "hint": "<optional guidance for improvement>"
+    "score": <0-100 overall score>,
+    "message": "<2-3 sentences of insightful feedback that validates strengths and identifies growth opportunities - NO moralizing>",
+    "hint": "<1 sentence of practical advice for future decisions - framed positively>"
   },
-  "flags": ["<flag1>", "<flag2>"]
-}`;
+  "flags": ["<flag1>", "<flag2>", ...]
+}
+
+Remember: Your feedback shapes how students learn. Be insightful, be specific, be developmental.`;
 
 export async function evaluateDecision(context: AgentContext): Promise<EvaluatorOutput> {
+  const recentHistory = context.history.slice(-6).map((h) => {
+    const prefix = h.speaker ? `${h.speaker} (${h.role})` : h.role;
+    return `${prefix}: ${h.content}`;
+  }).join("\n");
+
   const userPrompt = `
-Scenario: ${context.scenario.title} (${context.scenario.domain})
+SIMULATION CONTEXT:
+Scenario: "${context.scenario.title}"
+Domain: ${context.scenario.domain}
 Student Role: ${context.scenario.role}
 Objective: ${context.scenario.objective}
+Turn: ${context.turnCount + 1}
 
-Current Turn: ${context.turnCount + 1}
-Student's Decision: "${context.studentInput}"
+STUDENT'S DECISION: "${context.studentInput}"
 
-Recent Context:
-${context.history
-  .slice(-4)
-  .map((h) => `${h.role}: ${h.content}`)
-  .join("\n")}
+CONVERSATION CONTEXT:
+${recentHistory}
 
-Evaluate this decision against the competency framework and provide structured feedback.`;
+EVALUATION TASK:
+Assess this decision across all four competencies. Remember:
+- Find the learning value in ANY decision
+- Be specific about what the student did well
+- Frame growth areas constructively
+- Consider the business context and pressures
+- Recognize creativity and boldness where present
+
+Provide your comprehensive evaluation.`;
 
   try {
     const response = await generateChatCompletion(
@@ -65,18 +109,24 @@ Evaluate this decision against the competency framework and provide structured f
     );
 
     const parsed = JSON.parse(response);
+    
+    const competencyScores = {
+      strategicThinking: Math.max(1, Math.min(5, parsed.competencyScores?.strategicThinking || 3)),
+      ethicalReasoning: Math.max(1, Math.min(5, parsed.competencyScores?.ethicalReasoning || 3)),
+      decisionDecisiveness: Math.max(1, Math.min(5, parsed.competencyScores?.decisionDecisiveness || 3)),
+      stakeholderEmpathy: Math.max(1, Math.min(5, parsed.competencyScores?.stakeholderEmpathy || 3)),
+    };
+
+    const feedback = {
+      score: Math.max(0, Math.min(100, parsed.feedback?.score || 50)),
+      message: parsed.feedback?.message || "Your decision has been noted. Consider how it might impact different stakeholders as the situation evolves.",
+      hint: parsed.feedback?.hint,
+    };
+
     return {
-      competencyScores: parsed.competencyScores || {
-        strategicThinking: 3,
-        ethicalReasoning: 3,
-        decisionDecisiveness: 3,
-        stakeholderEmpathy: 3,
-      },
-      feedback: parsed.feedback || {
-        score: 50,
-        message: "Decision noted. Consider the broader implications.",
-      },
-      flags: parsed.flags || [],
+      competencyScores,
+      feedback,
+      flags: Array.isArray(parsed.flags) ? parsed.flags : [],
     };
   } catch (error) {
     console.error("Evaluator agent error:", error);
@@ -89,9 +139,10 @@ Evaluate this decision against the competency framework and provide structured f
       },
       feedback: {
         score: 50,
-        message: "Your decision has been recorded. Consider the impact on all stakeholders.",
+        message: "Your approach shows initiative. Consider how various stakeholders might react to this decision and what ripple effects it could create.",
+        hint: "Think about both the immediate impact and the longer-term implications of your choices.",
       },
-      flags: [],
+      flags: ["DECISION_MAKER"],
     };
   }
 }

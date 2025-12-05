@@ -5,31 +5,86 @@ import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative } from "./narrator";
 import { generateChatCompletion } from "../openai";
 
-const INTENT_VALIDATION_PROMPT = `You are validating a student's input in a business simulation.
-Determine if the input is:
-1. A valid attempt to make a decision or take action
-2. A clarifying question about the scenario
-3. Gibberish, off-topic, or inappropriate
+const INTENT_INTERPRETER_PROMPT = `You are an INTENT INTERPRETER for an immersive business simulation game.
 
-Output JSON:
+YOUR CRITICAL MISSION: Accept and interpret virtually ANYTHING the student says as a valid decision or action within the simulation context. You are NOT a gatekeeper - you are a creative interpreter.
+
+CORE PRINCIPLES:
+1. ASSUME POSITIVE INTENT - The student is trying to engage with the simulation
+2. BE MAXIMALLY PERMISSIVE - Accept typos, casual language, partial sentences, unconventional ideas
+3. INTERPRET CREATIVELY - Find the business decision hidden in any statement
+4. NEVER REJECT - Transform unclear inputs into actionable interpretations
+
+EXAMPLES OF VALID INTERPRETATIONS:
+- "ush developers to finish" → VALID: "Push developers to finish on deadline" (obvious typo)
+- "give them coffee everyday" → VALID: Improve workplace amenities/morale
+- "i dunno maybe delay it" → VALID: Consider delaying the project/deadline
+- "fire everyone lol" → VALID: Dramatic cost-cutting/restructuring (explore consequences)
+- "what if we just lie" → VALID: Questionable ethical approach (explore consequences)
+- "push through no matter what" → VALID: Aggressive deadline pursuit strategy
+- "that above is my decision" → VALID: Referencing their previous statement as their decision
+- "i just answered the question" → VALID: Their previous message was their intended action
+- Random/silly answers → VALID: Interpret as an unconventional business approach and show consequences
+
+INPUTS TO FLAG FOR CLARIFICATION (still rare):
+- Complete gibberish with zero interpretable meaning: "asdfghjkl"
+- Content promoting violence, illegal activities, or harassment that cannot be reframed as a business decision
+- Content completely unrelated to any professional/business context
+
+Note: Risky or ethically questionable BUSINESS decisions are VALID (e.g., "fire everyone", "lie to customers") - let consequences teach. Only flag truly harmful/off-topic content.
+
+OUTPUT FORMAT (JSON only):
 {
-  "isValid": true/false,
-  "type": "decision" | "question" | "invalid",
-  "clarificationNeeded": "<if invalid, what clarification to request>"
-}`;
+  "isValid": true,
+  "interpretedAction": "<clear description of what the student is trying to do>",
+  "confidence": "high" | "medium" | "low"
+}
 
-async function validateIntent(input: string): Promise<{ isValid: boolean; type: string; clarificationNeeded?: string }> {
+For the extremely rare invalid case:
+{
+  "isValid": false,
+  "helpfulPrompt": "<engaging question to get them back on track>"
+}
+
+Remember: A creative business simulation should be able to handle ANY decision and show interesting consequences. Your job is to enable play, not block it.`;
+
+async function interpretIntent(
+  input: string,
+  history: HistoryEntry[],
+  scenario: { title: string; context: string }
+): Promise<{ isValid: boolean; interpretedAction?: string; helpfulPrompt?: string }> {
   try {
+    const recentContext = history.slice(-4).map(h => `${h.role}: ${h.content}`).join("\n");
+    
     const response = await generateChatCompletion(
       [
-        { role: "system", content: INTENT_VALIDATION_PROMPT },
-        { role: "user", content: `Student input: "${input}"` },
+        { role: "system", content: INTENT_INTERPRETER_PROMPT },
+        { role: "user", content: `
+SCENARIO: ${scenario.title}
+SCENARIO CONTEXT: ${scenario.context}
+
+RECENT CONVERSATION:
+${recentContext}
+
+STUDENT'S LATEST INPUT: "${input}"
+
+Interpret this input as a simulation action. Find the business decision in their words.` },
       ],
       { responseFormat: "json", maxTokens: 256 }
     );
-    return JSON.parse(response);
+    
+    const parsed = JSON.parse(response);
+    
+    if (parsed.isValid === false && parsed.helpfulPrompt) {
+      return { isValid: false, helpfulPrompt: parsed.helpfulPrompt };
+    }
+    
+    return { 
+      isValid: true, 
+      interpretedAction: parsed.interpretedAction || input 
+    };
   } catch {
-    return { isValid: true, type: "decision" };
+    return { isValid: true, interpretedAction: input };
   }
 }
 
@@ -66,10 +121,15 @@ function checkGameOver(kpis: KPIs): boolean {
 }
 
 export async function processStudentTurn(context: AgentContext): Promise<DirectorOutput> {
-  const intentCheck = await validateIntent(context.studentInput);
+  const intentResult = await interpretIntent(
+    context.studentInput,
+    context.history as HistoryEntry[],
+    { title: context.scenario.title, context: `${context.scenario.domain} - ${context.scenario.objective}` }
+  );
 
-  if (!intentCheck.isValid) {
-    const clarificationText = intentCheck.clarificationNeeded || "Could you please clarify your intended action? I need to understand what decision you'd like to make.";
+  if (!intentResult.isValid) {
+    const helpPrompt = intentResult.helpfulPrompt || 
+      "I want to help you navigate this situation! What action would you like to take? You can try anything - negotiate, investigate, make bold moves, or even unconventional approaches.";
     
     const updatedHistory: HistoryEntry[] = [
       ...context.history as HistoryEntry[],
@@ -80,20 +140,20 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
       },
       {
         role: "system",
-        content: clarificationText,
+        content: helpPrompt,
         timestamp: new Date().toISOString(),
       },
     ];
     
     return {
       narrative: {
-        text: clarificationText,
+        text: helpPrompt,
         mood: "neutral",
       },
       kpiUpdates: {},
       feedback: {
         score: 0,
-        message: "Please provide a clear business decision or action.",
+        message: "Tell me what you want to do - I'll make it happen in the simulation!",
       },
       isGameOver: false,
       updatedState: {
@@ -106,15 +166,20 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
     };
   }
 
+  const interpretedContext = {
+    ...context,
+    studentInput: intentResult.interpretedAction || context.studentInput,
+  };
+
   const [evaluation, kpiImpact] = await Promise.all([
-    evaluateDecision(context),
-    calculateKPIImpact(context),
+    evaluateDecision(interpretedContext),
+    calculateKPIImpact(interpretedContext),
   ]);
 
   const newKpis = applyKPIDeltas(context.currentKpis, kpiImpact.kpiDeltas);
 
   const narrativeContext = {
-    ...context,
+    ...interpretedContext,
     currentKpis: newKpis,
   };
   const narrative = await generateNarrative(narrativeContext, kpiImpact, evaluation);

@@ -2,38 +2,58 @@ import { generateChatCompletion } from "../openai";
 import type { AgentContext, NarratorOutput, DomainExpertOutput, EvaluatorOutput } from "./types";
 import { NPC_PERSONAS } from "./types";
 
-const NARRATOR_SYSTEM_PROMPT = `You are the ScenarioWeaver agent for SIMULEARN, a business simulation engine.
-Your role is to generate immersive narrative responses that bring the simulation to life.
+const NARRATOR_SYSTEM_PROMPT = `You are the MASTER STORYTELLER for SIMULEARN, an elite business simulation engine used by top business schools.
 
-You MUST output valid JSON with no markdown formatting.
+YOUR MISSION: Create breathtakingly immersive, cinematic narrative responses that make every decision feel consequential and real. You are Steven Spielberg directing a business thriller.
 
-Style Guidelines:
-- Professional, high-stakes business tone
-- Immersive and engaging storytelling
-- Show, don't tell - describe reactions and consequences
-- Include NPC dialogue when appropriate
-- Max 150 words for the narrative
+CRITICAL RULES:
+1. NEVER break character or ask for clarification - ALWAYS advance the story
+2. EMBRACE unconventional decisions - they create the most dramatic stories
+3. Show CONSEQUENCES vividly - both good and bad decisions lead to interesting outcomes
+4. Use SENSORY details - describe what people see, hear, feel in the room
+5. Create TENSION and STAKES - every moment matters
+6. Make NPCs come ALIVE with distinct voices and reactions
 
-Available NPCs:
+NARRATIVE TECHNIQUES:
+- Open with action or reaction, not summary
+- Use present tense for immediacy ("The room goes silent...")
+- Include body language, facial expressions, environmental details
+- NPCs should have emotional reactions that feel authentic
+- End with a new challenge or decision point to maintain momentum
+- Balance showing consequences with presenting new opportunities
+
+HANDLING UNCONVENTIONAL/RISKY DECISIONS:
+When students make bold, unusual, or ethically questionable choices:
+- NEVER lecture or moralize in the narrative
+- Show realistic CONSEQUENCES through story
+- Let NPCs react authentically (shock, concern, enthusiasm)
+- Create interesting situations that explore the implications
+- The story should be educational through experience, not preaching
+
+For example, if a student says "push everyone to work 80-hour weeks":
+- Don't say "That's unethical" 
+- Instead, show exhausted faces, resignation letters appearing, productivity spikes followed by mistakes, etc.
+
+AVAILABLE NPCs (use them to create dynamic scenes):
 ${Object.entries(NPC_PERSONAS)
-  .map(([name, npc]) => `- ${name} (${npc.role}): ${npc.trait}. ${npc.prompt}`)
+  .map(([name, npc]) => `${npc.name} (${npc.role}): ${npc.trait}. Style: ${npc.prompt}`)
   .join("\n")}
 
-Mood Types:
-- neutral: Standard business situation
-- positive: Things are going well, progress being made
-- negative: Challenges arise, tension increases
-- crisis: Critical situation, high stakes
+MOOD MAPPING:
+- positive: Progress, wins, momentum, hope
+- negative: Setbacks, friction, warning signs
+- crisis: Breaking point, ultimatums, critical decisions
+- neutral: Information gathering, planning, steady state
 
-Output Schema:
+OUTPUT FORMAT (strict JSON only, no markdown):
 {
-  "text": "<narrative paragraph describing what happens next>",
-  "speaker": "<NPC name if someone speaks, or null>",
-  "mood": "<neutral|positive|negative|crisis>",
-  "suggestedOptions": ["<option 1>", "<option 2>", "<option 3>"]
+  "text": "<100-150 word immersive narrative with sensory details and NPC dialogue>",
+  "speaker": "<primary NPC name if dialogue-heavy, or null>",
+  "mood": "positive" | "negative" | "crisis" | "neutral",
+  "suggestedOptions": ["<specific option 1>", "<contrasting option 2>", "<bold option 3>"]
 }
 
-End narratives with a clear call to action for the next decision.`;
+Keep narratives punchy and impactful. Quality over quantity.`;
 
 export async function generateNarrative(
   context: AgentContext,
@@ -43,49 +63,61 @@ export async function generateNarrative(
   const selectNPC = (): string | null => {
     const input = context.studentInput.toLowerCase();
     const flags = evaluation.flags.join(" ").toLowerCase();
+    const kpiDeltas = kpiImpact.kpiDeltas;
 
-    if (input.includes("cost") || input.includes("budget") || input.includes("spend")) {
+    if (kpiDeltas.morale && kpiDeltas.morale <= -10) return "Sarah";
+    if (kpiDeltas.revenue && Math.abs(kpiDeltas.revenue) >= 10000) return "Marcus";
+    if (flags.includes("ethical") || flags.includes("questionable") || flags.includes("risky")) return "Alex";
+    if (kpiDeltas.efficiency && kpiDeltas.efficiency >= 5) return "Victor";
+    
+    if (input.includes("cost") || input.includes("budget") || input.includes("money") || input.includes("spend")) {
       return "Marcus";
     }
-    if (input.includes("team") || input.includes("employee") || kpiImpact.kpiDeltas.morale < -5) {
+    if (input.includes("team") || input.includes("employee") || input.includes("people") || input.includes("work") || input.includes("overtime")) {
       return "Sarah";
     }
-    if (input.includes("performance") || input.includes("result") || input.includes("deadline")) {
+    if (input.includes("deadline") || input.includes("launch") || input.includes("deliver") || input.includes("push") || input.includes("faster")) {
       return "Victor";
     }
-    if (flags.includes("ethical") || input.includes("right thing") || input.includes("honest")) {
+    if (input.includes("right") || input.includes("wrong") || input.includes("honest") || input.includes("lie") || input.includes("ethical")) {
       return "Alex";
     }
-    return null;
+    
+    const randomNPCs = ["Marcus", "Sarah", "Victor", "Alex"];
+    return randomNPCs[Math.floor(Math.random() * randomNPCs.length)];
   };
 
   const selectedNpc = selectNPC();
   const npcContext = selectedNpc ? NPC_PERSONAS[selectedNpc as keyof typeof NPC_PERSONAS] : null;
 
+  const kpiSummary = Object.entries(kpiImpact.kpiDeltas)
+    .filter(([_, v]) => v !== 0)
+    .map(([k, v]) => {
+      const direction = v > 0 ? "increased" : "decreased";
+      const intensity = Math.abs(v) >= 10 ? "significantly" : "slightly";
+      return `${k} ${intensity} ${direction}`;
+    })
+    .join(", ");
+
   const userPrompt = `
-Scenario: ${context.scenario.title} (${context.scenario.domain})
-Student Role: ${context.scenario.role}
-Turn: ${context.turnCount + 1}
+SCENARIO: "${context.scenario.title}"
+DOMAIN: ${context.scenario.domain}
+STUDENT ROLE: ${context.scenario.role}
+TURN NUMBER: ${context.turnCount + 1}
 
-Student's Decision: "${context.studentInput}"
+THE STUDENT'S DECISION: "${context.studentInput}"
 
-KPI Changes:
-${Object.entries(kpiImpact.kpiDeltas)
-  .filter(([_, v]) => v !== 0)
-  .map(([k, v]) => `- ${k}: ${v > 0 ? "+" : ""}${v}`)
-  .join("\n")}
-Reasoning: ${kpiImpact.reasoning}
+CONSEQUENCES HAPPENING:
+- KPI Changes: ${kpiSummary || "Subtle shifts in the landscape"}
+- Business Logic: ${kpiImpact.reasoning}
+- Evaluation Flags: ${evaluation.flags.length ? evaluation.flags.join(", ") : "Standard business decision"}
 
-Evaluation Flags: ${evaluation.flags.join(", ") || "None"}
+CURRENT SITUATION:
+${context.history.slice(-3).map((h) => `[${h.role}${h.speaker ? ` - ${h.speaker}` : ""}]: ${h.content}`).join("\n")}
 
-${
-  npcContext
-    ? `Include dialogue from ${npcContext.name} (${npcContext.role}): ${npcContext.prompt}`
-    : "No specific NPC dialogue required."
-}
+REQUIRED NPC: ${npcContext ? `Feature ${npcContext.name} (${npcContext.role}) prominently. Their personality: ${npcContext.trait}. Their style: ${npcContext.prompt}` : "Choose the most relevant NPC for this situation."}
 
-Write the next scene describing the consequences of this decision.
-Provide 2-3 suggested next actions the student might consider.`;
+WRITE: A vivid scene (100-150 words) showing the immediate aftermath. Include NPC reactions and end with a new challenge facing the student.`;
 
   try {
     const response = await generateChatCompletion(
@@ -93,25 +125,38 @@ Provide 2-3 suggested next actions the student might consider.`;
         { role: "system", content: NARRATOR_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      { responseFormat: "json", maxTokens: 1024 }
+      { responseFormat: "json", maxTokens: 800 }
     );
 
     const parsed = JSON.parse(response);
+    
+    const text = parsed.text || "The weight of your decision hangs in the air. Eyes turn to you, waiting for what comes next. The situation continues to evolve, and your next move will shape everything that follows.";
+    const suggestedOptions = parsed.suggestedOptions?.length 
+      ? parsed.suggestedOptions 
+      : [
+          "Take a moment to assess the situation carefully",
+          "Address the most pressing concern head-on",
+          "Make a bold, unexpected move"
+        ];
+
     return {
-      text: parsed.text || "The situation continues to develop...",
-      speaker: parsed.speaker || undefined,
+      text,
+      speaker: parsed.speaker || npcContext?.name || undefined,
       mood: parsed.mood || "neutral",
-      suggestedOptions: parsed.suggestedOptions || [],
+      suggestedOptions,
     };
   } catch (error) {
     console.error("Narrator agent error:", error);
+    
+    const fallbackNpc = npcContext?.name || "Sarah";
     return {
-      text: "Your decision has been noted. The consequences are beginning to unfold. What will you do next?",
+      text: `${fallbackNpc} pauses, taking in the implications of your decision. The room seems to hold its breath. "Interesting approach," ${fallbackNpc === "Victor" ? "he" : "she"} says carefully. "Let's see where this leads us." The team exchanges glances - some worried, some curious. Your move has set something in motion. What will you do to capitalize on this moment?`,
+      speaker: fallbackNpc,
       mood: "neutral",
       suggestedOptions: [
-        "Gather more information",
-        "Consult with the team",
-        "Take decisive action",
+        "Follow up with clear direction to the team",
+        "Gather more information before proceeding",
+        "Double down on your approach with confidence",
       ],
     };
   }
