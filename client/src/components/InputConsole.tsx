@@ -28,6 +28,12 @@ interface InputConsoleProps {
   isGameOver: boolean;
   onViewResults?: () => void;
   rubric?: { criteria: RubricCriterion[] };
+  currentFeedback?: {
+    score: number;
+    message: string;
+    hint?: string;
+  } | null;
+  onRequestHint?: () => Promise<string>;
 }
 
 export function InputConsole({
@@ -38,10 +44,27 @@ export function InputConsole({
   isGameOver,
   onViewResults,
   rubric,
+  currentFeedback,
+  onRequestHint,
 }: InputConsoleProps) {
   const [input, setInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingHint, setIsLoadingHint] = useState(false);
+  const [currentHint, setCurrentHint] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleRequestHint = async () => {
+    if (!onRequestHint || isLoadingHint) return;
+    setIsLoadingHint(true);
+    try {
+      const hint = await onRequestHint();
+      setCurrentHint(hint);
+    } catch (error) {
+      console.error("Failed to get hint:", error);
+    } finally {
+      setIsLoadingHint(false);
+    }
+  };
 
   useEffect(() => {
     if (!isProcessing && textareaRef.current) {
@@ -188,8 +211,81 @@ export function InputConsole({
               </div>
             </DialogContent>
           </Dialog>
+
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={handleRequestHint}
+                disabled={isLoadingHint || isGameOver}
+                data-testid="button-get-hint"
+              >
+                {isLoadingHint ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Lightbulb className="w-3 h-3 mr-1" />
+                )}
+                Hint
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md" data-testid="dialog-hint-content">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2" data-testid="text-hint-title">
+                  <Lightbulb className="w-5 h-5 text-chart-4" />
+                  Guidance
+                </DialogTitle>
+                <DialogDescription>
+                  Here's some guidance to help with your decision
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                {currentHint ? (
+                  <p className="text-sm leading-relaxed" data-testid="text-current-hint">{currentHint}</p>
+                ) : currentFeedback?.hint ? (
+                  <div className="space-y-3">
+                    <p className="text-sm leading-relaxed" data-testid="text-feedback-hint-dialog">{currentFeedback.hint}</p>
+                    {currentFeedback.message && (
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <p className="text-xs font-medium mb-1">Previous Feedback:</p>
+                        <p className="text-sm text-muted-foreground" data-testid="text-previous-feedback">{currentFeedback.message}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground" data-testid="text-default-hint">
+                    Consider the stakeholders involved - employees, customers, investors, and the broader community. 
+                    Think about both short-term gains and long-term consequences of your decisions.
+                  </p>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
+
+      {currentFeedback && !isGameOver && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-3 p-3 bg-muted/30 rounded-lg border xl:hidden"
+          data-testid="inline-feedback-panel"
+        >
+          <div className="flex items-start gap-2">
+            <Lightbulb className="w-4 h-4 text-chart-4 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium mb-1" data-testid="text-feedback-label">Feedback</p>
+              <p className="text-sm text-muted-foreground" data-testid="text-feedback-message">{currentFeedback.message}</p>
+              {currentFeedback.hint && (
+                <p className="text-xs text-muted-foreground italic mt-2" data-testid="text-feedback-hint">
+                  Hint: {currentFeedback.hint}
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {isGameOver && (
         <motion.div

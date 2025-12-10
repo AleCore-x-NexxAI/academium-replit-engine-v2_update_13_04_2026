@@ -327,6 +327,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/simulations/:sessionId/hint", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+      
+      const session = await storage.getSimulationSessionWithScenario(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const { generateChatCompletion } = await import("./openai");
+      
+      const recentHistory = session.currentState.history.slice(-4)
+        .map((h: HistoryEntry) => `${h.role}: ${h.content}`)
+        .join("\n");
+      
+      const hintPrompt = `You are a helpful business mentor in a simulation game.
+
+SCENARIO: ${session.scenario?.title || "Business Simulation"}
+OBJECTIVE: ${session.scenario?.initialState?.objective || "Navigate the challenge successfully"}
+ROLE: ${session.scenario?.initialState?.role || "Business Leader"}
+
+CURRENT SITUATION:
+${recentHistory}
+
+CURRENT KPIs:
+- Revenue: $${session.currentState.kpis.revenue.toLocaleString()}
+- Team Morale: ${session.currentState.kpis.morale}%
+- Reputation: ${session.currentState.kpis.reputation}%
+- Efficiency: ${session.currentState.kpis.efficiency}%
+- Trust: ${session.currentState.kpis.trust}%
+
+Provide a helpful, encouraging hint (2-3 sentences) that guides the student toward good decision-making without giving away the "answer." Focus on:
+- Key stakeholders they should consider
+- Trade-offs they might be missing
+- Questions they should ask themselves
+
+Be constructive and educational, not judgmental.`;
+
+      const hint = await generateChatCompletion([
+        { role: "user", content: hintPrompt },
+      ], { maxTokens: 256 });
+
+      res.json({ hint });
+    } catch (error) {
+      console.error("Error generating hint:", error);
+      res.status(500).json({ message: "Failed to generate hint" });
+    }
+  });
+
   app.get("/api/simulations/:sessionId/history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

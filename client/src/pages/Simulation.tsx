@@ -123,7 +123,7 @@ export default function Simulation() {
       addTurn(input, response);
       queryClient.invalidateQueries({ queryKey: ["/api/simulations", sessionId] });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       if (isUnauthorizedError(error as Error)) {
         toast({
           title: "Session Expired",
@@ -135,6 +135,16 @@ export default function Simulation() {
         }, 500);
         return;
       }
+      
+      const errorMessage = error?.data?.message || error?.message || "";
+      if (errorMessage.includes("not active") || errorMessage.includes("Session is not active")) {
+        toast({
+          title: "Simulation Complete",
+          description: "This simulation has ended. View your results to see how you did!",
+        });
+        return;
+      }
+      
       toast({
         title: "Error",
         description: "Failed to process your decision. Please try again.",
@@ -242,6 +252,12 @@ export default function Simulation() {
             isGameOver={isGameOver}
             onViewResults={() => navigate(`/simulation/${sessionId}/results`)}
             rubric={session.scenario?.rubric || undefined}
+            currentFeedback={currentFeedback}
+            onRequestHint={async () => {
+              const response = await apiRequest("POST", `/api/simulations/${sessionId}/hint`);
+              const data = await response.json();
+              return data.hint;
+            }}
           />
         </main>
 
