@@ -19,7 +19,10 @@ import {
   BookOpen,
   X,
   File,
+  Sparkles,
+  PenTool,
 } from "lucide-react";
+import AIAuthoringChat from "@/components/AIAuthoringChat";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -321,6 +324,222 @@ function PDFUploader({
         </>
       )}
     </div>
+  );
+}
+
+function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | undefined>();
+  const { toast } = useToast();
+
+  const form = useForm<ScenarioFormData>({
+    resolver: zodResolver(scenarioFormSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      domain: "",
+      difficultyLevel: "intermediate",
+      role: "",
+      objective: "",
+      introText: "",
+      companyName: "",
+      industry: "",
+      companySize: "",
+      situationBackground: "",
+      timelineContext: "",
+      industryContext: "",
+      competitiveEnvironment: "",
+      regulatoryEnvironment: "",
+      culturalContext: "",
+      resourceConstraints: "",
+      stakeholdersJson: "",
+      keyConstraintsText: "",
+      learningObjectivesText: "",
+      ethicalDimensionsText: "",
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: ScenarioFormData) => {
+      let stakeholders: Array<{name: string; role: string; interests: string; influence: "low" | "medium" | "high"}> = [];
+      if (data.stakeholdersJson) {
+        try {
+          stakeholders = JSON.parse(data.stakeholdersJson);
+        } catch (e) {
+          stakeholders = data.stakeholdersJson.split("\n")
+            .filter(line => line.trim())
+            .map(line => {
+              const parts = line.split("-").map(p => p.trim());
+              return {
+                name: parts[0] || "Stakeholder",
+                role: parts[1] || "Role",
+                interests: parts[2] || "Interests",
+                influence: "medium" as const,
+              };
+            });
+        }
+      }
+      
+      const parseTextList = (text?: string) => 
+        text?.split("\n").filter(line => line.trim()).map(line => line.trim()) || [];
+      
+      return await apiRequest("POST", "/api/scenarios", {
+        title: data.title,
+        description: data.description,
+        domain: data.domain,
+        initialState: {
+          role: data.role,
+          objective: data.objective,
+          introText: data.introText,
+          kpis: {
+            revenue: 100000,
+            morale: 75,
+            reputation: 75,
+            efficiency: 75,
+            trust: 75,
+          },
+          caseStudyUrl: uploadedFile?.url,
+          companyName: data.companyName || undefined,
+          industry: data.industry || undefined,
+          companySize: data.companySize || undefined,
+          situationBackground: data.situationBackground || undefined,
+          timelineContext: data.timelineContext || undefined,
+          industryContext: data.industryContext || undefined,
+          competitiveEnvironment: data.competitiveEnvironment || undefined,
+          regulatoryEnvironment: data.regulatoryEnvironment || undefined,
+          culturalContext: data.culturalContext || undefined,
+          resourceConstraints: data.resourceConstraints || undefined,
+          difficultyLevel: data.difficultyLevel,
+          stakeholders: stakeholders.length > 0 ? stakeholders : undefined,
+          keyConstraints: parseTextList(data.keyConstraintsText).length > 0 ? parseTextList(data.keyConstraintsText) : undefined,
+          learningObjectives: parseTextList(data.learningObjectivesText).length > 0 ? parseTextList(data.learningObjectivesText) : undefined,
+          ethicalDimensions: parseTextList(data.ethicalDimensionsText).length > 0 ? parseTextList(data.ethicalDimensionsText) : undefined,
+        },
+        isPublished: true,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Scenario created successfully" });
+      form.reset();
+      setUploadedFile(undefined);
+      onSuccess();
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error as Error)) {
+        toast({ title: "Session Expired", description: "Please sign in again.", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/api/login"; }, 500);
+        return;
+      }
+      toast({ title: "Error", description: "Failed to create scenario", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit((data) => createMutation.mutate(data))}
+        className="space-y-6"
+      >
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Scenario Title *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., The Data Breach Crisis" {...field} data-testid="input-scenario-title-manual" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="domain"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Domain *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-domain-manual">
+                        <SelectValue placeholder="Select a domain" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {DOMAINS.map((domain) => (
+                        <SelectItem key={domain} value={domain}>{domain}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description *</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="Brief overview of what students will experience..." className="min-h-20" {...field} data-testid="input-description-manual" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="role"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Player Role *</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., Chief Marketing Officer" {...field} data-testid="input-role-manual" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="objective"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Objective *</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="What must the player accomplish?" className="min-h-16" {...field} data-testid="input-objective-manual" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="introText"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Opening Narrative *</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="The immersive introduction students will read..." className="min-h-24" {...field} data-testid="input-intro-manual" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-manual">
+            {createMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+            Create Scenario
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }
 
@@ -1046,8 +1265,11 @@ function ScenarioListItem({
   );
 }
 
+type AuthoringMode = "list" | "manual" | "ai-assisted";
+
 export default function Studio() {
   const [, navigate] = useLocation();
+  const [authoringMode, setAuthoringMode] = useState<AuthoringMode>("list");
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -1106,6 +1328,11 @@ export default function Studio() {
     );
   }
 
+  const handleAIPublished = () => {
+    setAuthoringMode("list");
+    refetch();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 bg-background z-50">
@@ -1114,7 +1341,13 @@ export default function Studio() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/")}
+              onClick={() => {
+                if (authoringMode !== "list") {
+                  setAuthoringMode("list");
+                } else {
+                  navigate("/");
+                }
+              }}
               data-testid="button-back-home"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -1125,50 +1358,129 @@ export default function Studio() {
             </div>
           </div>
 
-          <CreateScenarioDialog onSuccess={() => refetch()} />
+          {authoringMode === "list" && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setAuthoringMode("ai-assisted")}
+                data-testid="button-ai-authoring"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                AI Assistant
+              </Button>
+              <CreateScenarioDialog onSuccess={() => refetch()} />
+            </div>
+          )}
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-2xl font-bold mb-2">Your Scenarios</h1>
-          <p className="text-muted-foreground">
-            Create and manage business simulation scenarios for your students.
-          </p>
-        </motion.div>
+        <AnimatePresence mode="wait">
+          {authoringMode === "ai-assisted" ? (
+            <motion.div
+              key="ai-chat"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="h-[calc(100vh-12rem)]"
+            >
+              <AIAuthoringChat
+                onScenarioPublished={handleAIPublished}
+                onClose={() => setAuthoringMode("list")}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="scenario-list"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <div className="mb-8">
+                <h1 className="text-2xl font-bold mb-2">Your Scenarios</h1>
+                <p className="text-muted-foreground">
+                  Create and manage business simulation scenarios for your students.
+                </p>
+              </div>
 
-        {scenariosLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 rounded-lg" />
-            ))}
-          </div>
-        ) : scenarios && scenarios.length > 0 ? (
-          <div className="space-y-4">
-            {scenarios.map((scenario) => (
-              <motion.div
-                key={scenario.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <ScenarioListItem scenario={scenario} onDelete={() => refetch()} />
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <Card className="p-12 text-center">
-            <BookOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-            <h3 className="text-lg font-medium mb-2">No Scenarios Yet</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Create your first scenario to start building simulations.
-            </p>
-            <CreateScenarioDialog onSuccess={() => refetch()} />
-          </Card>
-        )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <Card
+                  className="p-6 cursor-pointer hover-elevate border-2 border-transparent hover:border-primary/20"
+                  onClick={() => setAuthoringMode("ai-assisted")}
+                  data-testid="card-ai-authoring-mode"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold mb-1">AI-Assisted Creation</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Chat with AI to generate rich scenarios from case studies, documents, or descriptions.
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card
+                  className="p-6 cursor-pointer hover-elevate border-2 border-transparent hover:border-primary/20"
+                  data-testid="card-manual-authoring-mode"
+                >
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <PenTool className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold mb-1">Manual Creation</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Build a scenario from scratch using the comprehensive form with all fields.
+                          </p>
+                        </div>
+                      </div>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Create New Scenario</DialogTitle>
+                      </DialogHeader>
+                      <ManualScenarioForm onSuccess={() => { refetch(); }} />
+                    </DialogContent>
+                  </Dialog>
+                </Card>
+              </div>
+
+              {scenariosLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-24 rounded-lg" />
+                  ))}
+                </div>
+              ) : scenarios && scenarios.length > 0 ? (
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold">Published Scenarios</h2>
+                  {scenarios.map((scenario) => (
+                    <motion.div
+                      key={scenario.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      <ScenarioListItem scenario={scenario} onDelete={() => refetch()} />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <Card className="p-12 text-center">
+                  <BookOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                  <h3 className="text-lg font-medium mb-2">No Scenarios Yet</h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Use AI assistance or manual creation above to build your first scenario.
+                  </p>
+                </Card>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

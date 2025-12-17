@@ -7,7 +7,7 @@ import { processStudentTurn } from "./agents/director";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import type { AgentContext } from "./agents/types";
-import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage } from "@shared/schema";
+import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage, GeneratedScenarioData } from "@shared/schema";
 import { 
   extractInsights, 
   generateScenario, 
@@ -661,10 +661,12 @@ Be constructive and educational, not judgmental.`;
         timestamp: new Date().toISOString(),
       };
 
-      await storage.addDraftMessage(draftId, userMessage);
+      const draftAfterUserMessage = await storage.addDraftMessage(draftId, userMessage);
+      if (!draftAfterUserMessage) {
+        return res.status(500).json({ message: "Failed to save message" });
+      }
 
-      const currentHistory = (draft.conversationHistory || []) as DraftConversationMessage[];
-      const updatedHistory = [...currentHistory, userMessage];
+      const updatedHistory = draftAfterUserMessage.conversationHistory as DraftConversationMessage[];
 
       let assistantResponse: string;
       let updatedScenario = draft.generatedScenario;
@@ -757,17 +759,18 @@ Be constructive and educational, not judgmental.`;
         return res.status(403).json({ message: "Not authorized" });
       }
 
-      if (!draft.generatedScenario) {
-        return res.status(400).json({ message: "No scenario to publish" });
+      const generatedScenario = draft.generatedScenario as GeneratedScenarioData | null;
+      if (!generatedScenario || !generatedScenario.title || !generatedScenario.initialState) {
+        return res.status(400).json({ message: "No complete scenario to publish" });
       }
 
       const scenario = await storage.createScenario({
         authorId: userId,
-        title: draft.generatedScenario.title,
-        description: draft.generatedScenario.description,
-        domain: draft.generatedScenario.domain,
-        initialState: draft.generatedScenario.initialState,
-        rubric: draft.generatedScenario.rubric,
+        title: generatedScenario.title,
+        description: generatedScenario.description,
+        domain: generatedScenario.domain,
+        initialState: generatedScenario.initialState,
+        rubric: generatedScenario.rubric,
         isPublished: true,
       });
 
