@@ -96,11 +96,32 @@ Decision: "Give everyone coffee and a 2 month vacation"
 Remember: Your job is to make decisions FEEL consequential and realistic, not to punish or reward. Show cause and effect.`;
 
 export async function calculateKPIImpact(context: AgentContext): Promise<DomainExpertOutput> {
+  // Build rich context from enhanced scenario data
+  const industryInfo = [];
+  if (context.scenario.industry) industryInfo.push(`Industry: ${context.scenario.industry}`);
+  if (context.scenario.companySize) industryInfo.push(`Company Size: ${context.scenario.companySize}`);
+  if (context.scenario.companyName) industryInfo.push(`Company: ${context.scenario.companyName}`);
+  
+  const environmentInfo = [];
+  if (context.scenario.industryContext) environmentInfo.push(`Industry dynamics: ${context.scenario.industryContext}`);
+  if (context.scenario.competitiveEnvironment) environmentInfo.push(`Competition: ${context.scenario.competitiveEnvironment}`);
+  if (context.scenario.regulatoryEnvironment) environmentInfo.push(`Regulations: ${context.scenario.regulatoryEnvironment}`);
+  if (context.scenario.resourceConstraints) environmentInfo.push(`Resources: ${context.scenario.resourceConstraints}`);
+  
+  const constraintsInfo = context.scenario.keyConstraints?.length
+    ? `CONSTRAINTS: ${context.scenario.keyConstraints.join("; ")}`
+    : "";
+
   const userPrompt = `
 SIMULATION CONTEXT:
 Scenario: "${context.scenario.title}"
 Domain: ${context.scenario.domain}
+${industryInfo.length > 0 ? industryInfo.join(" | ") : ""}
 Student Role: ${context.scenario.role}
+Difficulty: ${context.scenario.difficultyLevel || "intermediate"}
+
+${environmentInfo.length > 0 ? `BUSINESS ENVIRONMENT:\n${environmentInfo.join("\n")}\n` : ""}
+${constraintsInfo}
 
 CURRENT KPI STATE:
 - Revenue: $${context.currentKpis.revenue.toLocaleString()}
@@ -115,12 +136,14 @@ RECENT CONTEXT:
 ${context.history.slice(-4).map((h) => `[${h.role}${h.speaker ? ` - ${h.speaker}` : ""}]: ${h.content}`).join("\n")}
 
 TASK: Calculate the realistic business impact of this decision. Consider:
-1. What would ACTUALLY happen if a manager made this decision?
-2. What are the immediate effects on each KPI?
-3. Are there cascading effects (e.g., morale affecting efficiency)?
-4. Is this decision bold/risky, moderate, or conservative?
+1. What would ACTUALLY happen in THIS specific industry/company context?
+2. How do the BUSINESS ENVIRONMENT factors affect the impact?
+3. What are the immediate effects on each KPI?
+4. Are there cascading effects (e.g., morale affecting efficiency)?
+5. Does this violate any CONSTRAINTS and what are the consequences?
+6. Scale impacts to the ${context.scenario.difficultyLevel || "intermediate"} difficulty level
 
-Provide your KPI calculations with clear business reasoning.`;
+Provide your KPI calculations with clear business reasoning that references the specific context.`;
 
   try {
     const response = await generateChatCompletion(

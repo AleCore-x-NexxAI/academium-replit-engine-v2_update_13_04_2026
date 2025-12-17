@@ -25,6 +25,27 @@ const createScenarioSchema = z.object({
       trust: z.number(),
     }),
     caseStudyUrl: z.string().optional(),
+    // Enhanced scenario context for AI tailoring
+    companyName: z.string().optional(),
+    industry: z.string().optional(),
+    companySize: z.string().optional(),
+    situationBackground: z.string().optional(),
+    stakeholders: z.array(z.object({
+      name: z.string(),
+      role: z.string(),
+      interests: z.string(),
+      influence: z.enum(["low", "medium", "high"]),
+    })).optional(),
+    keyConstraints: z.array(z.string()).optional(),
+    learningObjectives: z.array(z.string()).optional(),
+    difficultyLevel: z.enum(["beginner", "intermediate", "advanced"]).optional(),
+    timelineContext: z.string().optional(),
+    ethicalDimensions: z.array(z.string()).optional(),
+    industryContext: z.string().optional(),
+    competitiveEnvironment: z.string().optional(),
+    resourceConstraints: z.string().optional(),
+    culturalContext: z.string().optional(),
+    regulatoryEnvironment: z.string().optional(),
   }),
   rubric: z.object({
     criteria: z.array(z.object({
@@ -269,6 +290,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Session is not active" });
       }
 
+      const initialState = session.scenario?.initialState;
       const context: AgentContext = {
         sessionId,
         turnCount: session.currentState.turnCount,
@@ -279,8 +301,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         scenario: {
           title: session.scenario?.title || "Business Simulation",
           domain: session.scenario?.domain || "General",
-          role: session.scenario?.initialState?.role || "Business Leader",
-          objective: session.scenario?.initialState?.objective || "Navigate the challenge",
+          role: initialState?.role || "Business Leader",
+          objective: initialState?.objective || "Navigate the challenge",
+          // Enhanced context for AI tailoring
+          companyName: initialState?.companyName,
+          industry: initialState?.industry,
+          companySize: initialState?.companySize,
+          situationBackground: initialState?.situationBackground,
+          stakeholders: initialState?.stakeholders,
+          keyConstraints: initialState?.keyConstraints,
+          learningObjectives: initialState?.learningObjectives,
+          difficultyLevel: initialState?.difficultyLevel,
+          timelineContext: initialState?.timelineContext,
+          ethicalDimensions: initialState?.ethicalDimensions,
+          industryContext: initialState?.industryContext,
+          competitiveEnvironment: initialState?.competitiveEnvironment,
+          resourceConstraints: initialState?.resourceConstraints,
+          culturalContext: initialState?.culturalContext,
+          regulatoryEnvironment: initialState?.regulatoryEnvironment,
         },
       };
 

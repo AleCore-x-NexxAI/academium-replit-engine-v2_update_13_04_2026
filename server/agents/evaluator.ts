@@ -76,13 +76,36 @@ export async function evaluateDecision(context: AgentContext): Promise<Evaluator
     return `${prefix}: ${h.content}`;
   }).join("\n");
 
+  // Build rich context from enhanced scenario data
+  const learningGoals = context.scenario.learningObjectives?.length
+    ? `LEARNING OBJECTIVES: ${context.scenario.learningObjectives.join("; ")}`
+    : "";
+  const ethicsContext = context.scenario.ethicalDimensions?.length
+    ? `ETHICAL DIMENSIONS TO CONSIDER: ${context.scenario.ethicalDimensions.join("; ")}`
+    : "";
+  const stakeholderContext = context.scenario.stakeholders?.length
+    ? `KEY STAKEHOLDERS: ${context.scenario.stakeholders.map(s => `${s.name} (${s.role})`).join(", ")}`
+    : "";
+  const constraintsContext = context.scenario.keyConstraints?.length
+    ? `CONSTRAINTS: ${context.scenario.keyConstraints.join("; ")}`
+    : "";
+
   const userPrompt = `
 SIMULATION CONTEXT:
 Scenario: "${context.scenario.title}"
 Domain: ${context.scenario.domain}
+${context.scenario.companyName ? `Company: ${context.scenario.companyName}` : ""}
+${context.scenario.industry ? `Industry: ${context.scenario.industry}` : ""}
 Student Role: ${context.scenario.role}
 Objective: ${context.scenario.objective}
+Difficulty: ${context.scenario.difficultyLevel || "intermediate"}
 Turn: ${context.turnCount + 1}
+
+${learningGoals}
+${ethicsContext}
+${stakeholderContext}
+${constraintsContext}
+${context.scenario.situationBackground ? `SITUATION: ${context.scenario.situationBackground}` : ""}
 
 STUDENT'S DECISION: "${context.studentInput}"
 
@@ -91,11 +114,13 @@ ${recentHistory}
 
 EVALUATION TASK:
 Assess this decision across all four competencies. Remember:
-- Find the learning value in ANY decision
+- Evaluate against the specific LEARNING OBJECTIVES if provided
+- Consider the ETHICAL DIMENSIONS relevant to this scenario
+- Note how well the student considered KEY STAKEHOLDERS
+- Account for CONSTRAINTS the student had to work within
 - Be specific about what the student did well
 - Frame growth areas constructively
-- Consider the business context and pressures
-- Recognize creativity and boldness where present
+- Match evaluation rigor to the DIFFICULTY level
 
 Provide your comprehensive evaluation.`;
 

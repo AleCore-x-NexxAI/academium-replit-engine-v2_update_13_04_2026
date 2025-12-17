@@ -99,11 +99,46 @@ export async function generateNarrative(
     })
     .join(", ");
 
+  // Build rich context from enhanced scenario data
+  const scenarioContext = [];
+  if (context.scenario.companyName) scenarioContext.push(`Company: ${context.scenario.companyName}`);
+  if (context.scenario.industry) scenarioContext.push(`Industry: ${context.scenario.industry}`);
+  if (context.scenario.companySize) scenarioContext.push(`Company Size: ${context.scenario.companySize}`);
+  if (context.scenario.timelineContext) scenarioContext.push(`Timeline: ${context.scenario.timelineContext}`);
+  
+  const environmentContext = [];
+  if (context.scenario.industryContext) environmentContext.push(`Industry Dynamics: ${context.scenario.industryContext}`);
+  if (context.scenario.competitiveEnvironment) environmentContext.push(`Competitive Landscape: ${context.scenario.competitiveEnvironment}`);
+  if (context.scenario.regulatoryEnvironment) environmentContext.push(`Regulations: ${context.scenario.regulatoryEnvironment}`);
+  if (context.scenario.culturalContext) environmentContext.push(`Cultural Factors: ${context.scenario.culturalContext}`);
+  if (context.scenario.resourceConstraints) environmentContext.push(`Resources: ${context.scenario.resourceConstraints}`);
+  
+  const stakeholderInfo = context.scenario.stakeholders?.length 
+    ? `KEY STAKEHOLDERS:\n${context.scenario.stakeholders.map(s => `- ${s.name} (${s.role}): ${s.interests} [${s.influence} influence]`).join("\n")}`
+    : "";
+    
+  const constraintsInfo = context.scenario.keyConstraints?.length
+    ? `CONSTRAINTS: ${context.scenario.keyConstraints.join("; ")}`
+    : "";
+    
+  const ethicsInfo = context.scenario.ethicalDimensions?.length
+    ? `ETHICAL CONSIDERATIONS: ${context.scenario.ethicalDimensions.join("; ")}`
+    : "";
+
   const userPrompt = `
 SCENARIO: "${context.scenario.title}"
 DOMAIN: ${context.scenario.domain}
+${scenarioContext.length > 0 ? scenarioContext.join(" | ") : ""}
 STUDENT ROLE: ${context.scenario.role}
+OBJECTIVE: ${context.scenario.objective}
+DIFFICULTY: ${context.scenario.difficultyLevel || "intermediate"}
 TURN NUMBER: ${context.turnCount + 1}
+
+${context.scenario.situationBackground ? `SITUATION BACKGROUND:\n${context.scenario.situationBackground}\n` : ""}
+${environmentContext.length > 0 ? `ENVIRONMENT:\n${environmentContext.join("\n")}\n` : ""}
+${stakeholderInfo}
+${constraintsInfo}
+${ethicsInfo}
 
 THE STUDENT'S DECISION: "${context.studentInput}"
 
@@ -112,12 +147,13 @@ CONSEQUENCES HAPPENING:
 - Business Logic: ${kpiImpact.reasoning}
 - Evaluation Flags: ${evaluation.flags.length ? evaluation.flags.join(", ") : "Standard business decision"}
 
-CURRENT SITUATION:
+RECENT HISTORY:
 ${context.history.slice(-3).map((h) => `[${h.role}${h.speaker ? ` - ${h.speaker}` : ""}]: ${h.content}`).join("\n")}
 
+${stakeholderInfo ? "Use the SCENARIO STAKEHOLDERS above as NPCs if defined. Otherwise use:" : ""}
 REQUIRED NPC: ${npcContext ? `Feature ${npcContext.name} (${npcContext.role}) prominently. Their personality: ${npcContext.trait}. Their style: ${npcContext.prompt}` : "Choose the most relevant NPC for this situation."}
 
-WRITE: A vivid scene (100-150 words) showing the immediate aftermath. Include NPC reactions and end with a new challenge facing the student.`;
+WRITE: A vivid scene (100-150 words) showing the immediate aftermath. Reference specific stakeholders, constraints, and environment details to make it feel authentic and tailored. Include NPC reactions and end with a new challenge.`;
 
   try {
     const response = await generateChatCompletion(

@@ -125,6 +125,29 @@ export interface InitialState {
   role: string;
   objective: string;
   caseStudyUrl?: string;
+  // Enhanced scenario context for AI tailoring
+  companyName?: string;
+  industry?: string;
+  companySize?: string; // "startup", "small", "medium", "large", "enterprise"
+  situationBackground?: string; // Detailed background on the crisis/situation
+  stakeholders?: Stakeholder[];
+  keyConstraints?: string[]; // Budget limits, time pressure, regulations, etc.
+  learningObjectives?: string[]; // What students should learn
+  difficultyLevel?: "beginner" | "intermediate" | "advanced";
+  timelineContext?: string; // "immediate crisis", "3-month project", etc.
+  ethicalDimensions?: string[]; // Ethical considerations in this scenario
+  industryContext?: string; // Specific industry dynamics
+  competitiveEnvironment?: string;
+  resourceConstraints?: string;
+  culturalContext?: string;
+  regulatoryEnvironment?: string;
+}
+
+export interface Stakeholder {
+  name: string;
+  role: string;
+  interests: string;
+  influence: "low" | "medium" | "high";
 }
 
 export interface RubricCriterion {

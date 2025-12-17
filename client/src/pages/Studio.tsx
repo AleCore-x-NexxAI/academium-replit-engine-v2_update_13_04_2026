@@ -55,12 +55,40 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Scenario } from "@shared/schema";
 
 const scenarioFormSchema = z.object({
+  // Basic Info
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   domain: z.string().min(1, "Please select a domain"),
+  difficultyLevel: z.enum(["beginner", "intermediate", "advanced"]).default("intermediate"),
+  
+  // Player Context
   role: z.string().min(3, "Role must be at least 3 characters"),
   objective: z.string().min(10, "Objective must be at least 10 characters"),
   introText: z.string().min(20, "Introduction must be at least 20 characters"),
+  
+  // Company Context
+  companyName: z.string().optional(),
+  industry: z.string().optional(),
+  companySize: z.string().optional(),
+  
+  // Situation Details
+  situationBackground: z.string().optional(),
+  timelineContext: z.string().optional(),
+  
+  // Environment
+  industryContext: z.string().optional(),
+  competitiveEnvironment: z.string().optional(),
+  regulatoryEnvironment: z.string().optional(),
+  culturalContext: z.string().optional(),
+  resourceConstraints: z.string().optional(),
+  
+  // Stakeholders (as JSON string for form handling)
+  stakeholdersJson: z.string().optional(),
+  
+  // Constraints & Learning
+  keyConstraintsText: z.string().optional(),
+  learningObjectivesText: z.string().optional(),
+  ethicalDimensionsText: z.string().optional(),
 });
 
 type ScenarioFormData = z.infer<typeof scenarioFormSchema>;
@@ -73,6 +101,42 @@ const DOMAINS = [
   "Crisis",
   "Finance",
   "Operations",
+  "Leadership",
+  "Sustainability",
+  "Innovation",
+  "Mergers & Acquisitions",
+  "Supply Chain",
+];
+
+const INDUSTRIES = [
+  "Technology",
+  "Healthcare",
+  "Finance",
+  "Manufacturing",
+  "Retail",
+  "Education",
+  "Non-profit",
+  "Energy",
+  "Media & Entertainment",
+  "Real Estate",
+  "Transportation",
+  "Hospitality",
+  "Agriculture",
+  "Government",
+];
+
+const COMPANY_SIZES = [
+  { value: "startup", label: "Startup (1-50 employees)" },
+  { value: "small", label: "Small Business (51-200)" },
+  { value: "medium", label: "Medium Enterprise (201-1000)" },
+  { value: "large", label: "Large Corporation (1001-10000)" },
+  { value: "enterprise", label: "Enterprise (10000+)" },
+];
+
+const DIFFICULTY_LEVELS = [
+  { value: "beginner", label: "Beginner - Clear choices, forgiving outcomes" },
+  { value: "intermediate", label: "Intermediate - Trade-offs and complexity" },
+  { value: "advanced", label: "Advanced - Ambiguous situations, high stakes" },
 ];
 
 interface UploadedFile {
@@ -271,14 +335,54 @@ function CreateScenarioDialog({ onSuccess }: { onSuccess: () => void }) {
       title: "",
       description: "",
       domain: "",
+      difficultyLevel: "intermediate",
       role: "",
       objective: "",
       introText: "",
+      companyName: "",
+      industry: "",
+      companySize: "",
+      situationBackground: "",
+      timelineContext: "",
+      industryContext: "",
+      competitiveEnvironment: "",
+      regulatoryEnvironment: "",
+      culturalContext: "",
+      resourceConstraints: "",
+      stakeholdersJson: "",
+      keyConstraintsText: "",
+      learningObjectivesText: "",
+      ethicalDimensionsText: "",
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: ScenarioFormData) => {
+      // Parse stakeholders from JSON if provided
+      let stakeholders: Array<{name: string; role: string; interests: string; influence: "low" | "medium" | "high"}> = [];
+      if (data.stakeholdersJson) {
+        try {
+          stakeholders = JSON.parse(data.stakeholdersJson);
+        } catch (e) {
+          // If invalid JSON, try to parse as simple text list
+          stakeholders = data.stakeholdersJson.split("\n")
+            .filter(line => line.trim())
+            .map(line => {
+              const parts = line.split("-").map(p => p.trim());
+              return {
+                name: parts[0] || "Stakeholder",
+                role: parts[1] || "Role",
+                interests: parts[2] || "Interests",
+                influence: "medium" as const,
+              };
+            });
+        }
+      }
+      
+      // Parse text lists into arrays
+      const parseTextList = (text?: string) => 
+        text?.split("\n").filter(line => line.trim()).map(line => line.trim()) || [];
+      
       return await apiRequest("POST", "/api/scenarios", {
         title: data.title,
         description: data.description,
@@ -295,6 +399,22 @@ function CreateScenarioDialog({ onSuccess }: { onSuccess: () => void }) {
             trust: 75,
           },
           caseStudyUrl: uploadedFile?.url,
+          // Enhanced context fields
+          companyName: data.companyName || undefined,
+          industry: data.industry || undefined,
+          companySize: data.companySize || undefined,
+          situationBackground: data.situationBackground || undefined,
+          timelineContext: data.timelineContext || undefined,
+          industryContext: data.industryContext || undefined,
+          competitiveEnvironment: data.competitiveEnvironment || undefined,
+          regulatoryEnvironment: data.regulatoryEnvironment || undefined,
+          culturalContext: data.culturalContext || undefined,
+          resourceConstraints: data.resourceConstraints || undefined,
+          difficultyLevel: data.difficultyLevel,
+          stakeholders: stakeholders.length > 0 ? stakeholders : undefined,
+          keyConstraints: parseTextList(data.keyConstraintsText).length > 0 ? parseTextList(data.keyConstraintsText) : undefined,
+          learningObjectives: parseTextList(data.learningObjectivesText).length > 0 ? parseTextList(data.learningObjectivesText) : undefined,
+          ethicalDimensions: parseTextList(data.ethicalDimensionsText).length > 0 ? parseTextList(data.ethicalDimensionsText) : undefined,
         },
         isPublished: true,
       });
@@ -334,7 +454,7 @@ function CreateScenarioDialog({ onSuccess }: { onSuccess: () => void }) {
           Create Scenario
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create New Scenario</DialogTitle>
         </DialogHeader>
@@ -344,136 +464,483 @@ function CreateScenarioDialog({ onSuccess }: { onSuccess: () => void }) {
             onSubmit={form.handleSubmit((data) => createMutation.mutate(data))}
             className="space-y-6"
           >
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Scenario Title</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g., The Data Breach Crisis"
-                      {...field}
-                      data-testid="input-scenario-title"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* SECTION: Basic Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Scenario Title *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., The Data Breach Crisis"
+                          {...field}
+                          data-testid="input-scenario-title"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="domain"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Domain</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                <FormField
+                  control={form.control}
+                  name="domain"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Domain *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-domain">
+                            <SelectValue placeholder="Select a domain" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {DOMAINS.map((domain) => (
+                            <SelectItem key={domain} value={domain}>
+                              {domain}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="difficultyLevel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Difficulty Level</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-difficulty">
+                          <SelectValue placeholder="Select difficulty" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {DIFFICULTY_LEVELS.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>
+                            {level.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description *</FormLabel>
                     <FormControl>
-                      <SelectTrigger data-testid="select-domain">
-                        <SelectValue placeholder="Select a domain" />
-                      </SelectTrigger>
+                      <Textarea
+                        placeholder="Brief overview of what students will experience..."
+                        className="min-h-20"
+                        {...field}
+                        data-testid="input-scenario-description"
+                      />
                     </FormControl>
-                    <SelectContent>
-                      {DOMAINS.map((domain) => (
-                        <SelectItem key={domain} value={domain}>
-                          {domain}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Brief overview of the scenario..."
-                      className="min-h-20"
-                      {...field}
-                      data-testid="input-scenario-description"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Player Role</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g., Chief Marketing Officer"
-                      {...field}
-                      data-testid="input-role"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="objective"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Primary Objective</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g., Restore brand reputation while maintaining profitability"
-                      {...field}
-                      data-testid="input-objective"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="introText"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Opening Narrative</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="The story that sets the scene..."
-                      className="min-h-32"
-                      {...field}
-                      data-testid="input-intro-text"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div>
-              <FormLabel className="mb-2 block">Case Study PDF (Optional)</FormLabel>
-              <p className="text-sm text-muted-foreground mb-3">
-                Upload a PDF case study to provide context for the AI agents
-              </p>
-              <PDFUploader
-                onUploadComplete={setUploadedFile}
-                uploadedFile={uploadedFile}
-                onRemoveFile={() => setUploadedFile(undefined)}
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
 
-            <div className="flex justify-end gap-3">
+            {/* SECTION: Company Context */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Company Context</h3>
+              <p className="text-sm text-muted-foreground">The more detail you provide, the more tailored the AI simulation will be.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="companyName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., TechFlow Inc."
+                          {...field}
+                          data-testid="input-company-name"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="industry"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Industry</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-industry">
+                            <SelectValue placeholder="Select industry" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {INDUSTRIES.map((industry) => (
+                            <SelectItem key={industry} value={industry}>
+                              {industry}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="companySize"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Size</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-company-size">
+                            <SelectValue placeholder="Select size" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {COMPANY_SIZES.map((size) => (
+                            <SelectItem key={size.value} value={size.value}>
+                              {size.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="industryContext"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Industry Dynamics</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Describe the industry landscape - market trends, challenges, opportunities, typical competitors..."
+                        className="min-h-16"
+                        {...field}
+                        data-testid="input-industry-context"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="competitiveEnvironment"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Competitive Environment</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Who are the main competitors? What's the competitive pressure like?"
+                        className="min-h-16"
+                        {...field}
+                        data-testid="input-competitive-environment"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* SECTION: Player Role & Situation */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Player Role & Situation</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Player Role *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Chief Marketing Officer"
+                          {...field}
+                          data-testid="input-role"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="timelineContext"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Timeline Context</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Immediate crisis - 72 hours to respond"
+                          {...field}
+                          data-testid="input-timeline"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="objective"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Primary Objective *</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="What is the main goal the player must achieve? e.g., Restore brand reputation while maintaining profitability and employee morale"
+                        className="min-h-16"
+                        {...field}
+                        data-testid="input-objective"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="situationBackground"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Situation Background</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="What happened before the scenario begins? What events led to this crisis or challenge? Provide rich context for the AI..."
+                        className="min-h-24"
+                        {...field}
+                        data-testid="input-situation-background"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="introText"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Opening Narrative *</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="The immersive story that sets the scene when the student starts. Write this as if narrating a story..."
+                        className="min-h-32"
+                        {...field}
+                        data-testid="input-intro-text"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* SECTION: Stakeholders */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Key Stakeholders</h3>
+              <p className="text-sm text-muted-foreground">Define the key people the player will interact with. Format: Name - Role - Interests (one per line)</p>
+              
+              <FormField
+                control={form.control}
+                name="stakeholdersJson"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stakeholders</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Sarah Chen - CEO - Wants quick resolution to protect stock price&#10;Marcus Williams - Head of PR - Concerned about media narrative&#10;Elena Rodriguez - Legal Counsel - Focused on regulatory compliance&#10;James Park - Employee Rep - Advocates for staff concerns"
+                        className="min-h-28 font-mono text-sm"
+                        {...field}
+                        data-testid="input-stakeholders"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* SECTION: Environment & Constraints */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Environment & Constraints</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="regulatoryEnvironment"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Regulatory Environment</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="What regulations, laws, or compliance requirements apply?"
+                          className="min-h-16"
+                          {...field}
+                          data-testid="input-regulatory"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="culturalContext"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cultural Context</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Any cultural, geographical, or social factors to consider?"
+                          className="min-h-16"
+                          {...field}
+                          data-testid="input-cultural"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="resourceConstraints"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Resource Constraints</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Budget limitations, staffing issues, time pressures, technical limitations..."
+                        className="min-h-16"
+                        {...field}
+                        data-testid="input-resources"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="keyConstraintsText"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Key Constraints (one per line)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="$500,000 maximum budget&#10;Must maintain at least 80% workforce&#10;Cannot change product pricing&#10;Must comply with GDPR regulations"
+                        className="min-h-20 font-mono text-sm"
+                        {...field}
+                        data-testid="input-constraints"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* SECTION: Learning Objectives & Ethics */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Learning Objectives & Ethics</h3>
+              
+              <FormField
+                control={form.control}
+                name="learningObjectivesText"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Learning Objectives (one per line)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Understand crisis communication strategies&#10;Balance stakeholder interests under pressure&#10;Apply ethical decision-making frameworks&#10;Analyze trade-offs between short and long-term outcomes"
+                        className="min-h-24 font-mono text-sm"
+                        {...field}
+                        data-testid="input-learning-objectives"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="ethicalDimensionsText"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ethical Dimensions (one per line)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Transparency vs. corporate protection&#10;Employee welfare vs. shareholder value&#10;Short-term profits vs. long-term sustainability&#10;Individual accountability vs. organizational culture"
+                        className="min-h-20 font-mono text-sm"
+                        {...field}
+                        data-testid="input-ethical-dimensions"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* SECTION: Supporting Materials */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold border-b pb-2">Supporting Materials</h3>
+              
+              <div>
+                <FormLabel className="mb-2 block">Case Study PDF (Optional)</FormLabel>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Upload a PDF case study to provide additional context for the AI agents
+                </p>
+                <PDFUploader
+                  onUploadComplete={setUploadedFile}
+                  uploadedFile={uploadedFile}
+                  onRemoveFile={() => setUploadedFile(undefined)}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
               <Button
                 type="button"
                 variant="outline"

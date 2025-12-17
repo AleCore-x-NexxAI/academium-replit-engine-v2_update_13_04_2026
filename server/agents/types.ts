@@ -12,6 +12,22 @@ export interface AgentContext {
     domain: string;
     role: string;
     objective: string;
+    // Enhanced context for better AI tailoring
+    companyName?: string;
+    industry?: string;
+    companySize?: string;
+    situationBackground?: string;
+    stakeholders?: Array<{ name: string; role: string; interests: string; influence: string }>;
+    keyConstraints?: string[];
+    learningObjectives?: string[];
+    difficultyLevel?: string;
+    timelineContext?: string;
+    ethicalDimensions?: string[];
+    industryContext?: string;
+    competitiveEnvironment?: string;
+    resourceConstraints?: string;
+    culturalContext?: string;
+    regulatoryEnvironment?: string;
   };
 }
 
