@@ -12,6 +12,8 @@ import SessionResults from "@/pages/SessionResults";
 import Studio from "@/pages/Studio";
 import Analytics from "@/pages/Analytics";
 import ProfessorDashboard from "@/pages/ProfessorDashboard";
+import ScenarioEdit from "@/pages/ScenarioEdit";
+import ScenarioAnalytics from "@/pages/ScenarioAnalytics";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -39,6 +41,8 @@ function Router() {
       <Route path="/studio" component={Studio} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/professor" component={ProfessorDashboard} />
+      <Route path="/scenarios/:scenarioId/edit" component={ScenarioEdit} />
+      <Route path="/scenarios/:scenarioId/analytics" component={ScenarioAnalytics} />
       <Route component={NotFound} />
     </Switch>
   );

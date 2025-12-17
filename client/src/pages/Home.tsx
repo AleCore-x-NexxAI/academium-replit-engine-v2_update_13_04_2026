@@ -74,13 +74,13 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
             </Button>
           </Link>
           <div className="flex gap-2">
-            <Link href={`/studio?edit=${scenario.id}`} className="flex-1">
+            <Link href={`/scenarios/${scenario.id}/edit`} className="flex-1">
               <Button variant="outline" className="w-full" data-testid={`button-edit-${scenario.id}`}>
                 <Pencil className="w-4 h-4 mr-2" />
                 Edit
               </Button>
             </Link>
-            <Link href={`/professor?scenario=${scenario.id}`} className="flex-1">
+            <Link href={`/scenarios/${scenario.id}/analytics`} className="flex-1">
               <Button variant="outline" className="w-full" data-testid={`button-analytics-${scenario.id}`}>
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Analytics

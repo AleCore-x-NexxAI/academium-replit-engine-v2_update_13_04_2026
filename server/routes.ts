@@ -165,7 +165,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Scenario not found" });
       }
 
-      if (scenario.authorId !== userId) {
+      // Fetch user to check role for admin access
+      const user = await storage.getUser(userId);
+      const isAdmin = user?.role === "admin";
+      if (scenario.authorId !== userId && !isAdmin) {
         return res.status(403).json({ message: "Not authorized" });
       }
 
