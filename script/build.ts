@@ -1,11 +1,12 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm, readFile } from "fs/promises";
+import { rm, readFile, writeFile } from "fs/promises";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 const allowlist = [
   "@google/generative-ai",
+  "@google-cloud/storage",
   "@neondatabase/serverless",
   "axios",
   "connect-pg-simple",
@@ -17,11 +18,15 @@ const allowlist = [
   "express-rate-limit",
   "express-session",
   "jsonwebtoken",
+  "memoizee",
   "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
   "openai",
+  "openid-client",
+  "p-limit",
+  "p-retry",
   "passport",
   "passport-local",
   "stripe",
@@ -31,6 +36,14 @@ const allowlist = [
   "zod",
   "zod-validation-error",
 ];
+
+// CJS shim that dynamically imports the ESM bundle
+const CJS_SHIM = `// CJS shim to load ESM bundle - works with "type": "module" in package.json
+import('./index.mjs').catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
+`;
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
@@ -46,19 +59,27 @@ async function buildAll() {
   ];
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
+  // Build as ESM to match package.json "type": "module"
   await esbuild({
     entryPoints: ["server/index.ts"],
     platform: "node",
     bundle: true,
-    format: "cjs",
-    outfile: "dist/index.cjs",
+    format: "esm",
+    outfile: "dist/index.mjs",
     define: {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
     external: externals,
     logLevel: "info",
+    banner: {
+      js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url);`,
+    },
   });
+
+  // Write CJS shim for npm start compatibility
+  console.log("writing CJS shim...");
+  await writeFile("dist/index.cjs", CJS_SHIM);
 }
 
 buildAll().catch((err) => {
