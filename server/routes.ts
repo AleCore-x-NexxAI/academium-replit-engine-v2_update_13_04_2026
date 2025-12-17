@@ -461,11 +461,16 @@ Be constructive and educational, not judgmental.`;
 
   app.post("/api/users/role", isAuthenticated, async (req: any, res) => {
     try {
-      if (process.env.NODE_ENV !== "development") {
-        return res.status(403).json({ message: "Role switching is only available in development mode" });
-      }
-      
       const userId = req.user.claims.sub;
+      const currentUser = await storage.getUser(userId);
+      
+      // In production, only admins can switch roles
+      // In development, anyone can switch roles for testing
+      if (process.env.NODE_ENV !== "development") {
+        if (!currentUser || currentUser.role !== "admin") {
+          return res.status(403).json({ message: "Only admins can switch roles" });
+        }
+      }
       
       const parseResult = updateRoleSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -475,7 +480,7 @@ Be constructive and educational, not judgmental.`;
       const { role } = parseResult.data;
       const user = await storage.updateUserRole(userId, role);
       
-      console.log(`[DEMO] User ${userId} switched role to ${role}`);
+      console.log(`User ${userId} switched role to ${role}`);
       res.json(user);
     } catch (error) {
       console.error("Error updating role:", error);

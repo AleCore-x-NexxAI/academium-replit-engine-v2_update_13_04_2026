@@ -74,7 +74,7 @@ export function RoleSwitcher({ currentRole }: RoleSwitcherProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-          Demo: Switch between roles
+          Admin: Switch between views
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
