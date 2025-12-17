@@ -341,10 +341,38 @@ const extendedScenarioFormSchema = scenarioFormSchema.extend({
 
 type ExtendedScenarioFormData = z.infer<typeof extendedScenarioFormSchema>;
 
+interface CustomKPIInput {
+  id: string;
+  label: string;
+  value: number;
+  unit: "percentage" | "absolute" | "currency";
+}
+
 function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | undefined>();
+  const [rubricFile, setRubricFile] = useState<UploadedFile | undefined>();
+  const [customKpis, setCustomKpis] = useState<CustomKPIInput[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["basic", "player"]));
   const { toast } = useToast();
+
+  const addCustomKpi = () => {
+    setCustomKpis(prev => [...prev, {
+      id: `custom-${Date.now()}`,
+      label: "",
+      value: 50,
+      unit: "percentage"
+    }]);
+  };
+
+  const removeCustomKpi = (id: string) => {
+    setCustomKpis(prev => prev.filter(k => k.id !== id));
+  };
+
+  const updateCustomKpi = (id: string, field: keyof CustomKPIInput, value: string | number) => {
+    setCustomKpis(prev => prev.map(k => 
+      k.id === id ? { ...k, [field]: value } : k
+    ));
+  };
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => {
@@ -430,6 +458,25 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
         }
       }
       
+      // Add rubric attachment if uploaded
+      if (rubric && rubricFile) {
+        rubric.attachment = {
+          name: rubricFile.name,
+          url: rubricFile.url,
+          size: rubricFile.size,
+        };
+      }
+
+      // Format custom KPIs for the schema
+      const formattedCustomKpis = customKpis
+        .filter(k => k.label.trim())
+        .map(k => ({
+          id: k.id,
+          label: k.label,
+          value: k.value,
+          unit: k.unit,
+        }));
+      
       return await apiRequest("POST", "/api/scenarios", {
         title: data.title,
         description: data.description,
@@ -445,6 +492,7 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
             efficiency: data.kpiEfficiency,
             trust: data.kpiTrust,
           },
+          customKpis: formattedCustomKpis.length > 0 ? formattedCustomKpis : undefined,
           caseStudyUrl: uploadedFile?.url,
           companyName: data.companyName || undefined,
           industry: data.industry || undefined,
@@ -460,7 +508,6 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
           stakeholders: stakeholders.length > 0 ? stakeholders : undefined,
           keyConstraints: parseTextList(data.keyConstraintsText).length > 0 ? parseTextList(data.keyConstraintsText) : undefined,
           learningObjectives: parseTextList(data.learningObjectivesText).length > 0 ? parseTextList(data.learningObjectivesText) : undefined,
-          ethicalDimensions: parseTextList(data.ethicalDimensionsText).length > 0 ? parseTextList(data.ethicalDimensionsText) : undefined,
         },
         rubric,
         isPublished: true,
@@ -470,6 +517,8 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
       toast({ title: "Success", description: "Scenario created successfully" });
       form.reset();
       setUploadedFile(undefined);
+      setRubricFile(undefined);
+      setCustomKpis([]);
       onSuccess();
     },
     onError: (error) => {
@@ -909,9 +958,9 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
           </AnimatePresence>
         </div>
 
-        {/* SECTION 6: Learning Objectives & Ethics */}
+        {/* SECTION 6: Learning Objectives */}
         <div className="space-y-4">
-          <SectionHeader id="learning" title="Learning Objectives & Ethics" />
+          <SectionHeader id="learning" title="Learning Objectives" />
           <AnimatePresence>
             {expandedSections.has("learning") && (
               <motion.div
@@ -921,36 +970,19 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
                 transition={{ duration: 0.2 }}
                 className="space-y-4 overflow-hidden"
               >
+                <p className="text-sm text-muted-foreground">Define what students should learn from this simulation (one objective per line).</p>
                 <FormField
                   control={form.control}
                   name="learningObjectivesText"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Learning Objectives (one per line)</FormLabel>
+                      <FormLabel>Learning Objectives</FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Understand crisis communication strategies&#10;Balance stakeholder interests under pressure&#10;Apply ethical decision-making frameworks"
-                          className="min-h-24 font-mono text-sm"
+                          placeholder="Understand crisis communication strategies&#10;Balance stakeholder interests under pressure&#10;Apply decision-making frameworks under uncertainty&#10;Analyze trade-offs between short and long-term outcomes"
+                          className="min-h-28 font-mono text-sm"
                           {...field}
                           data-testid="input-learning-objectives-manual"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="ethicalDimensionsText"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ethical Dimensions (one per line)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Transparency vs. corporate protection&#10;Employee welfare vs. shareholder value&#10;Short-term profits vs. long-term sustainability"
-                          className="min-h-20 font-mono text-sm"
-                          {...field}
-                          data-testid="input-ethical-dimensions-manual"
                         />
                       </FormControl>
                       <FormMessage />
@@ -975,72 +1007,152 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
                 className="space-y-4 overflow-hidden"
               >
                 <p className="text-sm text-muted-foreground">Set the starting values for key performance indicators. Revenue is absolute; others are percentages (0-100).</p>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="kpiRevenue"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Revenue ($)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} step={1000} {...field} data-testid="input-kpi-revenue-manual" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="kpiMorale"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Morale (%)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-morale-manual" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="kpiReputation"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reputation (%)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-reputation-manual" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="kpiEfficiency"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Efficiency (%)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-efficiency-manual" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="kpiTrust"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Trust (%)</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-trust-manual" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                
+                {/* Default KPIs */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Default KPIs</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="kpiRevenue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Revenue ($)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} step={1000} {...field} data-testid="input-kpi-revenue-manual" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="kpiMorale"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Morale (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-morale-manual" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="kpiReputation"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Reputation (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-reputation-manual" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="kpiEfficiency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Efficiency (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-efficiency-manual" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="kpiTrust"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Trust (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" min={0} max={100} {...field} data-testid="input-kpi-trust-manual" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Custom KPIs */}
+                <div className="space-y-3 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium">Custom KPIs (Optional)</h4>
+                      <p className="text-xs text-muted-foreground">Add additional metrics specific to this scenario</p>
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={addCustomKpi}
+                      data-testid="button-add-custom-kpi"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add KPI
+                    </Button>
+                  </div>
+                  
+                  {customKpis.map((kpi, index) => (
+                    <div key={kpi.id} className="flex items-end gap-3 p-3 bg-muted/30 rounded-lg">
+                      <div className="flex-1">
+                        <FormLabel className="text-xs">Label</FormLabel>
+                        <Input
+                          placeholder="e.g., Customer Satisfaction"
+                          value={kpi.label}
+                          onChange={(e) => updateCustomKpi(kpi.id, "label", e.target.value)}
+                          data-testid={`input-custom-kpi-label-${index}`}
+                        />
+                      </div>
+                      <div className="w-24">
+                        <FormLabel className="text-xs">Value</FormLabel>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={kpi.value}
+                          onChange={(e) => updateCustomKpi(kpi.id, "value", parseInt(e.target.value) || 0)}
+                          data-testid={`input-custom-kpi-value-${index}`}
+                        />
+                      </div>
+                      <div className="w-32">
+                        <FormLabel className="text-xs">Unit</FormLabel>
+                        <Select 
+                          value={kpi.unit} 
+                          onValueChange={(v) => updateCustomKpi(kpi.id, "unit", v as "percentage" | "absolute" | "currency")}
+                        >
+                          <SelectTrigger data-testid={`select-custom-kpi-unit-${index}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percentage">Percentage (%)</SelectItem>
+                            <SelectItem value="absolute">Number</SelectItem>
+                            <SelectItem value="currency">Currency ($)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeCustomKpi(kpi.id)}
+                        data-testid={`button-remove-custom-kpi-${index}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  {customKpis.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-lg">
+                      No custom KPIs added. Click "Add KPI" to create scenario-specific metrics.
+                    </p>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1078,6 +1190,45 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
                     </FormItem>
                   )}
                 />
+                
+                {/* Rubric Document Upload */}
+                <div className="space-y-2 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <FormLabel>Rubric Document (Optional)</FormLabel>
+                      <p className="text-xs text-muted-foreground">Upload a PDF with detailed grading criteria</p>
+                    </div>
+                  </div>
+                  
+                  {rubricFile ? (
+                    <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                      <FileText className="w-5 h-5 text-primary" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{rubricFile.name}</p>
+                        {rubricFile.size && (
+                          <p className="text-xs text-muted-foreground">
+                            {(rubricFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRubricFile(undefined)}
+                        data-testid="button-remove-rubric-file"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <FileUploader 
+                      onUploadComplete={(file) => setRubricFile(file)}
+                      accept=".pdf,.doc,.docx"
+                      maxSizeMB={10}
+                    />
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

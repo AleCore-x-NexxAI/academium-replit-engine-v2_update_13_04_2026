@@ -148,6 +148,7 @@ export interface KPIs {
 
 export interface InitialState {
   kpis: KPIs;
+  customKpis?: CustomKPI[]; // Optional additional KPIs beyond the 5 defaults
   introText: string;
   role: string;
   objective: string;
@@ -162,7 +163,7 @@ export interface InitialState {
   learningObjectives?: string[]; // What students should learn
   difficultyLevel?: "beginner" | "intermediate" | "advanced";
   timelineContext?: string; // "immediate crisis", "3-month project", etc.
-  ethicalDimensions?: string[]; // Ethical considerations in this scenario
+  ethicalDimensions?: string[]; // Ethical considerations in this scenario (legacy, kept for backward compat)
   industryContext?: string; // Specific industry dynamics
   competitiveEnvironment?: string;
   resourceConstraints?: string;
@@ -183,8 +184,24 @@ export interface RubricCriterion {
   weight: number;
 }
 
+export interface RubricAttachment {
+  name: string;
+  url: string;
+  size?: number;
+}
+
 export interface Rubric {
   criteria: RubricCriterion[];
+  attachment?: RubricAttachment; // Optional uploaded rubric document
+}
+
+// Custom KPI for optional additional metrics
+export interface CustomKPI {
+  id: string; // Unique identifier
+  label: string; // Display name
+  value: number; // Initial value
+  unit: "percentage" | "absolute" | "currency"; // How to display
+  description?: string;
 }
 
 export interface HistoryEntry {
