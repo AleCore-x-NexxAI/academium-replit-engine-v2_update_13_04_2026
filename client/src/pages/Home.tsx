@@ -16,6 +16,7 @@ import {
   Settings,
   BarChart3,
   LayoutDashboard,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -36,7 +37,59 @@ const domainIcons: Record<string, React.ReactNode> = {
   Crisis: <Clock className="w-5 h-5" />,
 };
 
-function ScenarioCard({ scenario }: { scenario: Scenario }) {
+interface ScenarioCardProps {
+  scenario: Scenario;
+  userId?: string;
+  userRole?: string;
+}
+
+function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
+  const isProfessorAndAuthor = (userRole === "professor" || userRole === "admin") && scenario.authorId === userId;
+  
+  if (isProfessorAndAuthor) {
+    return (
+      <Card
+        className="p-6 h-full"
+        data-testid={`card-scenario-${scenario.id}`}
+      >
+        <div className="flex items-start justify-between mb-4">
+          <div className="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            {domainIcons[scenario.domain] || <BookOpen className="w-5 h-5" />}
+          </div>
+          <Badge variant="secondary">{scenario.domain}</Badge>
+        </div>
+
+        <h3 className="text-lg font-semibold mb-2">{scenario.title}</h3>
+        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+          {scenario.description}
+        </p>
+
+        <div className="flex flex-col gap-2">
+          <Link href={`/simulation/start/${scenario.id}`}>
+            <Button variant="default" className="w-full" data-testid={`button-start-${scenario.id}`}>
+              <Play className="w-4 h-4 mr-2" />
+              Start Simulation
+            </Button>
+          </Link>
+          <div className="flex gap-2">
+            <Link href={`/studio?edit=${scenario.id}`} className="flex-1">
+              <Button variant="outline" className="w-full" data-testid={`button-edit-${scenario.id}`}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            </Link>
+            <Link href={`/professor?scenario=${scenario.id}`} className="flex-1">
+              <Button variant="outline" className="w-full" data-testid={`button-analytics-${scenario.id}`}>
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Link href={`/simulation/start/${scenario.id}`}>
       <Card
@@ -271,7 +324,11 @@ export default function Home() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <ScenarioCard scenario={scenario} />
+                  <ScenarioCard 
+                    scenario={scenario} 
+                    userId={user?.id}
+                    userRole={user?.role}
+                  />
                 </motion.div>
               ))}
             </div>
