@@ -171,6 +171,13 @@ Google Cloud Storage integration via `@google-cloud/storage` for PDF case study 
 ## Recent Changes
 
 ### December 2025
+- **Professor Dashboard**: Comprehensive management interface for professors at `/professor`:
+  - View all authored scenarios with enrollment statistics (total, active, completed)
+  - Session management: view student roster, progress, current KPIs
+  - Conversation viewer: full student-AI chat history with turn details
+  - Enrollment controls: unenroll students (marks as "abandoned"), re-enroll, delete sessions
+  - Scenario deletion: cascade delete all sessions and turns with transaction safety
+  - Professor-scoped API routes with ownership authorization checks
 - **AI-Assisted Scenario Authoring**: Dual-mode authoring in Studio - professors can either manually create scenarios or use AI assistance:
   - `ScenarioDraft` schema tracks drafts with conversation history, source artifacts, and generated scenarios
   - AI Authoring Assistant agent (`server/agents/authoringAssistant.ts`) handles insight extraction, scenario generation, and refinement
@@ -201,5 +208,6 @@ Google Cloud Storage integration via `@google-cloud/storage` for PDF case study 
 | `/simulation/start/:scenarioId` | SimulationStart | Authenticated |
 | `/simulation/:sessionId` | Simulation | Authenticated |
 | `/simulation/:sessionId/results` | SessionResults | Authenticated |
+| `/professor` | ProfessorDashboard | Professors only |
 | `/studio` | Studio | Professors only |
 | `/analytics` | Analytics | Professors only |

@@ -11,6 +11,7 @@ import SimulationStart from "@/pages/SimulationStart";
 import SessionResults from "@/pages/SessionResults";
 import Studio from "@/pages/Studio";
 import Analytics from "@/pages/Analytics";
+import ProfessorDashboard from "@/pages/ProfessorDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/simulation/:sessionId" component={Simulation} />
       <Route path="/studio" component={Studio} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/professor" component={ProfessorDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -806,4 +806,168 @@ Be constructive and educational, not judgmental.`;
       res.status(500).json({ message: "Failed to delete draft" });
     }
   });
+
+  // =====================================================
+  // Professor Dashboard Routes
+  // =====================================================
+
+  // Helper to check if user is professor or admin
+  const isProfessorOrAdmin = async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated() || !req.user?.claims?.sub) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = req.user.claims.sub;
+    const user = await storage.getUser(userId);
+    if (!user || (user.role !== "professor" && user.role !== "admin")) {
+      return res.status(403).json({ message: "Professor or admin access required" });
+    }
+    req.dbUser = user;
+    next();
+  };
+
+  // Get professor's scenarios with enrollment stats
+  app.get("/api/professor/scenarios", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const scenarios = await storage.getScenariosWithStats(userId);
+      res.json(scenarios);
+    } catch (error) {
+      console.error("Error fetching professor scenarios:", error);
+      res.status(500).json({ message: "Failed to fetch scenarios" });
+    }
+  });
+
+  // Get all sessions for a specific scenario (student roster)
+  app.get("/api/professor/scenarios/:scenarioId/sessions", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+
+      // Verify professor owns this scenario
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized to view this scenario's sessions" });
+      }
+
+      const sessions = await storage.getSessionsByScenario(scenarioId);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching scenario sessions:", error);
+      res.status(500).json({ message: "Failed to fetch sessions" });
+    }
+  });
+
+  // Get a specific session with full conversation history
+  app.get("/api/professor/sessions/:sessionId/conversation", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+
+      const result = await storage.getSessionWithConversation(sessionId);
+      if (!result) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      // Verify professor owns the scenario this session belongs to
+      const scenario = await storage.getScenario(result.session.scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized to view this session" });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching session conversation:", error);
+      res.status(500).json({ message: "Failed to fetch conversation" });
+    }
+  });
+
+  // Update session status (unenroll = "abandoned", re-enroll = "active")
+  app.patch("/api/professor/sessions/:sessionId/status", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+      const { status } = req.body;
+
+      if (!["active", "completed", "abandoned"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      // Verify session exists and professor owns the scenario
+      const session = await storage.getSimulationSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      const scenario = await storage.getScenario(session.scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized to modify this session" });
+      }
+
+      const updated = await storage.updateSessionStatus(sessionId, status);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating session status:", error);
+      res.status(500).json({ message: "Failed to update session status" });
+    }
+  });
+
+  // Delete a specific session (remove student from simulation)
+  app.delete("/api/professor/sessions/:sessionId", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+
+      // Verify session exists and professor owns the scenario
+      const session = await storage.getSimulationSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      const scenario = await storage.getScenario(session.scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized to delete this session" });
+      }
+
+      await storage.deleteSimulationSession(sessionId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting session:", error);
+      res.status(500).json({ message: "Failed to delete session" });
+    }
+  });
+
+  // Delete a scenario and all its sessions
+  app.delete("/api/professor/scenarios/:scenarioId", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+
+      // Verify scenario exists and professor owns it
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized to delete this scenario" });
+      }
+
+      await storage.deleteScenarioWithSessions(scenarioId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting scenario:", error);
+      res.status(500).json({ message: "Failed to delete scenario" });
+    }
+  });
 }

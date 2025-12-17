@@ -31,6 +31,19 @@ export interface AnalyticsData {
   recentSessions: (SimulationSession & { scenario?: Scenario })[];
 }
 
+// Professor Dashboard types
+export interface ScenarioWithStats extends Scenario {
+  enrollmentCount: number;
+  activeCount: number;
+  completedCount: number;
+}
+
+export interface SessionWithUserInfo extends SimulationSession {
+  user?: User;
+  scenario?: Scenario;
+  turnCount: number;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
@@ -63,6 +76,14 @@ export interface IStorage {
   updateDraftInsights(id: string, insights: ExtractedInsights): Promise<ScenarioDraft | undefined>;
   updateDraftGeneratedScenario(id: string, scenario: GeneratedScenarioData): Promise<ScenarioDraft | undefined>;
   deleteScenarioDraft(id: string): Promise<void>;
+
+  // Professor Dashboard operations
+  getScenariosWithStats(authorId: string): Promise<ScenarioWithStats[]>;
+  getSessionsByScenario(scenarioId: string): Promise<SessionWithUserInfo[]>;
+  getSessionWithConversation(sessionId: string): Promise<{ session: SessionWithUserInfo; turns: Turn[] } | undefined>;
+  deleteSimulationSession(sessionId: string): Promise<void>;
+  updateSessionStatus(sessionId: string, status: "active" | "completed" | "abandoned"): Promise<SimulationSession | undefined>;
+  deleteScenarioWithSessions(scenarioId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -330,6 +351,134 @@ export class DatabaseStorage implements IStorage {
 
   async deleteScenarioDraft(id: string): Promise<void> {
     await db.delete(scenarioDrafts).where(eq(scenarioDrafts.id, id));
+  }
+
+  // Professor Dashboard operations
+  async getScenariosWithStats(authorId: string): Promise<ScenarioWithStats[]> {
+    const authorScenarios = await db
+      .select()
+      .from(scenarios)
+      .where(eq(scenarios.authorId, authorId))
+      .orderBy(desc(scenarios.createdAt));
+
+    const results: ScenarioWithStats[] = [];
+    
+    for (const scenario of authorScenarios) {
+      const sessions = await db
+        .select()
+        .from(simulationSessions)
+        .where(eq(simulationSessions.scenarioId, scenario.id));
+
+      const enrollmentCount = sessions.length;
+      const activeCount = sessions.filter(s => s.status === "active").length;
+      const completedCount = sessions.filter(s => s.status === "completed").length;
+
+      results.push({
+        ...scenario,
+        enrollmentCount,
+        activeCount,
+        completedCount,
+      });
+    }
+
+    return results;
+  }
+
+  async getSessionsByScenario(scenarioId: string): Promise<SessionWithUserInfo[]> {
+    const results = await db
+      .select()
+      .from(simulationSessions)
+      .leftJoin(users, eq(simulationSessions.userId, users.id))
+      .leftJoin(scenarios, eq(simulationSessions.scenarioId, scenarios.id))
+      .where(eq(simulationSessions.scenarioId, scenarioId))
+      .orderBy(desc(simulationSessions.updatedAt));
+
+    const sessionsWithTurns: SessionWithUserInfo[] = [];
+
+    for (const result of results) {
+      const turnsList = await db
+        .select()
+        .from(turns)
+        .where(eq(turns.sessionId, result.simulation_sessions.id));
+
+      sessionsWithTurns.push({
+        ...result.simulation_sessions,
+        user: result.users || undefined,
+        scenario: result.scenarios || undefined,
+        turnCount: turnsList.length,
+      });
+    }
+
+    return sessionsWithTurns;
+  }
+
+  async getSessionWithConversation(sessionId: string): Promise<{ session: SessionWithUserInfo; turns: Turn[] } | undefined> {
+    const [result] = await db
+      .select()
+      .from(simulationSessions)
+      .leftJoin(users, eq(simulationSessions.userId, users.id))
+      .leftJoin(scenarios, eq(simulationSessions.scenarioId, scenarios.id))
+      .where(eq(simulationSessions.id, sessionId));
+
+    if (!result) return undefined;
+
+    const turnsList = await db
+      .select()
+      .from(turns)
+      .where(eq(turns.sessionId, sessionId))
+      .orderBy(turns.turnNumber);
+
+    return {
+      session: {
+        ...result.simulation_sessions,
+        user: result.users || undefined,
+        scenario: result.scenarios || undefined,
+        turnCount: turnsList.length,
+      },
+      turns: turnsList,
+    };
+  }
+
+  async deleteSimulationSession(sessionId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // First delete all turns for this session (child records first)
+      await tx.delete(turns).where(eq(turns.sessionId, sessionId));
+      // Then delete the session
+      await tx.delete(simulationSessions).where(eq(simulationSessions.id, sessionId));
+    });
+  }
+
+  async updateSessionStatus(sessionId: string, status: "active" | "completed" | "abandoned"): Promise<SimulationSession | undefined> {
+    const [updated] = await db
+      .update(simulationSessions)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(simulationSessions.id, sessionId))
+      .returning();
+    return updated;
+  }
+
+  async deleteScenarioWithSessions(scenarioId: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // First get all sessions for this scenario
+      const sessions = await tx
+        .select()
+        .from(simulationSessions)
+        .where(eq(simulationSessions.scenarioId, scenarioId));
+
+      // Delete all turns for all sessions (child records first)
+      for (const session of sessions) {
+        await tx.delete(turns).where(eq(turns.sessionId, session.id));
+      }
+
+      // Delete all sessions
+      await tx.delete(simulationSessions).where(eq(simulationSessions.scenarioId, scenarioId));
+
+      // Delete all drafts referencing this scenario
+      await tx.delete(scenarioDrafts).where(eq(scenarioDrafts.publishedScenarioId, scenarioId));
+
+      // Finally delete the scenario
+      await tx.delete(scenarios).where(eq(scenarios.id, scenarioId));
+    });
   }
 }
 
