@@ -39,10 +39,17 @@ const allowlist = [
 
 // CJS shim that dynamically imports the ESM bundle
 const CJS_SHIM = `// CJS shim to load ESM bundle - works with "type": "module" in package.json
-import('./index.mjs').catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+(async () => {
+  try {
+    console.log('Starting server...');
+    await import('./index.mjs');
+    console.log('Server module loaded successfully');
+  } catch (err) {
+    console.error('Failed to start server:');
+    console.error(err.stack || err.message || err);
+    process.exit(1);
+  }
+})();
 `;
 
 async function buildAll() {
