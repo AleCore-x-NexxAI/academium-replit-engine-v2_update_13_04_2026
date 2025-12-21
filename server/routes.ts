@@ -3,11 +3,15 @@ import type { Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { processStudentTurn } from "./agents/director";
+import { processStudentTurn, DEFAULT_DIRECTOR_PROMPT } from "./agents/director";
+import { DEFAULT_EVALUATOR_PROMPT } from "./agents/evaluator";
+import { DEFAULT_NARRATOR_PROMPT } from "./agents/narrator";
+import { DEFAULT_DOMAIN_EXPERT_PROMPT } from "./agents/domainExpert";
+import { SUPPORTED_MODELS } from "./openai";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import type { AgentContext } from "./agents/types";
-import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage, GeneratedScenarioData } from "@shared/schema";
+import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage, GeneratedScenarioData, AgentPrompts } from "@shared/schema";
 import { 
   extractInsights, 
   generateScenario, 
@@ -15,10 +19,21 @@ import {
   generateInitialGreeting 
 } from "./agents/authoringAssistant";
 
+const llmModelSchema = z.enum(["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]);
+
+const agentPromptsSchema = z.object({
+  narrator: z.string().optional(),
+  evaluator: z.string().optional(),
+  domainExpert: z.string().optional(),
+  director: z.string().optional(),
+}).optional();
+
 const createScenarioSchema = z.object({
   title: z.string().min(3),
   description: z.string().optional(),
   domain: z.string().min(1),
+  llmModel: llmModelSchema.optional(),
+  agentPrompts: agentPromptsSchema,
   initialState: z.object({
     role: z.string(),
     objective: z.string(),
@@ -88,6 +103,122 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // ==================== Agent Configuration Endpoints ====================
+  
+  // Get all default agent prompts (superadmin only)
+  app.get("/api/agents/default-prompts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.isSuperAdmin) {
+        return res.status(403).json({ message: "Superadmin access required" });
+      }
+      
+      res.json({
+        director: DEFAULT_DIRECTOR_PROMPT,
+        narrator: DEFAULT_NARRATOR_PROMPT,
+        evaluator: DEFAULT_EVALUATOR_PROMPT,
+        domainExpert: DEFAULT_DOMAIN_EXPERT_PROMPT,
+        supportedModels: SUPPORTED_MODELS,
+      });
+    } catch (error) {
+      console.error("Error fetching default prompts:", error);
+      res.status(500).json({ message: "Failed to fetch default prompts" });
+    }
+  });
+  
+  // Get scenario's LLM configuration and custom prompts (author or superadmin)
+  app.get("/api/scenarios/:id/config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const scenario = await storage.getScenario(req.params.id);
+      
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      
+      // Only author or superadmin can view config
+      const isAuthor = scenario.authorId === userId;
+      const isSuperAdmin = user?.isSuperAdmin;
+      
+      if (!isAuthor && !isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized to view scenario configuration" });
+      }
+      
+      res.json({
+        llmModel: scenario.llmModel || "gpt-4o",
+        agentPrompts: scenario.agentPrompts || {},
+        supportedModels: SUPPORTED_MODELS,
+        defaultPrompts: isSuperAdmin ? {
+          director: DEFAULT_DIRECTOR_PROMPT,
+          narrator: DEFAULT_NARRATOR_PROMPT,
+          evaluator: DEFAULT_EVALUATOR_PROMPT,
+          domainExpert: DEFAULT_DOMAIN_EXPERT_PROMPT,
+        } : undefined,
+      });
+    } catch (error) {
+      console.error("Error fetching scenario config:", error);
+      res.status(500).json({ message: "Failed to fetch scenario configuration" });
+    }
+  });
+  
+  // Update scenario's LLM configuration and custom prompts (author or superadmin)
+  app.put("/api/scenarios/:id/config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const scenario = await storage.getScenario(req.params.id);
+      
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      
+      // Only author or superadmin can update config
+      const isAuthor = scenario.authorId === userId;
+      const isSuperAdmin = user?.isSuperAdmin;
+      
+      if (!isAuthor && !isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized to update scenario configuration" });
+      }
+      
+      const updateSchema = z.object({
+        llmModel: llmModelSchema.optional(),
+        agentPrompts: agentPromptsSchema,
+      });
+      
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parseResult.error.errors });
+      }
+      
+      const updates: any = {};
+      if (parseResult.data.llmModel !== undefined) {
+        updates.llmModel = parseResult.data.llmModel;
+      }
+      if (parseResult.data.agentPrompts !== undefined) {
+        // Only superadmin can update agent prompts
+        if (!isSuperAdmin) {
+          return res.status(403).json({ message: "Only superadmins can modify agent prompts" });
+        }
+        updates.agentPrompts = parseResult.data.agentPrompts;
+      }
+      
+      const updated = await storage.updateScenario(req.params.id, updates);
+      if (!updated) {
+        return res.status(404).json({ message: "Scenario not found after update" });
+      }
+      res.json({
+        llmModel: updated.llmModel || "gpt-4o",
+        agentPrompts: updated.agentPrompts || {},
+      });
+    } catch (error) {
+      console.error("Error updating scenario config:", error);
+      res.status(500).json({ message: "Failed to update scenario configuration" });
     }
   });
 
