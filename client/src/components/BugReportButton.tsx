@@ -132,7 +132,12 @@ export function BugReportButton() {
       <DialogTrigger asChild>
         <Button
           size="icon"
-          className="fixed bottom-4 right-4 h-12 w-12 rounded-full shadow-lg z-50"
+          className="fixed h-12 w-12 rounded-full shadow-lg"
+          style={{
+            bottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
+            right: 'max(16px, env(safe-area-inset-right, 16px))',
+            zIndex: 9999,
+          }}
           data-testid="button-bug-report"
         >
           <Bug className="h-5 w-5" />
