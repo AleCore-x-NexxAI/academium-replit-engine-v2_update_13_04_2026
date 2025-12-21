@@ -29,9 +29,15 @@ export function OnboardingModal({ user }: OnboardingModalProps) {
     }
   }, [user.isSuperAdmin]);
 
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+    }
+    setOpen(newOpen);
+  };
+
   const handleClose = () => {
-    localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-    setOpen(false);
+    handleOpenChange(false);
   };
 
   const handleNext = () => {
@@ -75,7 +81,7 @@ export function OnboardingModal({ user }: OnboardingModalProps) {
   if (!user.isSuperAdmin) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center justify-center mb-4">
