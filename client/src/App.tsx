@@ -14,6 +14,7 @@ import Analytics from "@/pages/Analytics";
 import ProfessorDashboard from "@/pages/ProfessorDashboard";
 import ScenarioEdit from "@/pages/ScenarioEdit";
 import ScenarioAnalytics from "@/pages/ScenarioAnalytics";
+import BugReports from "@/pages/BugReports";
 import NotFound from "@/pages/not-found";
 import { BugReportButton } from "@/components/BugReportButton";
 import { OnboardingModal } from "@/components/OnboardingModal";
@@ -36,6 +37,7 @@ function AuthenticatedApp() {
         <Route path="/professor" component={ProfessorDashboard} />
         <Route path="/scenarios/:scenarioId/edit" component={ScenarioEdit} />
         <Route path="/scenarios/:scenarioId/analytics" component={ScenarioAnalytics} />
+        <Route path="/bug-reports" component={BugReports} />
         <Route component={NotFound} />
       </Switch>
       <BugReportButton />
@@ -55,6 +57,7 @@ function Router() {
     return (
       <Switch>
         <Route path="/" component={Landing} />
+        <Route path="/bug-reports" component={BugReports} />
         <Route component={Landing} />
       </Switch>
     );

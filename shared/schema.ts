@@ -104,6 +104,7 @@ export const bugReports = pgTable("bug_reports", {
   description: text("description").notNull(),
   pageUrl: varchar("page_url"),
   browserInfo: varchar("browser_info"),
+  screenshot: text("screenshot"), // Base64 encoded screenshot
   status: bugReportStatusEnum("status").default("new").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });

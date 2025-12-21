@@ -534,7 +534,23 @@ Be constructive and educational, not judgmental.`;
     description: z.string().min(10, "Description must be at least 10 characters"),
     pageUrl: z.string().optional(),
     browserInfo: z.string().optional(),
+    screenshot: z.string().optional(),
   });
+
+  // Simple token generation for bug reports access
+  const bugReportTokens = new Set<string>();
+  
+  const generateBugReportToken = () => {
+    const token = `br_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    bugReportTokens.add(token);
+    // Tokens expire after 1 hour
+    setTimeout(() => bugReportTokens.delete(token), 60 * 60 * 1000);
+    return token;
+  };
+
+  const validateBugReportToken = (token: string) => {
+    return bugReportTokens.has(token);
+  };
 
   app.post("/api/bug-reports", isAuthenticated, async (req: any, res) => {
     try {
@@ -558,8 +574,43 @@ Be constructive and educational, not judgmental.`;
     }
   });
 
-  app.get("/api/bug-reports", isAuthenticated, async (req: any, res) => {
+  // Password authentication for bug reports viewing
+  app.post("/api/bug-reports/authenticate", async (req, res) => {
     try {
+      const { password } = req.body;
+      const correctPassword = process.env.BUG_REPORTS_PASSWORD;
+      
+      if (!correctPassword) {
+        return res.status(500).json({ message: "Bug reports access not configured" });
+      }
+
+      if (password === correctPassword) {
+        const token = generateBugReportToken();
+        res.json({ token, message: "Authenticated successfully" });
+      } else {
+        res.status(401).json({ message: "Invalid password" });
+      }
+    } catch (error) {
+      console.error("Error authenticating:", error);
+      res.status(500).json({ message: "Authentication failed" });
+    }
+  });
+
+  app.get("/api/bug-reports", async (req: any, res) => {
+    try {
+      // Check for password-based token OR admin authentication
+      const token = req.headers["x-bug-reports-token"];
+      
+      if (token && validateBugReportToken(token)) {
+        const reports = await storage.getBugReports();
+        return res.json(reports);
+      }
+
+      // Fallback to user authentication for admins
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
       
@@ -573,6 +624,30 @@ Be constructive and educational, not judgmental.`;
     } catch (error) {
       console.error("Error fetching bug reports:", error);
       res.status(500).json({ message: "Failed to fetch bug reports" });
+    }
+  });
+
+  app.patch("/api/bug-reports/:id/status", async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const token = req.headers["x-bug-reports-token"];
+
+      // Validate token
+      if (!token || !validateBugReportToken(token)) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const validStatuses = ["new", "reviewed", "resolved", "dismissed"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const updated = await storage.updateBugReportStatus(id, status);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating bug report status:", error);
+      res.status(500).json({ message: "Failed to update status" });
     }
   });
 
