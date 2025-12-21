@@ -17,45 +17,95 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 async function captureScreenshot(): Promise<string | null> {
+  console.log('[Screenshot] Starting capture...');
   try {
     const html2canvas = (await import("html2canvas")).default;
+    console.log('[Screenshot] html2canvas loaded');
     
+    // Hide dialogs/portals during capture
     const portals = document.querySelectorAll('[data-radix-portal]');
     portals.forEach(p => (p as HTMLElement).style.visibility = 'hidden');
     
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    const capturePromise = new Promise<string | null>(async (resolve) => {
-      try {
-        const canvas = await html2canvas(document.body, {
-          useCORS: true,
-          allowTaint: true,
-          logging: false,
-          scale: 0.4,
-          backgroundColor: '#f8f9fa',
-          windowWidth: document.documentElement.scrollWidth,
-          windowHeight: document.documentElement.scrollHeight,
-        });
+    console.log('[Screenshot] Calling html2canvas with onclone...');
+    const canvas = await html2canvas(document.body, {
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      scale: 0.4,
+      backgroundColor: '#ffffff',
+      width: window.innerWidth,
+      height: window.innerHeight,
+      ignoreElements: (element) => {
+        return element.hasAttribute('data-radix-portal');
+      },
+      onclone: (clonedDoc) => {
+        // Remove all style elements and links to avoid color() parsing
+        clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => el.remove());
         
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-        resolve(dataUrl);
-      } catch (err) {
-        console.warn('Screenshot capture error:', err);
-        resolve(null);
+        // Add simple inline styles to preserve basic layout
+        const style = clonedDoc.createElement('style');
+        style.textContent = `
+          * { 
+            box-sizing: border-box; 
+            font-family: system-ui, -apple-system, sans-serif;
+            color: #1a1a1a !important;
+            background-color: transparent !important;
+            border-color: #e5e7eb !important;
+          }
+          body { 
+            background-color: #f9fafb !important; 
+            padding: 16px;
+          }
+          h1, h2, h3, h4 { 
+            color: #111827 !important; 
+            margin: 8px 0;
+          }
+          button, a { 
+            background-color: #3b82f6 !important; 
+            color: white !important; 
+            padding: 8px 16px;
+            border-radius: 6px;
+            display: inline-block;
+            margin: 4px;
+          }
+          input, textarea { 
+            border: 1px solid #d1d5db !important; 
+            padding: 8px;
+            border-radius: 4px;
+          }
+          [class*="card"], [class*="Card"] {
+            background-color: #ffffff !important;
+            border: 1px solid #e5e7eb !important;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 8px;
+          }
+          nav, header {
+            background-color: #ffffff !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 12px;
+          }
+          [data-radix-portal] { display: none !important; }
+        `;
+        clonedDoc.head.appendChild(style);
       }
     });
+    console.log('[Screenshot] Canvas created:', canvas.width, 'x', canvas.height);
     
-    const timeoutPromise = new Promise<null>((resolve) => {
-      setTimeout(() => resolve(null), 5000);
-    });
-    
-    const result = await Promise.race([capturePromise, timeoutPromise]);
-    
+    // Restore portals
     portals.forEach(p => (p as HTMLElement).style.visibility = '');
     
-    return result;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+    console.log('[Screenshot] DataURL created, length:', dataUrl.length);
+    
+    if (dataUrl.length < 100) {
+      console.error('[Screenshot] DataURL too short, likely failed');
+      return null;
+    }
+    
+    return dataUrl;
   } catch (error) {
-    console.warn('Screenshot module error:', error);
+    console.error('[Screenshot] Capture failed with error:', error);
     return null;
   }
 }
