@@ -327,6 +327,152 @@ function PDFUploader({
   );
 }
 
+// Rubric file uploader (supports PDF, DOC, DOCX)
+function RubricUploader({
+  onUploadComplete,
+}: {
+  onUploadComplete: (file: UploadedFile) => void;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const allowedTypes = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
+
+  const handleUpload = async (file: globalThis.File) => {
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PDF, DOC, or DOCX file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      const response = await apiRequest("POST", "/api/upload/url");
+      const { uploadUrl } = (await response.json()) as { uploadUrl: string };
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const fileUrl = uploadUrl.split("?")[0];
+      
+      onUploadComplete({
+        name: file.name,
+        url: fileUrl,
+        size: file.size,
+      });
+
+      toast({
+        title: "Upload complete",
+        description: `${file.name} uploaded successfully`,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleUpload(e.dataTransfer.files[0]);
+    }
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleUpload(e.target.files[0]);
+    }
+  };
+
+  return (
+    <div
+      className={`
+        border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
+        ${dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"}
+        ${isUploading ? "pointer-events-none opacity-50" : ""}
+      `}
+      onDragEnter={handleDrag}
+      onDragLeave={handleDrag}
+      onDragOver={handleDrag}
+      onDrop={handleDrop}
+      onClick={() => inputRef.current?.click()}
+      data-testid="dropzone-rubric"
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={handleChange}
+        className="hidden"
+        data-testid="input-rubric-file"
+      />
+      {isUploading ? (
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Uploading...</p>
+        </div>
+      ) : (
+        <>
+          <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+          <p className="text-sm font-medium mb-1">
+            Drop rubric file here or click to browse
+          </p>
+          <p className="text-xs text-muted-foreground">
+            PDF, DOC, or DOCX (max 10MB)
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Extended form schema for KPIs and rubric
 const extendedScenarioFormSchema = scenarioFormSchema.extend({
   // Initial KPIs
@@ -441,7 +587,10 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
         text?.split("\n").filter(line => line.trim()).map(line => line.trim()) || [];
       
       // Parse rubric criteria
-      let rubric = null;
+      let rubric: { 
+        criteria: { name: string; weight: number; description: string; }[];
+        attachment?: { name: string; url: string; size: number; };
+      } | null = null;
       if (data.rubricCriteriaText) {
         const criteria = data.rubricCriteriaText.split("\n")
           .filter(line => line.trim())
@@ -1222,10 +1371,8 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
                       </Button>
                     </div>
                   ) : (
-                    <FileUploader 
+                    <RubricUploader 
                       onUploadComplete={(file) => setRubricFile(file)}
-                      accept=".pdf,.doc,.docx"
-                      maxSizeMB={10}
                     />
                   )}
                 </div>
