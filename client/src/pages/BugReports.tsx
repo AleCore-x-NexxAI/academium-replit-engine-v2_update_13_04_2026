@@ -111,7 +111,7 @@ export default function BugReports() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/bug-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bug-reports", authToken] });
       toast({ title: "Status updated" });
     },
     onError: () => {
