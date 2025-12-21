@@ -122,6 +122,21 @@ export const bugReports = pgTable("bug_reports", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// LLM Providers table - Superadmin-managed API configurations
+// Note: API keys are stored in Replit Secrets (not in DB). Provider type determines which env var to use.
+export const llmProviders = pgTable("llm_providers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(), // Display name e.g., "OpenAI GPT-4o"
+  provider: varchar("provider", { length: 50 }).notNull(), // e.g., "openai", "anthropic", "google"
+  modelId: varchar("model_id", { length: 100 }).notNull(), // API model ID e.g., "gpt-4o", "claude-3-opus"
+  description: text("description"), // Optional description of model capabilities
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(), // Default model for new scenarios
+  sortOrder: integer("sort_order").default(0).notNull(), // Display order in dropdowns
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   scenarios: many(scenarios),
@@ -355,6 +370,12 @@ export const insertBugReportSchema = createInsertSchema(bugReports).omit({
   createdAt: true,
 });
 
+export const insertLlmProviderSchema = createInsertSchema(llmProviders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -368,3 +389,5 @@ export type InsertScenarioDraft = z.infer<typeof insertScenarioDraftSchema>;
 export type ScenarioDraft = typeof scenarioDrafts.$inferSelect;
 export type InsertBugReport = z.infer<typeof insertBugReportSchema>;
 export type BugReport = typeof bugReports.$inferSelect;
+export type InsertLlmProvider = z.infer<typeof insertLlmProviderSchema>;
+export type LlmProvider = typeof llmProviders.$inferSelect;

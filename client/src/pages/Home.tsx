@@ -13,11 +13,12 @@ import {
   BookOpen,
   ChevronRight,
   Loader2,
-  Settings,
+  Wrench,
   BarChart3,
   LayoutDashboard,
   Pencil,
   Bug,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -237,7 +238,7 @@ export default function Home() {
                 </Button>
                 <Button variant="outline" asChild data-testid="link-studio">
                   <Link href="/studio">
-                    <Settings className="w-4 h-4 mr-2" />
+                    <Wrench className="w-4 h-4 mr-2" />
                     Authoring Studio
                   </Link>
                 </Button>
@@ -253,6 +254,12 @@ export default function Home() {
                 </Link>
               </Button>
             )}
+
+            <Button variant="outline" size="icon" asChild data-testid="link-settings">
+              <Link href="/settings">
+                <Settings2 className="w-4 h-4" />
+              </Link>
+            </Button>
 
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">

@@ -15,6 +15,7 @@ import ProfessorDashboard from "@/pages/ProfessorDashboard";
 import ScenarioEdit from "@/pages/ScenarioEdit";
 import ScenarioAnalytics from "@/pages/ScenarioAnalytics";
 import BugReports from "@/pages/BugReports";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { BugReportButton } from "@/components/BugReportButton";
 import { OnboardingModal } from "@/components/OnboardingModal";
@@ -38,6 +39,7 @@ function AuthenticatedApp() {
         <Route path="/scenarios/:scenarioId/edit" component={ScenarioEdit} />
         <Route path="/scenarios/:scenarioId/analytics" component={ScenarioAnalytics} />
         <Route path="/bug-reports" component={BugReports} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
       {user?.isSuperAdmin && <BugReportButton />}

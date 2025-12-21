@@ -1264,4 +1264,192 @@ Be constructive and educational, not judgmental.`;
       res.status(500).json({ message: "Failed to delete scenario" });
     }
   });
+
+  // ============================================================================
+  // USER PROFILE ROUTES
+  // ============================================================================
+
+  // Update user profile
+  app.patch("/api/users/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const updateSchema = z.object({
+        firstName: z.string().min(1).max(100).optional(),
+        lastName: z.string().min(1).max(100).optional(),
+      });
+      
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parseResult.error.errors });
+      }
+
+      const updated = await storage.updateUserProfile(userId, parseResult.data);
+      if (!updated) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // ============================================================================
+  // LLM PROVIDER ROUTES (Superadmin only)
+  // ============================================================================
+
+  // Get all LLM providers (superadmin only)
+  app.get("/api/llm-providers", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.isSuperAdmin) {
+        return res.status(403).json({ message: "Superadmin access required" });
+      }
+
+      const providers = await storage.getLlmProviders();
+      res.json(providers);
+    } catch (error) {
+      console.error("Error fetching LLM providers:", error);
+      res.status(500).json({ message: "Failed to fetch LLM providers" });
+    }
+  });
+
+  // Get enabled LLM providers (all authenticated users - for scenario dropdown)
+  app.get("/api/llm-providers/enabled", isAuthenticated, async (req, res) => {
+    try {
+      const providers = await storage.getEnabledLlmProviders();
+      res.json(providers);
+    } catch (error) {
+      console.error("Error fetching enabled LLM providers:", error);
+      res.status(500).json({ message: "Failed to fetch LLM providers" });
+    }
+  });
+
+  // Create LLM provider (superadmin only)
+  app.post("/api/llm-providers", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.isSuperAdmin) {
+        return res.status(403).json({ message: "Superadmin access required" });
+      }
+
+      const createSchema = z.object({
+        name: z.string().min(1).max(100),
+        provider: z.string().min(1).max(50),
+        modelId: z.string().min(1).max(100),
+        description: z.string().optional(),
+        isEnabled: z.boolean().optional(),
+        isDefault: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      });
+
+      const parseResult = createSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parseResult.error.errors });
+      }
+
+      // If setting as default, unset other defaults first
+      if (parseResult.data.isDefault) {
+        const existing = await storage.getLlmProviders();
+        for (const p of existing) {
+          if (p.isDefault) {
+            await storage.updateLlmProvider(p.id, { isDefault: false });
+          }
+        }
+      }
+
+      const provider = await storage.createLlmProvider(parseResult.data);
+      res.status(201).json(provider);
+    } catch (error) {
+      console.error("Error creating LLM provider:", error);
+      res.status(500).json({ message: "Failed to create LLM provider" });
+    }
+  });
+
+  // Update LLM provider (superadmin only)
+  app.put("/api/llm-providers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.isSuperAdmin) {
+        return res.status(403).json({ message: "Superadmin access required" });
+      }
+
+      const { id } = req.params;
+      const existing = await storage.getLlmProvider(id);
+      if (!existing) {
+        return res.status(404).json({ message: "LLM provider not found" });
+      }
+
+      const updateSchema = z.object({
+        name: z.string().min(1).max(100).optional(),
+        provider: z.string().min(1).max(50).optional(),
+        modelId: z.string().min(1).max(100).optional(),
+        description: z.string().nullable().optional(),
+        isEnabled: z.boolean().optional(),
+        isDefault: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      }).refine(
+        (data) => Object.values(data).some((v) => v !== undefined),
+        { message: "At least one field must be provided" }
+      );
+
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parseResult.error.errors });
+      }
+
+      // Strip undefined values to prevent overwriting with NULL
+      const cleanedData = Object.fromEntries(
+        Object.entries(parseResult.data).filter(([_, v]) => v !== undefined)
+      );
+
+      // If setting as default, unset other defaults first
+      if (cleanedData.isDefault) {
+        const allProviders = await storage.getLlmProviders();
+        for (const p of allProviders) {
+          if (p.isDefault && p.id !== id) {
+            await storage.updateLlmProvider(p.id, { isDefault: false });
+          }
+        }
+      }
+
+      const updated = await storage.updateLlmProvider(id, cleanedData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating LLM provider:", error);
+      res.status(500).json({ message: "Failed to update LLM provider" });
+    }
+  });
+
+  // Delete LLM provider (superadmin only)
+  app.delete("/api/llm-providers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.isSuperAdmin) {
+        return res.status(403).json({ message: "Superadmin access required" });
+      }
+
+      const { id } = req.params;
+      const existing = await storage.getLlmProvider(id);
+      if (!existing) {
+        return res.status(404).json({ message: "LLM provider not found" });
+      }
+
+      await storage.deleteLlmProvider(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting LLM provider:", error);
+      res.status(500).json({ message: "Failed to delete LLM provider" });
+    }
+  });
 }

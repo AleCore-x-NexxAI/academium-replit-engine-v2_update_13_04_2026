@@ -5,6 +5,7 @@ import {
   turns,
   scenarioDrafts,
   bugReports,
+  llmProviders,
   type User,
   type UpsertUser,
   type Scenario,
@@ -21,6 +22,8 @@ import {
   type GeneratedScenarioData,
   type BugReport,
   type InsertBugReport,
+  type LlmProvider,
+  type InsertLlmProvider,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -93,6 +96,17 @@ export interface IStorage {
   createBugReport(report: InsertBugReport): Promise<BugReport>;
   getBugReports(): Promise<(BugReport & { user?: User })[]>;
   updateBugReportStatus(id: string, status: "new" | "reviewed" | "resolved" | "dismissed"): Promise<BugReport | undefined>;
+
+  // LLM Provider operations (superadmin)
+  getLlmProviders(): Promise<LlmProvider[]>;
+  getEnabledLlmProviders(): Promise<LlmProvider[]>;
+  getLlmProvider(id: string): Promise<LlmProvider | undefined>;
+  createLlmProvider(provider: InsertLlmProvider): Promise<LlmProvider>;
+  updateLlmProvider(id: string, data: Partial<InsertLlmProvider>): Promise<LlmProvider | undefined>;
+  deleteLlmProvider(id: string): Promise<void>;
+  
+  // User profile operations
+  updateUserProfile(id: string, data: { firstName?: string; lastName?: string }): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -533,6 +547,81 @@ export class DatabaseStorage implements IStorage {
       .update(bugReports)
       .set({ status })
       .where(eq(bugReports.id, id))
+      .returning();
+    return updated;
+  }
+
+  // LLM Provider operations
+  async getLlmProviders(): Promise<LlmProvider[]> {
+    return await db
+      .select()
+      .from(llmProviders)
+      .orderBy(llmProviders.sortOrder, llmProviders.name);
+  }
+
+  async getEnabledLlmProviders(): Promise<LlmProvider[]> {
+    return await db
+      .select()
+      .from(llmProviders)
+      .where(eq(llmProviders.isEnabled, true))
+      .orderBy(llmProviders.sortOrder, llmProviders.name);
+  }
+
+  async getLlmProvider(id: string): Promise<LlmProvider | undefined> {
+    const [provider] = await db
+      .select()
+      .from(llmProviders)
+      .where(eq(llmProviders.id, id));
+    return provider;
+  }
+
+  async createLlmProvider(provider: InsertLlmProvider): Promise<LlmProvider> {
+    const [created] = await db
+      .insert(llmProviders)
+      .values(provider)
+      .returning();
+    return created;
+  }
+
+  async updateLlmProvider(id: string, data: Partial<InsertLlmProvider>): Promise<LlmProvider | undefined> {
+    // First get existing provider to merge values
+    const [existing] = await db
+      .select()
+      .from(llmProviders)
+      .where(eq(llmProviders.id, id));
+    
+    if (!existing) return undefined;
+
+    // Merge existing values with new data, only updating fields that are explicitly provided
+    const mergedData = {
+      name: data.name ?? existing.name,
+      provider: data.provider ?? existing.provider,
+      modelId: data.modelId ?? existing.modelId,
+      description: data.description !== undefined ? data.description : existing.description,
+      isEnabled: data.isEnabled ?? existing.isEnabled,
+      isDefault: data.isDefault ?? existing.isDefault,
+      sortOrder: data.sortOrder ?? existing.sortOrder,
+      updatedAt: new Date(),
+    };
+
+    const [updated] = await db
+      .update(llmProviders)
+      .set(mergedData)
+      .where(eq(llmProviders.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLlmProvider(id: string): Promise<void> {
+    await db.delete(llmProviders).where(eq(llmProviders.id, id));
+  }
+
+  // User profile operations
+  async updateUserProfile(id: string, data: { firstName?: string; lastName?: string }): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, id))
       .returning();
     return updated;
   }
