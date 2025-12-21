@@ -199,6 +199,18 @@ Google Cloud Storage integration via `@google-cloud/storage` for PDF case study 
 - Fixed API response parsing in mutations (apiRequest returns Response, needs .json())
 - Fixed router configuration (separate Switch blocks for auth/unauth states)
 - Fixed p-retry AbortError import (named export instead of pRetry.AbortError)
+- **Superadmin Role with View Switching**: Added superadmin capability for platform administrators:
+  - `isSuperAdmin` boolean flag on users table identifies superadmins
+  - `viewingAs` field allows superadmins to switch UI views without changing their actual role
+  - Superadmins can switch between student/professor/admin views and always switch back
+  - UI uses effectiveRole (viewingAs || role) for display, backend uses actual role for authorization
+  - RoleSwitcher component shows crown icon for superadmins and uses POST /api/users/view endpoint
+  - Alejandro Correal and Avalanche AI LLC are configured as superadmins
+- **Concise AI Narrative Responses**: Updated narrator agent to produce shorter, dialogue-focused responses:
+  - Responses now 50-80 words (down from 100-150)
+  - Structure: NPC dialogue + outcome + next situation
+  - Clear cause-and-effect explanations instead of dramatic storytelling
+- **Fixed Feedback Panel Persistence**: Feedback panel now stays visible after making decisions (fixed reinitialization bug)
 
 ## Key Routes
 

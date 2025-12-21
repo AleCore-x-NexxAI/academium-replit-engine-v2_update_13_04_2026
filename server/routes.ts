@@ -468,15 +468,19 @@ Be constructive and educational, not judgmental.`;
     role: z.enum(["student", "professor", "admin"]),
   });
 
+  const updateViewingAsSchema = z.object({
+    viewingAs: z.enum(["student", "professor", "admin"]).nullable(),
+  });
+
+  // Role switching endpoint (changes actual role - legacy, kept for compatibility)
   app.post("/api/users/role", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const currentUser = await storage.getUser(userId);
       
-      // In production, only admins can switch roles
-      // In development, anyone can switch roles for testing
+      // Only superadmins or admins can switch roles (superadmins should use viewingAs instead)
       if (process.env.NODE_ENV !== "development") {
-        if (!currentUser || currentUser.role !== "admin") {
+        if (!currentUser || (currentUser.role !== "admin" && !currentUser.isSuperAdmin)) {
           return res.status(403).json({ message: "Only admins can switch roles" });
         }
       }
@@ -494,6 +498,33 @@ Be constructive and educational, not judgmental.`;
     } catch (error) {
       console.error("Error updating role:", error);
       res.status(500).json({ message: "Failed to update role" });
+    }
+  });
+
+  // View switching endpoint for superadmins (changes view, not actual role)
+  app.post("/api/users/view", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const currentUser = await storage.getUser(userId);
+      
+      // Only superadmins can switch views
+      if (!currentUser || !currentUser.isSuperAdmin) {
+        return res.status(403).json({ message: "Only superadmins can switch views" });
+      }
+      
+      const parseResult = updateViewingAsSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid view mode", errors: parseResult.error.errors });
+      }
+
+      const { viewingAs } = parseResult.data;
+      const user = await storage.updateUserViewingAs(userId, viewingAs);
+      
+      console.log(`Superadmin ${userId} switched view to ${viewingAs || 'default'}`);
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating view mode:", error);
+      res.status(500).json({ message: "Failed to update view mode" });
     }
   });
 

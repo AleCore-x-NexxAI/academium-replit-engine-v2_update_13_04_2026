@@ -197,7 +197,10 @@ export default function Home() {
   }, [scenariosError, toast]);
 
   const activeSessions = sessions?.filter((s) => s.status === "active") || [];
-  const isProfessor = user?.role === "professor" || user?.role === "admin";
+  
+  const effectiveRole = user?.viewingAs || user?.role || "student";
+  const isProfessor = effectiveRole === "professor" || effectiveRole === "admin";
+  const showRoleSwitcher = user?.isSuperAdmin || user?.role === "admin";
 
   return (
     <div className="min-h-screen bg-background">
@@ -234,7 +237,7 @@ export default function Home() {
               </>
             )}
 
-            <RoleSwitcher currentRole={user?.role || "student"} />
+            {showRoleSwitcher && user && <RoleSwitcher user={user} />}
 
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
@@ -242,7 +245,10 @@ export default function Home() {
                   {user?.firstName || "User"}
                 </p>
                 <p className="text-xs text-muted-foreground capitalize">
-                  {user?.role || "student"}
+                  {effectiveRole}
+                  {user?.isSuperAdmin && user?.viewingAs && (
+                    <span className="ml-1 text-amber-500">(viewing)</span>
+                  )}
                 </p>
               </div>
               <Avatar className="w-9 h-9">
@@ -329,7 +335,7 @@ export default function Home() {
                   <ScenarioCard 
                     scenario={scenario} 
                     userId={user?.id}
-                    userRole={user?.role}
+                    userRole={effectiveRole}
                   />
                 </motion.div>
               ))}

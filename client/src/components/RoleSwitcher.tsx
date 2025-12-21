@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, GraduationCap, BookMarked, Shield, Loader2 } from "lucide-react";
+import { ArrowLeftRight, GraduationCap, BookMarked, Shield, Crown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,12 +17,39 @@ import type { User } from "@shared/schema";
 type UserRole = "student" | "professor" | "admin";
 
 interface RoleSwitcherProps {
-  currentRole: string;
+  user: User;
 }
 
-export function RoleSwitcher({ currentRole }: RoleSwitcherProps) {
+export function RoleSwitcher({ user }: RoleSwitcherProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const isSuperAdmin = user.isSuperAdmin;
+  const effectiveRole = (user.viewingAs || user.role) as UserRole;
+
+  const switchViewMutation = useMutation({
+    mutationFn: async (newView: UserRole) => {
+      const response = await apiRequest("POST", "/api/users/view", { viewingAs: newView });
+      return response.json();
+    },
+    onSuccess: (data: User) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/scenarios"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/simulations/sessions"] });
+      const viewLabel = data.viewingAs === "professor" ? "Professor" : data.viewingAs === "admin" ? "Admin" : "Student";
+      toast({
+        title: "View Switched",
+        description: `Now viewing as ${viewLabel}`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to switch view. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const switchRoleMutation = useMutation({
     mutationFn: async (newRole: UserRole) => {
@@ -48,11 +75,17 @@ export function RoleSwitcher({ currentRole }: RoleSwitcherProps) {
     },
   });
 
-  const handleRoleSwitch = (role: UserRole) => {
-    if (role !== currentRole) {
-      switchRoleMutation.mutate(role);
+  const handleSwitch = (role: UserRole) => {
+    if (role !== effectiveRole) {
+      if (isSuperAdmin) {
+        switchViewMutation.mutate(role);
+      } else {
+        switchRoleMutation.mutate(role);
+      }
     }
   };
+
+  const isPending = switchViewMutation.isPending || switchRoleMutation.isPending;
 
   return (
     <DropdownMenu>
@@ -62,10 +95,12 @@ export function RoleSwitcher({ currentRole }: RoleSwitcherProps) {
           size="sm"
           className="gap-2"
           data-testid="button-role-switcher"
-          disabled={switchRoleMutation.isPending}
+          disabled={isPending}
         >
-          {switchRoleMutation.isPending ? (
+          {isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isSuperAdmin ? (
+            <Crown className="w-4 h-4 text-amber-500" />
           ) : (
             <ArrowLeftRight className="w-4 h-4" />
           )}
@@ -74,43 +109,50 @@ export function RoleSwitcher({ currentRole }: RoleSwitcherProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-          Admin: Switch between views
+          {isSuperAdmin ? (
+            <span className="flex items-center gap-1">
+              <Crown className="w-3 h-3 text-amber-500" />
+              Superadmin: Switch views freely
+            </span>
+          ) : (
+            "Admin: Switch between views"
+          )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => handleRoleSwitch("student")}
+          onClick={() => handleSwitch("student")}
           className="cursor-pointer"
           data-testid="menu-item-student"
         >
           <GraduationCap className="w-4 h-4 mr-2" />
           <span className="flex-1">Student View</span>
-          {currentRole === "student" && (
+          {effectiveRole === "student" && (
             <Badge variant="secondary" className="ml-2 text-xs">
               Active
             </Badge>
           )}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => handleRoleSwitch("professor")}
+          onClick={() => handleSwitch("professor")}
           className="cursor-pointer"
           data-testid="menu-item-professor"
         >
           <BookMarked className="w-4 h-4 mr-2" />
           <span className="flex-1">Professor View</span>
-          {currentRole === "professor" && (
+          {effectiveRole === "professor" && (
             <Badge variant="secondary" className="ml-2 text-xs">
               Active
             </Badge>
           )}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => handleRoleSwitch("admin")}
+          onClick={() => handleSwitch("admin")}
           className="cursor-pointer"
           data-testid="menu-item-admin"
         >
           <Shield className="w-4 h-4 mr-2" />
           <span className="flex-1">Admin View</span>
-          {currentRole === "admin" && (
+          {effectiveRole === "admin" && (
             <Badge variant="secondary" className="ml-2 text-xs">
               Active
             </Badge>

@@ -48,6 +48,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserRole(id: string, role: "student" | "professor" | "admin"): Promise<User | undefined>;
+  updateUserViewingAs(id: string, viewingAs: "student" | "professor" | "admin" | null): Promise<User | undefined>;
 
   getScenario(id: string): Promise<Scenario | undefined>;
   getPublishedScenarios(): Promise<Scenario[]>;
@@ -111,6 +112,15 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db
       .update(users)
       .set({ role, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async updateUserViewingAs(id: string, viewingAs: "student" | "professor" | "admin" | null): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ viewingAs, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
     return user;
