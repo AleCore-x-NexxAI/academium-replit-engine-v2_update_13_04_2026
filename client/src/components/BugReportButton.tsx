@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bug, Send, Loader2, Camera, Check } from "lucide-react";
+import { Bug, Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,77 +15,66 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import html2canvas from "html2canvas";
+
+async function captureScreenshot(): Promise<string | null> {
+  try {
+    const html2canvas = (await import("html2canvas")).default;
+    
+    const portals = document.querySelectorAll('[data-radix-portal]');
+    portals.forEach(p => (p as HTMLElement).style.visibility = 'hidden');
+    
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    const capturePromise = new Promise<string | null>(async (resolve) => {
+      try {
+        const canvas = await html2canvas(document.body, {
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          scale: 0.4,
+          backgroundColor: '#f8f9fa',
+          windowWidth: document.documentElement.scrollWidth,
+          windowHeight: document.documentElement.scrollHeight,
+        });
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        resolve(dataUrl);
+      } catch (err) {
+        console.warn('Screenshot capture error:', err);
+        resolve(null);
+      }
+    });
+    
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), 5000);
+    });
+    
+    const result = await Promise.race([capturePromise, timeoutPromise]);
+    
+    portals.forEach(p => (p as HTMLElement).style.visibility = '');
+    
+    return result;
+  } catch (error) {
+    console.warn('Screenshot module error:', error);
+    return null;
+  }
+}
 
 export function BugReportButton() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [screenshot, setScreenshot] = useState<string | null>(null);
-  const [capturingScreenshot, setCapturingScreenshot] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const captureScreenshot = async () => {
-    setCapturingScreenshot(true);
-    try {
-      // Hide the dialog overlay and content
-      const dialogOverlay = document.querySelector('[data-radix-portal]');
-      if (dialogOverlay) {
-        (dialogOverlay as HTMLElement).style.display = 'none';
-      }
-      
-      // Small delay to ensure dialog is hidden
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      // Capture only the visible area
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        scale: 0.5,
-        ignoreElements: (element) => {
-          // Ignore any dialog-related elements
-          return element.hasAttribute('data-radix-portal') || 
-                 element.getAttribute('role') === 'dialog';
-        },
-      });
-      
-      // Show dialog again
-      if (dialogOverlay) {
-        (dialogOverlay as HTMLElement).style.display = '';
-      }
-      
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-      setScreenshot(dataUrl);
-      toast({
-        title: "Screenshot captured",
-        description: "The current page has been captured.",
-      });
-    } catch (error) {
-      console.error("Failed to capture screenshot:", error);
-      // Ensure dialog is visible again on error
-      const dialogOverlay = document.querySelector('[data-radix-portal]');
-      if (dialogOverlay) {
-        (dialogOverlay as HTMLElement).style.display = '';
-      }
-      toast({
-        title: "Screenshot failed",
-        description: "Could not capture screenshot. You can still submit the report without one.",
-        variant: "destructive",
-      });
-    } finally {
-      setCapturingScreenshot(false);
-    }
-  };
-
   const submitMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (screenshotData: string | null) => {
       const response = await apiRequest("POST", "/api/bug-reports", {
         title,
         description,
         pageUrl: window.location.href,
         browserInfo: navigator.userAgent,
-        screenshot,
+        screenshot: screenshotData,
       });
       return response.json();
     },
@@ -96,8 +85,8 @@ export function BugReportButton() {
       });
       setTitle("");
       setDescription("");
-      setScreenshot(null);
       setOpen(false);
+      setIsSubmitting(false);
     },
     onError: (error: Error) => {
       toast({
@@ -105,10 +94,11 @@ export function BugReportButton() {
         description: error.message || "Please try again later.",
         variant: "destructive",
       });
+      setIsSubmitting(false);
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (title.length < 3 || description.length < 10) {
       toast({
@@ -118,14 +108,22 @@ export function BugReportButton() {
       });
       return;
     }
-    submitMutation.mutate();
+    
+    setIsSubmitting(true);
+    
+    let screenshot: string | null = null;
+    try {
+      screenshot = await captureScreenshot();
+    } catch (e) {
+      console.warn('Screenshot failed, continuing without it:', e);
+    }
+    
+    submitMutation.mutate(screenshot);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) {
-      // Reset state when closing
-      setScreenshot(null);
+    if (!isSubmitting) {
+      setOpen(newOpen);
     }
   };
 
@@ -158,6 +156,7 @@ export function BugReportButton() {
               placeholder="Brief description of the issue"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              disabled={isSubmitting}
               data-testid="input-bug-title"
             />
           </div>
@@ -169,75 +168,35 @@ export function BugReportButton() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={5}
+              disabled={isSubmitting}
               data-testid="input-bug-description"
             />
           </div>
-          
-          <div className="space-y-2">
-            <Label>Screenshot (optional)</Label>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={captureScreenshot}
-                disabled={capturingScreenshot}
-                data-testid="button-capture-screenshot"
-              >
-                {capturingScreenshot ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : screenshot ? (
-                  <Check className="h-4 w-4 mr-2 text-green-500" />
-                ) : (
-                  <Camera className="h-4 w-4 mr-2" />
-                )}
-                {screenshot ? "Screenshot captured" : "Capture screenshot"}
-              </Button>
-              {screenshot && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setScreenshot(null)}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-            {screenshot && (
-              <div className="mt-2 rounded-md overflow-hidden border">
-                <img 
-                  src={screenshot} 
-                  alt="Screenshot preview" 
-                  className="w-full max-h-32 object-cover object-top"
-                />
-              </div>
-            )}
-          </div>
 
           <div className="text-xs text-muted-foreground">
-            Current page and browser info will be included automatically.
+            A screenshot will be captured automatically along with page and browser info.
           </div>
           <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
+              disabled={isSubmitting}
               data-testid="button-bug-cancel"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={submitMutation.isPending}
+              disabled={isSubmitting}
               data-testid="button-bug-submit"
             >
-              {submitMutation.isPending ? (
+              {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <Send className="h-4 w-4 mr-2" />
               )}
-              Submit Report
+              {isSubmitting ? "Submitting..." : "Submit Report"}
             </Button>
           </div>
         </form>

@@ -532,9 +532,9 @@ Be constructive and educational, not judgmental.`;
   const createBugReportSchema = z.object({
     title: z.string().min(3, "Title must be at least 3 characters"),
     description: z.string().min(10, "Description must be at least 10 characters"),
-    pageUrl: z.string().optional(),
-    browserInfo: z.string().optional(),
-    screenshot: z.string().optional(),
+    pageUrl: z.string().optional().nullable(),
+    browserInfo: z.string().optional().nullable(),
+    screenshot: z.string().optional().nullable(),
   });
 
   // Simple token generation for bug reports access
