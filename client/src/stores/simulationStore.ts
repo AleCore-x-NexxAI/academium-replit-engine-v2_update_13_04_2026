@@ -26,9 +26,16 @@ interface SimulationStore {
   currentDecision: number;
   totalDecisions: number;
   decisionPoints: DecisionPoint[];
+  // Revision state for weak answer handling
+  pendingRevision: boolean;
+  revisionPrompt: string | null;
+  revisionAttempts: number;
+  maxRevisions: number;
 
   setSessionId: (id: string | null) => void;
   addTurn: (userInput: string, response: TurnResponse) => void;
+  handleRevisionRequest: (response: TurnResponse) => void;
+  clearRevision: () => void;
   updateKPIs: (updates: Record<string, { value: number; delta: number }>) => void;
   setProcessing: (status: boolean) => void;
   setThinkingSteps: (steps: ThinkingStep[]) => void;
@@ -73,6 +80,10 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   currentDecision: 1,
   totalDecisions: 0,
   decisionPoints: [],
+  pendingRevision: false,
+  revisionPrompt: null,
+  revisionAttempts: 0,
+  maxRevisions: 2,
 
   setSessionId: (id) => set({ sessionId: id }),
 
@@ -121,7 +132,42 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
         competencyScores: response.competencyScores || state.competencyScores,
         options: response.options || [],
         currentDecision: newDecision,
+        // Clear revision state on successful turn
+        pendingRevision: false,
+        revisionPrompt: null,
+        revisionAttempts: 0,
       };
+    }),
+
+  handleRevisionRequest: (response) =>
+    set((state) => {
+      // Add the revision prompt to history
+      const newHistory: HistoryEntry[] = [
+        ...state.history,
+        {
+          role: "system",
+          content: response.revisionPrompt || response.narrative.text,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
+      return {
+        history: newHistory,
+        pendingRevision: true,
+        revisionPrompt: response.revisionPrompt || null,
+        revisionAttempts: response.revisionAttempt || state.revisionAttempts + 1,
+        maxRevisions: response.maxRevisions || 2,
+        currentFeedback: {
+          score: 0,
+          message: response.feedback.message,
+        },
+      };
+    }),
+
+  clearRevision: () =>
+    set({
+      pendingRevision: false,
+      revisionPrompt: null,
     }),
 
   updateKPIs: (updates) =>
@@ -190,5 +236,9 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
       currentDecision: 1,
       totalDecisions: 0,
       decisionPoints: [],
+      pendingRevision: false,
+      revisionPrompt: null,
+      revisionAttempts: 0,
+      maxRevisions: 2,
     }),
 }));

@@ -84,6 +84,7 @@ const startSimulationSchema = z.object({
 
 const submitTurnSchema = z.object({
   input: z.string().min(1),
+  revisionAttempts: z.number().optional().default(0),
 });
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
@@ -416,7 +417,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Invalid input", errors: parseResult.error.errors });
       }
 
-      const { input } = parseResult.data;
+      const { input, revisionAttempts } = parseResult.data;
       const session = await storage.getSimulationSessionWithScenario(sessionId);
       if (!session) {
         return res.status(404).json({ message: "Session not found" });
@@ -474,8 +475,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       };
 
-      const result = await processStudentTurn(context);
+      const result = await processStudentTurn(context, revisionAttempts);
 
+      // If revision is required, don't save the turn yet - just update session state and return
+      if (result.requiresRevision) {
+        await storage.updateSimulationSession(sessionId, {
+          currentState: result.updatedState,
+        });
+        return res.json(result);
+      }
+
+      // Answer accepted - save the turn
       await storage.createTurn({
         sessionId,
         turnNumber: session.currentState.turnCount + 1,

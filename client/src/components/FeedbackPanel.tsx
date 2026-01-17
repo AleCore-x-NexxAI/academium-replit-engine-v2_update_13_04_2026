@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
-import { MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { MessageSquare, RefreshCw } from "lucide-react";
 
 interface FeedbackPanelProps {
   feedback: {
@@ -10,11 +11,19 @@ interface FeedbackPanelProps {
   } | null;
   competencyScores: Record<string, number>;
   isGameOver: boolean;
+  pendingRevision?: boolean;
+  revisionPrompt?: string | null;
+  revisionAttempts?: number;
+  maxRevisions?: number;
 }
 
 export function FeedbackPanel({
   feedback,
   isGameOver,
+  pendingRevision = false,
+  revisionPrompt,
+  revisionAttempts = 0,
+  maxRevisions = 2,
 }: FeedbackPanelProps) {
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
@@ -23,7 +32,37 @@ export function FeedbackPanel({
       </h3>
 
       <AnimatePresence mode="wait">
-        {feedback && (
+        {pendingRevision && revisionPrompt && (
+          <motion.div
+            key="revision"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            data-testid="revision-feedback-card"
+          >
+            <Card className="p-6 border-primary/30 bg-primary/5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-primary" />
+                  <span className="font-medium">Profundiza tu Respuesta</span>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {revisionAttempts}/{maxRevisions}
+                </Badge>
+              </div>
+
+              <p className="text-sm leading-relaxed text-foreground mb-4">
+                {revisionPrompt}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                Tómate un momento para reflexionar y ampliar tu respuesta.
+              </p>
+            </Card>
+          </motion.div>
+        )}
+
+        {!pendingRevision && feedback && (
           <motion.div
             key={feedback.message}
             initial={{ opacity: 0, y: 20 }}

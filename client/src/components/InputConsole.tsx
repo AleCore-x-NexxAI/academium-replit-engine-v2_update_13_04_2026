@@ -41,6 +41,10 @@ interface InputConsoleProps {
   currentDecisionPoint?: DecisionPoint;
   decisionNumber?: number;
   totalDecisions?: number;
+  pendingRevision?: boolean;
+  revisionPrompt?: string | null;
+  revisionAttempts?: number;
+  maxRevisions?: number;
 }
 
 export function InputConsole({
@@ -56,6 +60,10 @@ export function InputConsole({
   currentDecisionPoint,
   decisionNumber,
   totalDecisions,
+  pendingRevision = false,
+  revisionPrompt,
+  revisionAttempts = 0,
+  maxRevisions = 2,
 }: InputConsoleProps) {
   const [input, setInput] = useState("");
   const [selectedOption, setSelectedOption] = useState<string>("");
@@ -136,7 +144,28 @@ export function InputConsole({
 
   return (
     <div className="border-t bg-background p-4">
-      {currentDecisionPoint?.prompt && (
+      {pendingRevision && revisionPrompt && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 p-4 bg-primary/5 border-primary/20 rounded-lg border"
+          data-testid="revision-prompt-banner"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-primary uppercase tracking-wide">
+              El mentor te invita a profundizar
+            </span>
+            <Badge variant="outline" className="text-xs">
+              Revisión {revisionAttempts} de {maxRevisions}
+            </Badge>
+          </div>
+          <p className="text-sm text-foreground leading-relaxed">
+            {revisionPrompt}
+          </p>
+        </motion.div>
+      )}
+
+      {currentDecisionPoint?.prompt && !pendingRevision && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}

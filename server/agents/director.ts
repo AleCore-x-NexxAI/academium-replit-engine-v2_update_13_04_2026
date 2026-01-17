@@ -3,7 +3,10 @@ import type { KPIs, SimulationState, TurnResponse, HistoryEntry } from "@shared/
 import { evaluateDecision } from "./evaluator";
 import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative } from "./narrator";
+import { evaluateDepth } from "./depthEvaluator";
 import { generateChatCompletion, SupportedModel } from "../openai";
+
+const MAX_REVISIONS = 2;
 
 export const DEFAULT_DIRECTOR_PROMPT = `Eres un INTÉRPRETE DE INTENCIÓN para un juego de simulación empresarial inmersivo.
 
@@ -135,7 +138,10 @@ function checkGameOver(kpis: KPIs, context?: AgentContext): boolean {
   return kpiGameOver;
 }
 
-export async function processStudentTurn(context: AgentContext): Promise<DirectorOutput> {
+export async function processStudentTurn(
+  context: AgentContext,
+  revisionAttempts: number = 0
+): Promise<DirectorOutput> {
   const intentResult = await interpretIntent(
     context.studentInput,
     context.history as HistoryEntry[],
@@ -178,6 +184,8 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
         history: updatedHistory,
         flags: [],
         rubricScores: {},
+        pendingRevision: false,
+        revisionAttempts: 0,
       },
     };
   }
@@ -187,6 +195,60 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
     studentInput: intentResult.interpretedAction || context.studentInput,
   };
 
+  // DEPTH EVALUATION: Check if answer needs more depth before processing consequences
+  const depthResult = await evaluateDepth(
+    interpretedContext,
+    revisionAttempts,
+    { model: context.llmModel }
+  );
+
+  if (!depthResult.isDeepEnough && depthResult.revisionPrompt) {
+    // Answer is weak - ask for revision without showing consequences
+    const revisionHistory: HistoryEntry[] = [
+      ...context.history as HistoryEntry[],
+      {
+        role: "user",
+        content: context.studentInput,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        role: "system",
+        content: depthResult.revisionPrompt,
+        timestamp: new Date().toISOString(),
+      },
+    ];
+
+    return {
+      narrative: {
+        text: depthResult.revisionPrompt,
+        mood: "neutral",
+      },
+      kpiUpdates: {},
+      feedback: {
+        score: 0,
+        message: depthResult.strengthsAcknowledged || "",
+      },
+      isGameOver: false,
+      requiresRevision: true,
+      revisionPrompt: depthResult.revisionPrompt,
+      revisionAttempt: revisionAttempts + 1,
+      maxRevisions: MAX_REVISIONS,
+      updatedState: {
+        turnCount: context.turnCount,
+        kpis: context.currentKpis,
+        indicators: context.indicators,
+        history: revisionHistory,
+        flags: [],
+        rubricScores: {},
+        currentDecision: context.currentDecision,
+        pendingRevision: true,
+        revisionAttempts: revisionAttempts + 1,
+        lastStudentInput: context.studentInput,
+      },
+    };
+  }
+
+  // Answer is deep enough - proceed with full processing
   const [evaluation, kpiImpact] = await Promise.all([
     evaluateDecision(interpretedContext),
     calculateKPIImpact(interpretedContext),
@@ -236,12 +298,14 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
   const updatedState: SimulationState = {
     turnCount: context.turnCount + 1,
     kpis: newKpis,
-    indicators: context.indicators, // Preserve indicators (updated by frontend for now)
+    indicators: context.indicators,
     history: newHistory,
     flags: [...(context.history as any).flags || [], ...evaluation.flags],
     rubricScores: evaluation.competencyScores,
     currentDecision: simulationComplete ? totalDecisions : nextDecision,
     isComplete: simulationComplete || isGameOver,
+    pendingRevision: false,
+    revisionAttempts: 0,
   };
 
   return {
@@ -256,6 +320,7 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
     options: narrative.suggestedOptions,
     isGameOver,
     competencyScores: evaluation.competencyScores,
+    requiresRevision: false,
     updatedState,
   };
 }

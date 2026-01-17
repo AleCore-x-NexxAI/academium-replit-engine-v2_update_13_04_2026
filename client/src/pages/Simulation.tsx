@@ -45,10 +45,15 @@ export default function Simulation() {
     currentDecision,
     totalDecisions,
     decisionPoints,
+    pendingRevision,
+    revisionPrompt,
+    revisionAttempts,
+    maxRevisions,
     setProcessing,
     setThinkingSteps,
     updateThinkingStep,
     addTurn,
+    handleRevisionRequest,
     initializeSession,
     resetStore,
   } = useSimulationStore();
@@ -116,6 +121,7 @@ export default function Simulation() {
     mutationFn: async (input: string) => {
       const response = await apiRequest("POST", `/api/simulations/${sessionId}/turn`, {
         input,
+        revisionAttempts: pendingRevision ? revisionAttempts : 0,
       });
       return (await response.json()) as TurnResponse;
     },
@@ -137,7 +143,12 @@ export default function Simulation() {
       return { interval };
     },
     onSuccess: (response, input) => {
-      addTurn(input, response);
+      // Check if revision is required
+      if (response.requiresRevision) {
+        handleRevisionRequest(response);
+      } else {
+        addTurn(input, response);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/simulations", sessionId] });
     },
     onError: (error: any) => {
@@ -284,6 +295,10 @@ export default function Simulation() {
             currentDecisionPoint={decisionPoints[currentDecision - 1]}
             decisionNumber={currentDecision}
             totalDecisions={totalDecisions}
+            pendingRevision={pendingRevision}
+            revisionPrompt={revisionPrompt}
+            revisionAttempts={revisionAttempts}
+            maxRevisions={maxRevisions}
           />
         </main>
 
@@ -296,6 +311,10 @@ export default function Simulation() {
             feedback={currentFeedback}
             competencyScores={competencyScores}
             isGameOver={isGameOver}
+            pendingRevision={pendingRevision}
+            revisionPrompt={revisionPrompt}
+            revisionAttempts={revisionAttempts}
+            maxRevisions={maxRevisions}
           />
         </motion.aside>
       </div>
