@@ -251,6 +251,7 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
       mood: narrative.mood,
     },
     kpiUpdates,
+    indicatorDeltas: kpiImpact.indicatorDeltas,
     feedback: evaluation.feedback,
     options: narrative.suggestedOptions,
     isGameOver,

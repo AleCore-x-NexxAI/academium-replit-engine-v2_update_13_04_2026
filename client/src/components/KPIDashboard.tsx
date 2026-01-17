@@ -1,6 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, TrendingDown, DollarSign, Users, Star, Gauge, Shield, Activity, Clock, Target, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Users, Star, Gauge, Shield, Activity, Clock, Target, AlertTriangle, HelpCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { KPIs, Indicator } from "@shared/schema";
 
 interface KPIDashboardProps {
@@ -15,19 +20,54 @@ interface KPIDashboardProps {
   totalDecisions?: number;
 }
 
+interface IndicatorInfo {
+  description: string;
+  upMeaning: string;
+  downMeaning: string;
+}
+
+const indicatorExplanations: Record<string, IndicatorInfo> = {
+  teamMorale: {
+    description: "Mide el nivel de motivación, compromiso y bienestar emocional del equipo de trabajo.",
+    upMeaning: "El equipo se siente más motivado, valorado y comprometido con el proyecto.",
+    downMeaning: "El equipo experimenta estrés, frustración o desmotivación ante las decisiones tomadas.",
+  },
+  budgetImpact: {
+    description: "Refleja la salud financiera del proyecto y los recursos disponibles para la operación.",
+    upMeaning: "Las decisiones han optimizado recursos o generado ahorros/ingresos adicionales.",
+    downMeaning: "Las decisiones han generado costos adicionales o consumido más recursos de lo planeado.",
+  },
+  operationalRisk: {
+    description: "Indica el nivel de incertidumbre y posibles problemas técnicos u operativos que enfrenta el proyecto.",
+    upMeaning: "El riesgo ha aumentado - hay más posibilidad de problemas técnicos o fallos operativos.",
+    downMeaning: "El riesgo ha disminuido - las decisiones han estabilizado la operación.",
+  },
+  strategicAlignment: {
+    description: "Mide qué tan alineadas están las decisiones con los objetivos estratégicos de la organización.",
+    upMeaning: "Las decisiones apoyan mejor la visión y objetivos de largo plazo de la empresa.",
+    downMeaning: "Las decisiones pueden estar desviándose de los objetivos estratégicos principales.",
+  },
+  timePressure: {
+    description: "Representa la urgencia y presión temporal sobre el proyecto y sus entregables.",
+    upMeaning: "La presión de tiempo ha aumentado - hay más urgencia para cumplir plazos.",
+    downMeaning: "Se ha ganado tiempo o reducido la urgencia de los entregables.",
+  },
+};
+
 interface IndicatorCardProps {
+  indicatorId: string;
   label: string;
   value: number;
   previousValue?: number;
   icon: React.ReactNode;
   color: string;
-  description?: string;
 }
 
-function IndicatorCard({ label, value, previousValue, icon, color, description }: IndicatorCardProps) {
+function IndicatorCard({ indicatorId, label, value, previousValue, icon, color }: IndicatorCardProps) {
   const delta = previousValue !== undefined ? value - previousValue : 0;
   const isPositive = delta > 0;
   const isNegative = delta < 0;
+  const info = indicatorExplanations[indicatorId];
 
   return (
     <Card
@@ -35,9 +75,35 @@ function IndicatorCard({ label, value, previousValue, icon, color, description }
       data-testid={`indicator-card-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="uppercase text-xs tracking-wide font-medium text-muted-foreground">
-          {label}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="uppercase text-xs tracking-wide font-medium text-muted-foreground">
+            {label}
+          </span>
+          {info && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs p-3">
+                <div className="space-y-2 text-xs">
+                  <p className="font-medium">{info.description}</p>
+                  <div className="pt-1 border-t border-border/50">
+                    <p className="text-chart-2 flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      <span>{info.upMeaning}</span>
+                    </p>
+                    <p className="text-chart-4 flex items-center gap-1 mt-1">
+                      <TrendingDown className="w-3 h-3" />
+                      <span>{info.downMeaning}</span>
+                    </p>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
         <div className={`${color} p-1.5 rounded-md`}>{icon}</div>
       </div>
 
@@ -58,7 +124,7 @@ function IndicatorCard({ label, value, previousValue, icon, color, description }
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               className={`flex items-center gap-1 text-sm font-medium ${
-                isPositive ? "text-chart-2" : isNegative ? "text-destructive" : ""
+                isPositive ? "text-chart-2" : isNegative ? "text-chart-4" : ""
               }`}
             >
               {isPositive ? (
@@ -74,22 +140,12 @@ function IndicatorCard({ label, value, previousValue, icon, color, description }
 
       <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
         <motion.div
-          className={`h-full rounded-full ${
-            value < 30
-              ? "bg-destructive"
-              : value < 50
-              ? "bg-chart-4"
-              : "bg-chart-2"
-          }`}
+          className="h-full rounded-full bg-primary/70"
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(100, value)}%` }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         />
       </div>
-
-      {description && (
-        <p className="mt-2 text-xs text-muted-foreground">{description}</p>
-      )}
     </Card>
   );
 }
@@ -107,7 +163,6 @@ function KPICard({ label, value, previousValue, icon, format, color }: KPICardPr
   const delta = previousValue !== undefined ? value - previousValue : 0;
   const isPositive = delta > 0;
   const isNegative = delta < 0;
-  const isCritical = format === "percentage" && value < 30;
 
   const formattedValue =
     format === "currency"
@@ -116,9 +171,7 @@ function KPICard({ label, value, previousValue, icon, format, color }: KPICardPr
 
   return (
     <Card
-      className={`p-4 transition-all duration-300 ${
-        isCritical ? "border-destructive bg-destructive/5" : ""
-      }`}
+      className="p-4 transition-all duration-300"
       data-testid={`kpi-card-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <div className="flex items-center justify-between mb-2">
@@ -133,9 +186,7 @@ function KPICard({ label, value, previousValue, icon, format, color }: KPICardPr
           key={value}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`text-3xl font-mono font-semibold ${
-            isCritical ? "text-destructive" : ""
-          }`}
+          className="text-3xl font-mono font-semibold"
         >
           {formattedValue}
         </motion.span>
@@ -147,7 +198,7 @@ function KPICard({ label, value, previousValue, icon, format, color }: KPICardPr
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               className={`flex items-center gap-1 text-sm font-medium ${
-                isPositive ? "text-chart-2" : isNegative ? "text-destructive" : ""
+                isPositive ? "text-chart-2" : isNegative ? "text-chart-4" : ""
               }`}
             >
               {isPositive ? (
@@ -167,13 +218,7 @@ function KPICard({ label, value, previousValue, icon, format, color }: KPICardPr
       {format === "percentage" && (
         <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
           <motion.div
-            className={`h-full rounded-full ${
-              isCritical
-                ? "bg-destructive"
-                : value < 50
-                ? "bg-chart-4"
-                : "bg-chart-2"
-            }`}
+            className="h-full rounded-full bg-primary/70"
             initial={{ width: 0 }}
             animate={{ width: `${value}%` }}
             transition={{ duration: 0.5, ease: "easeOut" }}
@@ -297,12 +342,12 @@ export function KPIDashboard({
               return (
                 <IndicatorCard
                   key={indicator.id}
+                  indicatorId={indicator.id}
                   label={indicator.label}
                   value={indicator.value}
                   previousValue={prevIndicator?.value}
                   icon={indicatorIcons[indicator.id] || <Gauge className="w-4 h-4" />}
                   color={indicatorColors[indicator.id] || "bg-muted text-muted-foreground"}
-                  description={indicator.description}
                 />
               );
             })

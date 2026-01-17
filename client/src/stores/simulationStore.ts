@@ -100,6 +100,14 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
         }
       });
 
+      const newIndicators = state.indicators.map((indicator) => {
+        const delta = response.indicatorDeltas?.[indicator.id] || 0;
+        return {
+          ...indicator,
+          value: Math.max(0, Math.min(100, indicator.value + delta)),
+        };
+      });
+
       const newDecision = state.currentDecision + 1;
       const isComplete = state.totalDecisions > 0 && newDecision > state.totalDecisions;
 
@@ -107,6 +115,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
         history: newHistory,
         kpis: newKpis,
         previousIndicators: state.indicators,
+        indicators: newIndicators,
         currentFeedback: response.feedback,
         isGameOver: response.isGameOver || isComplete,
         competencyScores: response.competencyScores || state.competencyScores,

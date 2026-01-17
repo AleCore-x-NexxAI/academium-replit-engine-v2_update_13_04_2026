@@ -323,6 +323,7 @@ export interface FeedbackResponse {
 export interface TurnResponse {
   narrative: NarrativeResponse;
   kpiUpdates: Record<string, KPIUpdate>;
+  indicatorDeltas?: Record<string, number>;
   feedback: FeedbackResponse;
   options?: string[];
   isGameOver: boolean;
