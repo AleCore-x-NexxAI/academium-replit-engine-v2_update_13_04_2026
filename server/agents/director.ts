@@ -5,48 +5,50 @@ import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative } from "./narrator";
 import { generateChatCompletion, SupportedModel } from "../openai";
 
-export const DEFAULT_DIRECTOR_PROMPT = `You are an INTENT INTERPRETER for an immersive business simulation game.
+export const DEFAULT_DIRECTOR_PROMPT = `Eres un INTÉRPRETE DE INTENCIÓN para un juego de simulación empresarial inmersivo.
 
-YOUR CRITICAL MISSION: Accept and interpret virtually ANYTHING the student says as a valid decision or action within the simulation context. You are NOT a gatekeeper - you are a creative interpreter.
+TU MISIÓN CRÍTICA: Aceptar e interpretar virtualmente CUALQUIER COSA que el estudiante diga como una decisión o acción válida dentro del contexto de la simulación. NO eres un guardián - eres un intérprete creativo.
 
-CORE PRINCIPLES:
-1. ASSUME POSITIVE INTENT - The student is trying to engage with the simulation
-2. BE MAXIMALLY PERMISSIVE - Accept typos, casual language, partial sentences, unconventional ideas
-3. INTERPRET CREATIVELY - Find the business decision hidden in any statement
-4. NEVER REJECT - Transform unclear inputs into actionable interpretations
+PRINCIPIOS FUNDAMENTALES:
+1. ASUME INTENCIÓN POSITIVA - El estudiante está tratando de participar en la simulación
+2. SÉ MÁXIMAMENTE PERMISIVO - Acepta errores de escritura, lenguaje casual, oraciones parciales, ideas no convencionales
+3. INTERPRETA CREATIVAMENTE - Encuentra la decisión empresarial oculta en cualquier declaración
+4. NUNCA RECHACES - Transforma entradas poco claras en interpretaciones accionables
 
-EXAMPLES OF VALID INTERPRETATIONS:
-- "ush developers to finish" → VALID: "Push developers to finish on deadline" (obvious typo)
-- "give them coffee everyday" → VALID: Improve workplace amenities/morale
-- "i dunno maybe delay it" → VALID: Consider delaying the project/deadline
-- "fire everyone lol" → VALID: Dramatic cost-cutting/restructuring (explore consequences)
-- "what if we just lie" → VALID: Questionable ethical approach (explore consequences)
-- "push through no matter what" → VALID: Aggressive deadline pursuit strategy
-- "that above is my decision" → VALID: Referencing their previous statement as their decision
-- "i just answered the question" → VALID: Their previous message was their intended action
-- Random/silly answers → VALID: Interpret as an unconventional business approach and show consequences
+EJEMPLOS DE INTERPRETACIONES VÁLIDAS:
+- "empjuar a los desarrolladores" → VÁLIDO: "Presionar a los desarrolladores para terminar a tiempo" (error obvio)
+- "darles café todos los días" → VÁLIDO: Mejorar amenidades del lugar de trabajo/moral
+- "no sé quizás retrasarlo" → VÁLIDO: Considerar retrasar el proyecto/fecha límite
+- "despedir a todos jaja" → VÁLIDO: Reducción dramática de costos/reestructuración (explorar consecuencias)
+- "qué tal si mentimos" → VÁLIDO: Enfoque ético cuestionable (explorar consecuencias)
+- "seguir adelante sin importar qué" → VÁLIDO: Estrategia agresiva de cumplimiento de fechas
+- "lo de arriba es mi decisión" → VÁLIDO: Referenciando su declaración anterior como su decisión
+- "ya respondí la pregunta" → VÁLIDO: Su mensaje anterior era su acción pretendida
+- Respuestas aleatorias/tontas → VÁLIDO: Interpretar como un enfoque empresarial no convencional y mostrar consecuencias
 
-INPUTS TO FLAG FOR CLARIFICATION (still rare):
-- Complete gibberish with zero interpretable meaning: "asdfghjkl"
-- Content promoting violence, illegal activities, or harassment that cannot be reframed as a business decision
-- Content completely unrelated to any professional/business context
+ENTRADAS PARA MARCAR PARA ACLARACIÓN (aún raras):
+- Galimatías completo sin significado interpretable: "asdfghjkl"
+- Contenido que promueve violencia, actividades ilegales o acoso que no puede reformularse como decisión empresarial
+- Contenido completamente no relacionado con cualquier contexto profesional/empresarial
 
-Note: Risky or ethically questionable BUSINESS decisions are VALID (e.g., "fire everyone", "lie to customers") - let consequences teach. Only flag truly harmful/off-topic content.
+Nota: Las decisiones empresariales arriesgadas o éticamente cuestionables SON VÁLIDAS (ej., "despedir a todos", "mentirle a los clientes") - deja que las consecuencias enseñen. Solo marca contenido verdaderamente dañino/fuera de tema.
 
-OUTPUT FORMAT (JSON only):
+IMPORTANTE: Si la entrada no es válida, el helpfulPrompt debe estar en ESPAÑOL.
+
+FORMATO DE SALIDA (solo JSON):
 {
   "isValid": true,
-  "interpretedAction": "<clear description of what the student is trying to do>",
+  "interpretedAction": "<descripción clara de lo que el estudiante está tratando de hacer>",
   "confidence": "high" | "medium" | "low"
 }
 
-For the extremely rare invalid case:
+Para el caso extremadamente raro de inválido:
 {
   "isValid": false,
-  "helpfulPrompt": "<engaging question to get them back on track>"
+  "helpfulPrompt": "<pregunta atractiva en español para regresarlos al camino>"
 }
 
-Remember: A creative business simulation should be able to handle ANY decision and show interesting consequences. Your job is to enable play, not block it.`;
+Recuerda: Una simulación empresarial creativa debe poder manejar CUALQUIER decisión y mostrar consecuencias interesantes. Tu trabajo es habilitar el juego, no bloquearlo.`;
 
 async function interpretIntent(
   input: string,
@@ -143,7 +145,7 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
 
   if (!intentResult.isValid) {
     const helpPrompt = intentResult.helpfulPrompt || 
-      "I want to help you navigate this situation! What action would you like to take? You can try anything - negotiate, investigate, make bold moves, or even unconventional approaches.";
+      "¡Quiero ayudarte a navegar esta situación! ¿Qué acción te gustaría tomar? Puedes intentar cualquier cosa - negociar, investigar, tomar decisiones audaces, o incluso enfoques no convencionales.";
     
     const updatedHistory: HistoryEntry[] = [
       ...context.history as HistoryEntry[],
@@ -167,7 +169,7 @@ export async function processStudentTurn(context: AgentContext): Promise<Directo
       kpiUpdates: {},
       feedback: {
         score: 0,
-        message: "Tell me what you want to do - I'll make it happen in the simulation!",
+        message: "¡Cuéntame qué quieres hacer y lo haré realidad en la simulación!",
       },
       isGameOver: false,
       updatedState: {

@@ -21,10 +21,10 @@ interface FeedbackPanelProps {
 }
 
 const competencyLabels: Record<string, string> = {
-  strategicThinking: "Strategic Thinking",
-  ethicalReasoning: "Ethical Reasoning",
-  decisionDecisiveness: "Decisiveness",
-  stakeholderEmpathy: "Empathy",
+  strategicThinking: "Pensamiento Estratégico",
+  ethicalReasoning: "Razonamiento Ético",
+  decisionDecisiveness: "Capacidad de Decisión",
+  stakeholderEmpathy: "Empatía",
 };
 
 export function FeedbackPanel({
@@ -41,22 +41,22 @@ export function FeedbackPanel({
   const hasCompetencyData = radarData.length > 0;
 
   const getScoreBadge = (score: number) => {
-    if (score >= 80) return { label: "Excellent", variant: "default" as const };
-    if (score >= 60) return { label: "Good", variant: "secondary" as const };
-    if (score >= 40) return { label: "Fair", variant: "outline" as const };
-    return { label: "Needs Improvement", variant: "destructive" as const };
+    if (score >= 80) return { label: "Excelente", variant: "default" as const };
+    if (score >= 60) return { label: "Bueno", variant: "secondary" as const };
+    if (score >= 40) return { label: "Aceptable", variant: "outline" as const };
+    return { label: "Necesita Mejorar", variant: "destructive" as const };
   };
 
   return (
     <div className="h-full flex flex-col p-6 overflow-y-auto">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-6">
-        Performance Analysis
+        Análisis de Desempeño
       </h3>
 
       {hasCompetencyData && (
         <Card className="p-4 mb-6">
           <h4 className="text-sm font-medium mb-4 text-center">
-            Competency Profile
+            Perfil de Competencias
           </h4>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
@@ -99,7 +99,7 @@ export function FeedbackPanel({
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Award className="w-5 h-5 text-chart-4" />
-                  <span className="font-medium">Decision Feedback</span>
+                  <span className="font-medium">Retroalimentación</span>
                 </div>
                 <Badge variant={getScoreBadge(feedback.score).variant}>
                   {getScoreBadge(feedback.score).label}
@@ -134,12 +134,12 @@ export function FeedbackPanel({
               <div className="flex items-center gap-3 mb-4">
                 <AlertTriangle className="w-6 h-6 text-destructive" />
                 <h4 className="text-lg font-semibold text-destructive">
-                  Simulation Ended
+                  Simulación Terminada
                 </h4>
               </div>
               <p className="text-sm text-muted-foreground">
-                A critical threshold was reached. Review your decisions to
-                understand what led to this outcome.
+                Se alcanzó un umbral crítico. Revisa tus decisiones para
+                entender qué llevó a este resultado.
               </p>
             </Card>
           </motion.div>
@@ -151,7 +151,7 @@ export function FeedbackPanel({
           <div className="p-6">
             <Award className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
             <p className="text-sm text-muted-foreground">
-              Make a decision to receive feedback
+              Toma una decisión para recibir retroalimentación
             </p>
           </div>
         </div>

@@ -74,7 +74,7 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
           <Link href={`/simulation/start/${scenario.id}`}>
             <Button variant="default" className="w-full" data-testid={`button-start-${scenario.id}`}>
               <Play className="w-4 h-4 mr-2" />
-              Start Simulation
+              Iniciar Simulación
             </Button>
           </Link>
           <div className="flex gap-2">
@@ -82,7 +82,7 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
               <Link href={`/scenarios/${scenario.id}/edit`} className="flex-1">
                 <Button variant="outline" className="w-full" data-testid={`button-edit-${scenario.id}`}>
                   <Pencil className="w-4 h-4 mr-2" />
-                  Edit
+                  Editar
                 </Button>
               </Link>
             )}
@@ -90,7 +90,7 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
               <Link href={`/scenarios/${scenario.id}/analytics`} className={canEditScenario ? "flex-1" : "w-full"}>
                 <Button variant="outline" className="w-full" data-testid={`button-analytics-${scenario.id}`}>
                   <BarChart3 className="w-4 h-4 mr-2" />
-                  Analytics
+                  Analíticas
                 </Button>
               </Link>
             )}
@@ -119,7 +119,7 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
         </p>
 
         <div className="flex items-center text-sm text-primary font-medium">
-          Start Simulation
+          Iniciar Simulación
           <ChevronRight className="w-4 h-4 ml-1" />
         </div>
       </Card>
@@ -157,8 +157,8 @@ function SessionCard({ session }: { session: SimulationSession & { scenario?: Sc
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              {session.currentState.turnCount} turns
-              {session.status === "active" && " - In Progress"}
+              {session.currentState.turnCount} decisiones
+              {session.status === "active" && " - En Progreso"}
             </p>
           </div>
 
@@ -194,8 +194,8 @@ export default function Home() {
   useEffect(() => {
     if (scenariosError && isUnauthorizedError(scenariosError as Error)) {
       toast({
-        title: "Session Expired",
-        description: "Please sign in again.",
+        title: "Sesión Expirada",
+        description: "Por favor inicia sesión nuevamente.",
         variant: "destructive",
       });
       setTimeout(() => {
@@ -227,19 +227,19 @@ export default function Home() {
                 <Button variant="outline" asChild data-testid="link-professor-dashboard">
                   <Link href="/professor">
                     <LayoutDashboard className="w-4 h-4 mr-2" />
-                    Dashboard
+                    Panel
                   </Link>
                 </Button>
                 <Button variant="outline" asChild data-testid="link-analytics">
                   <Link href="/analytics">
                     <BarChart3 className="w-4 h-4 mr-2" />
-                    Analytics
+                    Analíticas
                   </Link>
                 </Button>
                 <Button variant="outline" asChild data-testid="link-studio">
                   <Link href="/studio">
                     <Wrench className="w-4 h-4 mr-2" />
-                    Authoring Studio
+                    Estudio de Autoría
                   </Link>
                 </Button>
               </>
@@ -264,12 +264,12 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium" data-testid="text-user-name">
-                  {user?.firstName || "User"}
+                  {user?.firstName || "Usuario"}
                 </p>
                 <p className="text-xs text-muted-foreground capitalize">
                   {effectiveRole}
                   {user?.isSuperAdmin && user?.viewingAs && (
-                    <span className="ml-1 text-amber-500">(viewing)</span>
+                    <span className="ml-1 text-amber-500">(viendo como)</span>
                   )}
                 </p>
               </div>
@@ -285,7 +285,7 @@ export default function Home() {
                 asChild
                 data-testid="button-logout"
               >
-                <a href="/api/logout">Sign Out</a>
+                <a href="/api/logout">Cerrar Sesión</a>
               </Button>
             </div>
           </div>
@@ -299,18 +299,18 @@ export default function Home() {
           className="mb-12"
         >
           <h1 className="text-3xl font-bold mb-2">
-            Welcome back, {user?.firstName || "there"}
+            Bienvenido/a, {user?.firstName || ""}
           </h1>
           <p className="text-muted-foreground">
-            Continue your learning journey or start a new simulation.
+            Continúa tu experiencia de aprendizaje o inicia una nueva simulación.
           </p>
         </motion.div>
 
         {activeSessions.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">Active Simulations</h2>
-              <Badge variant="secondary">{activeSessions.length} in progress</Badge>
+              <h2 className="text-xl font-semibold">Simulaciones Activas</h2>
+              <Badge variant="secondary">{activeSessions.length} en progreso</Badge>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -329,12 +329,12 @@ export default function Home() {
 
         <section>
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold">Available Scenarios</h2>
+            <h2 className="text-xl font-semibold">Escenarios Disponibles</h2>
             {isProfessor && (
               <Button asChild data-testid="button-create-scenario">
                 <Link href="/studio">
                   <Plus className="w-4 h-4 mr-2" />
-                  Create Scenario
+                  Crear Escenario
                 </Link>
               </Button>
             )}
@@ -365,17 +365,17 @@ export default function Home() {
           ) : (
             <Card className="p-12 text-center">
               <BookOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-lg font-medium mb-2">No Scenarios Available</h3>
+              <h3 className="text-lg font-medium mb-2">No Hay Escenarios Disponibles</h3>
               <p className="text-sm text-muted-foreground mb-6">
                 {isProfessor
-                  ? "Create your first scenario to get started."
-                  : "Check back soon for new learning experiences."}
+                  ? "Crea tu primer escenario para comenzar."
+                  : "Vuelve pronto para nuevas experiencias de aprendizaje."}
               </p>
               {isProfessor && (
                 <Button asChild>
                   <Link href="/studio">
                     <Plus className="w-4 h-4 mr-2" />
-                    Create Scenario
+                    Crear Escenario
                   </Link>
                 </Button>
               )}

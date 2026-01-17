@@ -202,7 +202,7 @@ export function SimulationFeed({
         <div className="text-center p-8">
           <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
           <p className="text-muted-foreground">
-            The simulation will begin shortly...
+            La simulación comenzará en breve...
           </p>
         </div>
       </div>

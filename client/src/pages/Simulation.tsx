@@ -17,10 +17,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { SimulationSession, Scenario, TurnResponse, KPIs, Indicator, DecisionPoint } from "@shared/schema";
 
 const THINKING_STEPS = [
-  { message: "Analyzing your decision...", completed: false },
-  { message: "Consulting stakeholders...", completed: false },
-  { message: "Calculating business impact...", completed: false },
-  { message: "Generating outcome...", completed: false },
+  { message: "Analizando tu decisión...", completed: false },
+  { message: "Consultando stakeholders...", completed: false },
+  { message: "Calculando impacto empresarial...", completed: false },
+  { message: "Generando resultado...", completed: false },
 ];
 
 export default function Simulation() {
@@ -65,8 +65,8 @@ export default function Simulation() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       toast({
-        title: "Please sign in",
-        description: "You need to be signed in to access simulations.",
+        title: "Por favor inicia sesión",
+        description: "Necesitas iniciar sesión para acceder a las simulaciones.",
         variant: "destructive",
       });
       setTimeout(() => {
@@ -78,8 +78,8 @@ export default function Simulation() {
   useEffect(() => {
     if (sessionError && isUnauthorizedError(sessionError as Error)) {
       toast({
-        title: "Session Expired",
-        description: "Please sign in again.",
+        title: "Sesión Expirada",
+        description: "Por favor inicia sesión nuevamente.",
         variant: "destructive",
       });
       setTimeout(() => {
@@ -143,8 +143,8 @@ export default function Simulation() {
     onError: (error: any) => {
       if (isUnauthorizedError(error as Error)) {
         toast({
-          title: "Session Expired",
-          description: "Please sign in again.",
+          title: "Sesión Expirada",
+          description: "Por favor inicia sesión nuevamente.",
           variant: "destructive",
         });
         setTimeout(() => {
@@ -156,15 +156,15 @@ export default function Simulation() {
       const errorMessage = error?.data?.message || error?.message || "";
       if (errorMessage.includes("not active") || errorMessage.includes("Session is not active")) {
         toast({
-          title: "Simulation Complete",
-          description: "This simulation has ended. View your results to see how you did!",
+          title: "Simulación Completada",
+          description: "Esta simulación ha terminado. ¡Revisa tus resultados para ver cómo te fue!",
         });
         return;
       }
       
       toast({
         title: "Error",
-        description: "Failed to process your decision. Please try again.",
+        description: "No se pudo procesar tu decisión. Por favor intenta de nuevo.",
         variant: "destructive",
       });
     },
@@ -186,7 +186,7 @@ export default function Simulation() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading simulation...</p>
+          <p className="text-muted-foreground">Cargando simulación...</p>
         </div>
       </div>
     );
@@ -197,11 +197,11 @@ export default function Simulation() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">Simulation Not Found</h2>
+          <h2 className="text-xl font-semibold mb-2">Simulación No Encontrada</h2>
           <p className="text-muted-foreground mb-6">
-            This simulation may have been deleted or you don't have access.
+            Esta simulación puede haber sido eliminada o no tienes acceso.
           </p>
-          <Button onClick={() => navigate("/")}>Return Home</Button>
+          <Button onClick={() => navigate("/")}>Volver al Inicio</Button>
         </div>
       </div>
     );
