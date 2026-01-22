@@ -19,6 +19,8 @@ import {
   Pencil,
   Bug,
   Settings2,
+  CheckCircle2,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -129,37 +131,67 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
 
 function SessionCard({ session }: { session: SimulationSession & { scenario?: Scenario } }) {
   // Only completed sessions are shown to students
+  const completedDate = session.updatedAt 
+    ? new Date(session.updatedAt).toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+
+  // Get the overall score if available
+  const overallScore = session.scoreSummary?.overallScore;
+  
   return (
     <Link href={`/simulation/${session.id}/results`}>
       <Card
         className="p-4 hover-elevate cursor-pointer"
         data-testid={`card-session-${session.id}`}
       >
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-            {session.scenario
-              ? domainIcons[session.scenario.domain] || <BookOpen className="w-5 h-5" />
-              : <BookOpen className="w-5 h-5" />}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h4 className="font-medium truncate">
-                {session.scenario?.title || "Simulation"}
-              </h4>
-              <Badge variant="secondary" className="text-xs shrink-0">
-                <div className="w-2 h-2 rounded-full bg-chart-1 mr-1" />
-                Completada
-              </Badge>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-chart-1/10 flex items-center justify-center shrink-0">
+              {session.scenario
+                ? domainIcons[session.scenario.domain] || <BookOpen className="w-5 h-5 text-chart-1" />
+                : <BookOpen className="w-5 h-5 text-chart-1" />}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {session.currentState.turnCount} decisiones tomadas
-            </p>
+
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium truncate mb-1">
+                {session.scenario?.title || "Simulación"}
+              </h4>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary" className="text-xs">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Completada
+                </Badge>
+                {overallScore !== undefined && (
+                  <Badge variant="outline" className="text-xs">
+                    <Target className="w-3 h-3 mr-1" />
+                    {Math.round(overallScore)}%
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 text-sm text-primary font-medium shrink-0">
-            Ver Resultados
-            <ChevronRight className="w-4 h-4" />
+          <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {session.currentState.turnCount} decisiones
+              </span>
+              {completedDate && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {completedDate}
+                </span>
+              )}
+            </div>
+            <span className="flex items-center gap-1 text-primary font-medium">
+              Ver Resultados
+              <ChevronRight className="w-4 h-4" />
+            </span>
           </div>
         </div>
       </Card>
