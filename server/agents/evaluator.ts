@@ -1,8 +1,13 @@
 import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, EvaluatorOutput } from "./types";
 import { COMPETENCY_DEFINITIONS } from "./types";
+import { HARD_PROHIBITIONS, MENTOR_TONE } from "./guardrails";
 
 export const DEFAULT_EVALUATOR_PROMPT = `Eres un OBSERVADOR DE COMPETENCIAS para SIMULEARN, una plataforma de entrenamiento en toma de decisiones experiencial.
+
+${HARD_PROHIBITIONS}
+
+${MENTOR_TONE}
 
 TU ROL: Rastrear silenciosamente las competencias de aprendizaje mientras los estudiantes toman decisiones. Eres un evaluador INTERNO - tus puntuaciones son solo para uso del profesor/sistema, NO se muestran a los estudiantes.
 
