@@ -74,6 +74,25 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: n
   );
 }
 
+function getTextContent(value: any): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    if (value.text) return String(value.text);
+    if (value.message) return String(value.message);
+    if (value.content) return String(value.content);
+    try {
+      const json = JSON.stringify(value);
+      if (json !== "[object Object]" && json.length < 1000) {
+        return "";
+      }
+    } catch {
+    }
+    return "";
+  }
+  return String(value);
+}
+
 function ConversationViewer({ sessionId }: { sessionId: string }) {
   const { data, isLoading } = useQuery<ConversationData>({
     queryKey: ["/api/professor/sessions", sessionId, "conversation"],
@@ -93,6 +112,9 @@ function ConversationViewer({ sessionId }: { sessionId: string }) {
         {data.turns.map((turn, index) => {
           const agentResponse = turn.agentResponse as any;
           const decisionNumber = index + 1;
+          const narrativeText = getTextContent(agentResponse?.narrative);
+          const reflectionText = getTextContent(agentResponse?.reflection);
+          const feedbackText = getTextContent(agentResponse?.feedback);
           
           return (
             <div key={turn.id} className="border rounded-lg p-4 space-y-4">
@@ -118,20 +140,29 @@ function ConversationViewer({ sessionId }: { sessionId: string }) {
                   </div>
                 </div>
                 
-                {agentResponse?.narrative && (
+                {narrativeText && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">Narrativa de Simulación:</p>
                     <div className="bg-muted/50 rounded-lg p-3">
-                      <p className="text-sm whitespace-pre-wrap">{agentResponse.narrative}</p>
+                      <p className="text-sm whitespace-pre-wrap">{narrativeText}</p>
                     </div>
                   </div>
                 )}
 
-                {agentResponse?.reflection && (
+                {reflectionText && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">Reflexión Final:</p>
                     <div className="bg-amber-50 dark:bg-amber-950/30 border-l-2 border-amber-500 rounded-r-lg p-3">
-                      <p className="text-sm whitespace-pre-wrap">{agentResponse.reflection}</p>
+                      <p className="text-sm whitespace-pre-wrap">{reflectionText}</p>
+                    </div>
+                  </div>
+                )}
+
+                {feedbackText && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Retroalimentación:</p>
+                    <div className="bg-blue-50 dark:bg-blue-950/30 border-l-2 border-blue-500 rounded-r-lg p-3">
+                      <p className="text-sm whitespace-pre-wrap">{feedbackText}</p>
                     </div>
                   </div>
                 )}

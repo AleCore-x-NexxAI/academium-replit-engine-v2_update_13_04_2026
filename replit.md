@@ -57,3 +57,16 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
 - Students get up to 2 revision attempts for weak/incomplete answers before final acceptance
 - Revision prompts appear in InputConsole banner and FeedbackPanel
 - UI shows "Revisión X de 2" counter
+
+### Faculty Visibility Dashboard (January 2026)
+- **ProfessorDashboard** (`/professor`): Overview of all professor's scenarios with student participation stats
+- **ScenarioAnalytics** (`/scenarios/:id/analytics`): Detailed view of all students for a scenario
+- **No Scores Displayed**: Faculty visibility shows raw student responses ONLY - no scores, rankings, or automated judgments
+- **Aggregated Themes**: Simple keyword frequency extraction from student responses (no AI-based judgment)
+- **ConversationViewer**: Shows decision-by-decision breakdown with "Decisión 1/2/3" labels, "Respuesta del Estudiante", "Narrativa de Simulación", "Reflexión Final"
+- **All UI in Spanish**: Professor-facing pages fully translated to Latin American Spanish
+- **API Endpoints**: 
+  - GET `/api/professor/scenarios` - List scenarios with student counts
+  - GET `/api/professor/scenarios/:id/sessions` - List all sessions for a scenario  
+  - GET `/api/professor/scenarios/:id/themes` - Aggregated keyword themes from responses
+  - GET `/api/professor/sessions/:id/conversation` - Full decision history for a session
