@@ -13,6 +13,8 @@ import {
   UserPlus,
   Loader2,
   BarChart3,
+  Hash,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -50,6 +52,12 @@ interface ConversationData {
   turns: Turn[];
 }
 
+interface ThemesData {
+  themes: { word: string; count: number }[];
+  totalResponses: number;
+  completedSessions: number;
+}
+
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: string }) {
   return (
     <Card className="p-4">
@@ -76,28 +84,61 @@ function ConversationViewer({ sessionId }: { sessionId: string }) {
   }
 
   if (!data?.turns || data.turns.length === 0) {
-    return <p className="text-muted-foreground text-center p-4">No conversation history</p>;
+    return <p className="text-muted-foreground text-center p-4">Sin historial de decisiones</p>;
   }
 
   return (
-    <ScrollArea className="h-[400px]">
-      <div className="space-y-3 p-4">
-        {data.turns.map((turn) => (
-          <div key={turn.id} className="space-y-2">
-            <div className="flex justify-end">
-              <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 max-w-[80%]">
-                <p className="text-sm">{turn.studentInput}</p>
+    <ScrollArea className="h-[500px]">
+      <div className="space-y-6 p-4">
+        {data.turns.map((turn, index) => {
+          const agentResponse = turn.agentResponse as any;
+          const decisionNumber = index + 1;
+          
+          return (
+            <div key={turn.id} className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="font-mono">
+                  Decisión {decisionNumber}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {turn.createdAt && new Date(turn.createdAt).toLocaleDateString("es-ES", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
+                </span>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Respuesta del Estudiante:</p>
+                  <div className="bg-primary/5 border-l-2 border-primary rounded-r-lg p-3">
+                    <p className="text-sm whitespace-pre-wrap">{turn.studentInput}</p>
+                  </div>
+                </div>
+                
+                {agentResponse?.narrative && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Narrativa de Simulación:</p>
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-sm whitespace-pre-wrap">{agentResponse.narrative}</p>
+                    </div>
+                  </div>
+                )}
+
+                {agentResponse?.reflection && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Reflexión Final:</p>
+                    <div className="bg-amber-50 dark:bg-amber-950/30 border-l-2 border-amber-500 rounded-r-lg p-3">
+                      <p className="text-sm whitespace-pre-wrap">{agentResponse.reflection}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            {turn.agentResponse && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-lg px-3 py-2 max-w-[80%]">
-                  <p className="text-sm">{(turn.agentResponse as any)?.narrative || "No narrative"}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </ScrollArea>
   );
@@ -115,6 +156,11 @@ export default function ScenarioAnalytics() {
 
   const { data: sessions, isLoading: sessionsLoading, refetch: refetchSessions } = useQuery<SessionWithUserInfo[]>({
     queryKey: ["/api/professor/scenarios", scenarioId, "sessions"],
+    enabled: !!scenarioId && !!user,
+  });
+
+  const { data: themesData, isLoading: themesLoading } = useQuery<ThemesData>({
+    queryKey: ["/api/professor/scenarios", scenarioId, "themes"],
     enabled: !!scenarioId && !!user,
   });
 
@@ -182,11 +228,11 @@ export default function ScenarioAnalytics() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-blue-500">Active</Badge>;
+        return <Badge className="bg-blue-500">En Progreso</Badge>;
       case "completed":
-        return <Badge className="bg-green-500">Completed</Badge>;
+        return <Badge className="bg-green-500">Completada</Badge>;
       case "abandoned":
-        return <Badge variant="secondary">Unenrolled</Badge>;
+        return <Badge variant="secondary">Abandonada</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -216,13 +262,57 @@ export default function ScenarioAnalytics() {
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Total Enrolled" value={sessions?.length || 0} icon={Users} color="bg-primary" />
-          <StatCard label="Active Sessions" value={activeSessions.length} icon={Clock} color="bg-blue-500" />
-          <StatCard label="Completed" value={completedSessions.length} icon={CheckCircle} color="bg-green-500" />
+          <StatCard label="Total Estudiantes" value={sessions?.length || 0} icon={Users} color="bg-primary" />
+          <StatCard label="En Progreso" value={activeSessions.length} icon={Clock} color="bg-blue-500" />
+          <StatCard label="Completadas" value={completedSessions.length} icon={CheckCircle} color="bg-green-500" />
         </div>
 
+        {/* Aggregated Themes Section */}
+        {themesData && themesData.themes.length > 0 && (
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Hash className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Temas Frecuentes en Respuestas</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Palabras más comunes en {themesData.totalResponses} respuestas de {themesData.completedSessions} sesiones completadas
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {themesData.themes.map((theme) => {
+                const maxCount = themesData.themes[0]?.count || 1;
+                const intensity = Math.max(0.3, theme.count / maxCount);
+                return (
+                  <Badge 
+                    key={theme.word} 
+                    variant="outline"
+                    className="px-3 py-1"
+                    style={{ opacity: 0.5 + intensity * 0.5 }}
+                  >
+                    <span className="font-medium">{theme.word}</span>
+                    <span className="ml-2 text-muted-foreground text-xs">({theme.count})</span>
+                  </Badge>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {themesLoading && (
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Hash className="w-5 h-5 text-primary" />
+              <Skeleton className="h-6 w-48" />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-20" />
+              ))}
+            </div>
+          </Card>
+        )}
+
         <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Enrolled Students</h2>
+          <h2 className="text-lg font-semibold mb-4">Estudiantes Participantes</h2>
           
           {sessionsLoading ? (
             <div className="space-y-2">
@@ -234,17 +324,23 @@ export default function ScenarioAnalytics() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Turns</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>Estudiante</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Decisiones</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sessions.map((session) => {
                   const currentState = session.currentState as any;
-                  const kpis = currentState?.kpis || {};
+                  const completedDate = session.updatedAt 
+                    ? new Date(session.updatedAt).toLocaleDateString("es-ES", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "-";
                   return (
                     <TableRow key={session.id} data-testid={`row-session-${session.id}`}>
                       <TableCell>
@@ -257,15 +353,8 @@ export default function ScenarioAnalytics() {
                       </TableCell>
                       <TableCell>{getStatusBadge(session.status)}</TableCell>
                       <TableCell>{session.turnCount || currentState?.turnCount || 0}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2 text-xs">
-                          {kpis.morale !== undefined && (
-                            <span>Morale: {kpis.morale}%</span>
-                          )}
-                          {kpis.reputation !== undefined && (
-                            <span>Rep: {kpis.reputation}%</span>
-                          )}
-                        </div>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {completedDate}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
@@ -275,10 +364,10 @@ export default function ScenarioAnalytics() {
                                 <Eye className="w-4 h-4" />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-w-2xl">
+                            <DialogContent className="max-w-2xl max-h-[80vh]">
                               <DialogHeader>
                                 <DialogTitle>
-                                  Conversation - {session.user?.firstName} {session.user?.lastName}
+                                  Recorrido de Decisiones - {session.user?.firstName} {session.user?.lastName}
                                 </DialogTitle>
                               </DialogHeader>
                               <ConversationViewer sessionId={session.id} />
@@ -330,9 +419,9 @@ export default function ScenarioAnalytics() {
           ) : (
             <div className="text-center py-12">
               <Users className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-lg font-medium mb-2">No Students Enrolled</h3>
+              <h3 className="text-lg font-medium mb-2">Sin Estudiantes Aún</h3>
               <p className="text-sm text-muted-foreground">
-                Students will appear here when they start this simulation.
+                Los estudiantes aparecerán aquí cuando inicien esta simulación.
               </p>
             </div>
           )}

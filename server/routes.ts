@@ -1314,6 +1314,82 @@ Be constructive and educational, not judgmental.`;
     }
   });
 
+  // Get aggregated themes from student responses for a scenario
+  app.get("/api/professor/scenarios/:scenarioId/themes", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+
+      // Verify professor owns this scenario
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized to view this scenario" });
+      }
+
+      // Get all sessions for this scenario
+      const sessions = await storage.getSessionsByScenario(scenarioId);
+      
+      // Collect all student responses from completed sessions
+      const allResponses: string[] = [];
+      for (const session of sessions) {
+        if (session.status === "completed" || session.status === "active") {
+          const turns = await storage.getTurnsBySession(session.id);
+          for (const turn of turns) {
+            if (turn.studentInput) {
+              allResponses.push(turn.studentInput);
+            }
+          }
+        }
+      }
+
+      // Simple keyword extraction (POC level - just word frequency)
+      const stopWords = new Set([
+        "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "a", "al",
+        "en", "con", "por", "para", "que", "se", "es", "son", "como", "pero", "más",
+        "ya", "su", "sus", "mi", "tu", "y", "o", "no", "si", "lo", "le", "les",
+        "me", "te", "nos", "este", "esta", "esto", "ese", "esa", "eso", "aquí", "ahí",
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have",
+        "has", "had", "do", "does", "did", "will", "would", "could", "should", "may",
+        "might", "must", "shall", "can", "need", "dare", "ought", "used", "to", "of",
+        "in", "for", "on", "with", "at", "by", "from", "or", "and", "not", "it", "this",
+        "that", "i", "you", "he", "she", "we", "they", "what", "which", "who", "when",
+        "where", "why", "how", "all", "each", "every", "both", "few", "more", "most",
+        "other", "some", "such", "only", "own", "same", "so", "than", "too", "very"
+      ]);
+
+      const wordCounts: Record<string, number> = {};
+      
+      for (const response of allResponses) {
+        const words = response.toLowerCase()
+          .replace(/[^\wáéíóúñü\s]/g, " ")
+          .split(/\s+/)
+          .filter(word => word.length > 3 && !stopWords.has(word));
+        
+        for (const word of words) {
+          wordCounts[word] = (wordCounts[word] || 0) + 1;
+        }
+      }
+
+      // Get top 20 most common words
+      const themes = Object.entries(wordCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([word, count]) => ({ word, count }));
+
+      res.json({ 
+        themes,
+        totalResponses: allResponses.length,
+        completedSessions: sessions.filter(s => s.status === "completed").length
+      });
+    } catch (error) {
+      console.error("Error getting themes:", error);
+      res.status(500).json({ message: "Failed to get themes" });
+    }
+  });
+
   // ============================================================================
   // USER PROFILE ROUTES
   // ============================================================================

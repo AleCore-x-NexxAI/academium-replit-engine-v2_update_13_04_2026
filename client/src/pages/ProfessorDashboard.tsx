@@ -108,13 +108,13 @@ export default function ProfessorDashboard() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Professor Dashboard</h1>
-          <p className="text-muted-foreground">Manage your simulations and monitor student progress</p>
+          <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">Panel del Profesor</h1>
+          <p className="text-muted-foreground">Gestiona tus simulaciones y visualiza el progreso de estudiantes</p>
         </div>
         <Link href="/studio">
           <Button data-testid="button-go-to-studio">
             <BookOpen className="w-4 h-4 mr-2" />
-            Authoring Studio
+            Estudio de Autoría
           </Button>
         </Link>
       </div>
@@ -129,7 +129,7 @@ export default function ProfessorDashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-total-scenarios">{scenarios?.length || 0}</p>
-                <p className="text-sm text-muted-foreground">Scenarios</p>
+                <p className="text-sm text-muted-foreground">Escenarios</p>
               </div>
             </div>
           </CardContent>
@@ -142,7 +142,7 @@ export default function ProfessorDashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-total-enrollments">{totalEnrollments}</p>
-                <p className="text-sm text-muted-foreground">Total Enrollments</p>
+                <p className="text-sm text-muted-foreground">Total Estudiantes</p>
               </div>
             </div>
           </CardContent>
@@ -155,7 +155,7 @@ export default function ProfessorDashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-active-sessions">{totalActive}</p>
-                <p className="text-sm text-muted-foreground">Active Sessions</p>
+                <p className="text-sm text-muted-foreground">En Progreso</p>
               </div>
             </div>
           </CardContent>
@@ -168,7 +168,7 @@ export default function ProfessorDashboard() {
               </div>
               <div>
                 <p className="text-2xl font-bold" data-testid="text-completed-sessions">{totalCompleted}</p>
-                <p className="text-sm text-muted-foreground">Completed</p>
+                <p className="text-sm text-muted-foreground">Completadas</p>
               </div>
             </div>
           </CardContent>
