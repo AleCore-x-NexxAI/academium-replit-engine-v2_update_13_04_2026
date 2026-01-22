@@ -379,6 +379,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Scenario not found" });
       }
 
+      // Check if user already has an active session for this scenario
+      const existingSession = await storage.getActiveSessionForScenario(userId, scenarioId);
+      if (existingSession) {
+        // Return the existing session with a flag indicating resume
+        return res.status(200).json({ 
+          sessionId: existingSession.id, 
+          initialState: existingSession.currentState,
+          isResume: true,
+          message: "Tienes una sesión en progreso para este escenario"
+        });
+      }
+
       const initialHistory: HistoryEntry[] = [
         {
           role: "system",
@@ -400,7 +412,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "active",
       });
 
-      res.status(201).json({ sessionId: session.id, initialState: session.currentState });
+      res.status(201).json({ sessionId: session.id, initialState: session.currentState, isResume: false });
     } catch (error) {
       console.error("Error starting simulation:", error);
       res.status(500).json({ message: "Failed to start simulation" });
@@ -578,6 +590,36 @@ Be constructive and educational, not judgmental.`;
     } catch (error) {
       console.error("Error generating hint:", error);
       res.status(500).json({ message: "Failed to generate hint" });
+    }
+  });
+
+  // Abandon a simulation session (mark as abandoned so user can start fresh)
+  app.post("/api/simulations/:sessionId/abandon", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+      
+      const session = await storage.getSimulationSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      if (session.status !== "active") {
+        return res.status(400).json({ message: "Session is not active" });
+      }
+
+      await storage.updateSimulationSession(sessionId, {
+        status: "abandoned",
+      });
+
+      res.json({ message: "Session abandoned successfully" });
+    } catch (error) {
+      console.error("Error abandoning session:", error);
+      res.status(500).json({ message: "Failed to abandon session" });
     }
   });
 

@@ -66,6 +66,7 @@ export interface IStorage {
   getSimulationSession(id: string): Promise<SimulationSession | undefined>;
   getSimulationSessionWithScenario(id: string): Promise<(SimulationSession & { scenario?: Scenario }) | undefined>;
   getUserSessions(userId: string): Promise<(SimulationSession & { scenario?: Scenario })[]>;
+  getActiveSessionForScenario(userId: string, scenarioId: string): Promise<SimulationSession | undefined>;
   createSimulationSession(session: InsertSimulationSession): Promise<SimulationSession>;
   updateSimulationSession(id: string, data: Partial<InsertSimulationSession>): Promise<SimulationSession | undefined>;
 
@@ -232,6 +233,22 @@ export class DatabaseStorage implements IStorage {
       ...r.simulation_sessions,
       scenario: r.scenarios || undefined,
     }));
+  }
+
+  async getActiveSessionForScenario(userId: string, scenarioId: string): Promise<SimulationSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(simulationSessions)
+      .where(
+        and(
+          eq(simulationSessions.userId, userId),
+          eq(simulationSessions.scenarioId, scenarioId),
+          eq(simulationSessions.status, "active")
+        )
+      )
+      .orderBy(desc(simulationSessions.updatedAt))
+      .limit(1);
+    return session;
   }
 
   async createSimulationSession(session: InsertSimulationSession): Promise<SimulationSession> {

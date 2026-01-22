@@ -128,14 +128,31 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
 }
 
 function SessionCard({ session }: { session: SimulationSession & { scenario?: Scenario } }) {
-  const statusColors = {
-    active: "bg-chart-2",
-    completed: "bg-chart-1",
-    abandoned: "bg-muted",
+  const statusConfig = {
+    active: { 
+      color: "bg-chart-2", 
+      label: "En Progreso",
+      action: "Continuar",
+      link: `/simulation/${session.id}`
+    },
+    completed: { 
+      color: "bg-chart-1", 
+      label: "Completada",
+      action: "Ver Resultados",
+      link: `/simulation/${session.id}/results`
+    },
+    abandoned: { 
+      color: "bg-muted", 
+      label: "Abandonada",
+      action: "Ver Detalles",
+      link: `/simulation/${session.id}/results`
+    },
   };
 
+  const config = statusConfig[session.status];
+
   return (
-    <Link href={`/simulation/${session.id}`}>
+    <Link href={config.link}>
       <Card
         className="p-4 hover-elevate cursor-pointer"
         data-testid={`card-session-${session.id}`}
@@ -152,17 +169,21 @@ function SessionCard({ session }: { session: SimulationSession & { scenario?: Sc
               <h4 className="font-medium truncate">
                 {session.scenario?.title || "Simulation"}
               </h4>
-              <div
-                className={`w-2 h-2 rounded-full ${statusColors[session.status]}`}
-              />
+              <Badge variant="secondary" className="text-xs shrink-0">
+                <div className={`w-2 h-2 rounded-full ${config.color} mr-1`} />
+                {config.label}
+              </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              {session.currentState.turnCount} decisiones
-              {session.status === "active" && " - En Progreso"}
+              {session.currentState.turnCount} decisiones tomadas
             </p>
           </div>
 
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          <div className="flex items-center gap-1 text-sm text-primary font-medium shrink-0">
+            {session.status === "active" && <Play className="w-4 h-4" />}
+            {config.action}
+            <ChevronRight className="w-4 h-4" />
+          </div>
         </div>
       </Card>
     </Link>
