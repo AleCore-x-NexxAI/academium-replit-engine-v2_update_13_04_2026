@@ -18,6 +18,11 @@ import {
   handleRefinement, 
   generateInitialGreeting 
 } from "./agents/authoringAssistant";
+import { 
+  generateCanonicalCase, 
+  convertCanonicalToScenarioData,
+  type CanonicalCaseData 
+} from "./agents/canonicalCaseGenerator";
 
 const llmModelSchema = z.enum(["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]);
 
@@ -1085,6 +1090,90 @@ Be constructive and educational, not judgmental.`;
     } catch (error) {
       console.error("Error processing chat:", error);
       res.status(500).json({ message: "Failed to process message" });
+    }
+  });
+
+  // ==================== Canonical Case Generation ====================
+  
+  const generateCanonicalCaseSchema = z.object({
+    topic: z.string().min(5, "El tema debe tener al menos 5 caracteres"),
+    additionalContext: z.string().optional(),
+  });
+
+  app.post("/api/canonical-case/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+
+      if (!user || (user.role !== "professor" && user.role !== "admin")) {
+        return res.status(403).json({ message: "No autorizado para crear casos" });
+      }
+
+      const parseResult = generateCanonicalCaseSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Datos inválidos", errors: parseResult.error.errors });
+      }
+
+      const { topic, additionalContext } = parseResult.data;
+
+      const canonicalCase = await generateCanonicalCase(topic, additionalContext);
+      const scenarioData = convertCanonicalToScenarioData(canonicalCase);
+
+      const initialMessage: DraftConversationMessage = {
+        role: "assistant",
+        content: `He generado un caso canónico basado en: "${topic}".\n\nPuedes revisar y editar cada sección antes de publicar.`,
+        timestamp: new Date().toISOString(),
+        metadata: { type: "preview" },
+      };
+
+      const draft = await storage.createScenarioDraft({
+        authorId: userId,
+        status: "reviewing",
+        sourceInput: topic,
+        generatedScenario: scenarioData,
+        conversationHistory: [initialMessage],
+      });
+
+      res.json({ 
+        draft, 
+        canonicalCase,
+        scenarioData 
+      });
+    } catch (error) {
+      console.error("Error generating canonical case:", error);
+      res.status(500).json({ message: "Error al generar el caso" });
+    }
+  });
+
+  app.put("/api/canonical-case/:draftId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const draftId = req.params.draftId;
+      const draft = await storage.getScenarioDraft(draftId);
+
+      if (!draft) {
+        return res.status(404).json({ message: "Borrador no encontrado" });
+      }
+
+      if (draft.authorId !== userId) {
+        return res.status(403).json({ message: "No autorizado" });
+      }
+
+      const { scenarioData } = req.body;
+      
+      if (!scenarioData) {
+        return res.status(400).json({ message: "Datos del escenario requeridos" });
+      }
+
+      const updatedDraft = await storage.updateScenarioDraft(draftId, {
+        generatedScenario: scenarioData,
+        updatedAt: new Date(),
+      });
+
+      res.json({ draft: updatedDraft });
+    } catch (error) {
+      console.error("Error updating canonical case:", error);
+      res.status(500).json({ message: "Error al actualizar el caso" });
     }
   });
 
