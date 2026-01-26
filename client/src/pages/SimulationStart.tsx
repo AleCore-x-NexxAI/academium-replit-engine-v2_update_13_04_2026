@@ -133,21 +133,24 @@ export default function SimulationStart() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <Badge variant="secondary" className="mb-4">
               {scenario.domain}
             </Badge>
             <h1 className="text-4xl font-bold mb-4" data-testid="text-scenario-title">
               {scenario.title}
             </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              {scenario.description}
-            </p>
+            {scenario.initialState?.companyName && (
+              <p className="text-lg text-muted-foreground">
+                {scenario.initialState.companyName}
+                {scenario.initialState.industry && ` · ${scenario.initialState.industry}`}
+              </p>
+            )}
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-12">
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-4">
+          <div className="grid md:grid-cols-2 gap-4 mb-8">
+            <Card className="p-5">
+              <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-lg bg-chart-1/10 text-chart-1 flex items-center justify-center">
                   <Target className="w-5 h-5" />
                 </div>
@@ -158,8 +161,8 @@ export default function SimulationStart() {
               </p>
             </Card>
 
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-4">
+            <Card className="p-5">
+              <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-lg bg-chart-2/10 text-chart-2 flex items-center justify-center">
                   <Users className="w-5 h-5" />
                 </div>
@@ -167,29 +170,92 @@ export default function SimulationStart() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {scenario.initialState?.objective ||
-                  "Navega el desafío empresarial y mantén los indicadores clave de desempeño."}
+                  "Navega el desafío empresarial y demuestra tu capacidad de análisis."}
               </p>
             </Card>
           </div>
 
-          <Card className="p-6 mb-12">
-            <h3 className="font-semibold mb-4">Condiciones Iniciales</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {[
-                { label: "Moral del Equipo", value: `${scenario.initialState?.kpis?.morale || 75}%` },
-                { label: "Impacto Presupuestario", value: `${scenario.initialState?.kpis?.reputation || 75}%` },
-                { label: "Riesgo Operacional", value: `${scenario.initialState?.kpis?.efficiency || 75}%` },
-                { label: "Alineación Estratégica", value: `${scenario.initialState?.kpis?.trust || 75}%` },
-                { label: "Presión de Tiempo", value: `${scenario.initialState?.kpis?.revenue ? Math.round(scenario.initialState.kpis.revenue / 10000) : 50}%` },
-              ].map((kpi) => (
-                <div key={kpi.label} className="text-center p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                    {kpi.label}
-                  </p>
-                  <p className="text-lg font-mono font-semibold">{kpi.value}</p>
-                </div>
-              ))}
+          <Card className="p-6 mb-8">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Brain className="w-5 h-5 text-primary" />
+              Contexto del Caso
+            </h3>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                {scenario.initialState?.caseContext || scenario.initialState?.introText || scenario.description}
+              </p>
             </div>
+
+            {scenario.initialState?.coreChallenge && (
+              <Card className="mt-4 p-4 bg-primary/5 border-primary/20">
+                <h4 className="font-medium text-sm text-primary mb-2 flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Desafío Central
+                </h4>
+                <p className="text-sm">
+                  {scenario.initialState.coreChallenge}
+                </p>
+              </Card>
+            )}
+          </Card>
+
+          {(scenario.initialState?.indicators && scenario.initialState.indicators.length > 0) ? (
+            <Card className="p-6 mb-8">
+              <h3 className="font-semibold mb-4">Indicadores Iniciales</h3>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {scenario.initialState.indicators.map((ind) => (
+                  <div key={ind.id} className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                      {ind.label}
+                    </p>
+                    <p className="text-lg font-mono font-semibold">{ind.value}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : scenario.initialState?.kpis && (
+            <Card className="p-6 mb-8">
+              <h3 className="font-semibold mb-4">Condiciones Iniciales</h3>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {[
+                  { label: "Moral del Equipo", value: `${scenario.initialState.kpis.morale || 75}%` },
+                  { label: "Reputación", value: `${scenario.initialState.kpis.reputation || 75}%` },
+                  { label: "Eficiencia", value: `${scenario.initialState.kpis.efficiency || 75}%` },
+                  { label: "Confianza", value: `${scenario.initialState.kpis.trust || 75}%` },
+                  { label: "Recursos", value: `${scenario.initialState.kpis.revenue ? Math.round(scenario.initialState.kpis.revenue / 10000) : 50}%` },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                      {kpi.label}
+                    </p>
+                    <p className="text-lg font-mono font-semibold">{kpi.value}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          <Card className="p-6 mb-8 border-dashed">
+            <h3 className="font-semibold mb-3">Estructura de la Simulación</h3>
+            <div className="flex items-center justify-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">1</Badge>
+                <span className="text-muted-foreground">Decisión de Orientación</span>
+              </div>
+              <span className="text-muted-foreground">→</span>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">2</Badge>
+                <span className="text-muted-foreground">Análisis</span>
+              </div>
+              <span className="text-muted-foreground">→</span>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">3</Badge>
+                <span className="text-muted-foreground">Integración</span>
+              </div>
+            </div>
+            <p className="text-xs text-center text-muted-foreground mt-3">
+              Duración estimada: 20-25 minutos
+            </p>
           </Card>
 
           <div className="text-center">
@@ -212,7 +278,7 @@ export default function SimulationStart() {
               )}
             </Button>
             <p className="text-sm text-muted-foreground mt-4">
-              Tus decisiones afectarán el resultado. Piensa cuidadosamente.
+              No hay respuestas "correctas". Lo importante es tu razonamiento.
             </p>
           </div>
         </motion.div>

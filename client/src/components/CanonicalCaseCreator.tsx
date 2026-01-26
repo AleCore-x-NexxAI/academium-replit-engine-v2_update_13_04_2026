@@ -237,12 +237,23 @@ export default function CanonicalCaseCreator({
     if (field === "title" || field === "description" || field === "domain") {
       setScenarioData({ ...scenarioData, [field]: value });
     } else if (field === "caseContext" || field === "coreChallenge") {
-      const introText = field === "caseContext" 
-        ? `${value}\n\n**Desafío Central:**\n${canonicalCase.coreChallenge}`
-        : `${canonicalCase.caseContext}\n\n**Desafío Central:**\n${value}`;
+      // Update both the introText (legacy) and the new structured fields
+      const newCaseContext = field === "caseContext" ? value : canonicalCase.caseContext;
+      const newCoreChallenge = field === "coreChallenge" ? value : canonicalCase.coreChallenge;
+      const introText = `${newCaseContext}\n\n**Desafío Central:**\n${newCoreChallenge}`;
       setScenarioData({
         ...scenarioData,
-        initialState: { ...scenarioData.initialState, introText },
+        initialState: { 
+          ...scenarioData.initialState, 
+          introText,
+          caseContext: newCaseContext,
+          coreChallenge: newCoreChallenge,
+        },
+      });
+    } else if (field === "reflectionPrompt") {
+      setScenarioData({
+        ...scenarioData,
+        initialState: { ...scenarioData.initialState, reflectionPrompt: value },
       });
     } else if (field === "role" || field === "objective") {
       setScenarioData({

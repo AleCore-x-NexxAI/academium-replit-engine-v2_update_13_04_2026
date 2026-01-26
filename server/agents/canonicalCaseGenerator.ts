@@ -304,6 +304,10 @@ ${canonical.coreChallenge}`;
     keyConstraints: canonical.keyConstraints,
     learningObjectives: canonical.learningObjectives,
     difficultyLevel: "intermediate",
+    // Canonical Case Structure (Harvard Business School style)
+    caseContext: canonical.caseContext,
+    coreChallenge: canonical.coreChallenge,
+    reflectionPrompt: canonical.reflectionPrompt,
   };
 
   return {

@@ -231,6 +231,11 @@ export interface InitialState {
   objective: string;
   caseStudyUrl?: string;
   
+  // Canonical Case Structure (Harvard Business School style)
+  caseContext?: string; // 120-180 word professional case context
+  coreChallenge?: string; // The central business challenge
+  reflectionPrompt?: string; // Final reflection prompt after all decisions
+  
   // Enhanced scenario context for AI tailoring
   companyName?: string;
   industry?: string;

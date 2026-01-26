@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Brain, ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
+import { Brain, ArrowLeft, Loader2, AlertTriangle, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,6 +19,7 @@ import { KPIDashboard } from "@/components/KPIDashboard";
 import { SimulationFeed } from "@/components/SimulationFeed";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { InputConsole } from "@/components/InputConsole";
+import { CaseContextPanel } from "@/components/CaseContextPanel";
 import { useSimulationStore } from "@/stores/simulationStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +41,7 @@ export default function Simulation() {
   const { toast } = useToast();
   const [previousKpis, setPreviousKpis] = useState<KPIs | undefined>();
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [showMobileCasePanel, setShowMobileCasePanel] = useState(false);
 
   const {
     history,
@@ -292,8 +294,53 @@ export default function Simulation() {
           </p>
         </div>
 
-        <div className="w-20" />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowMobileCasePanel(true)}
+            className="lg:hidden"
+            data-testid="button-show-case-mobile"
+          >
+            <FileText className="w-5 h-5" />
+          </Button>
+        </div>
       </header>
+
+      {showMobileCasePanel && session.scenario && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden"
+          onClick={() => setShowMobileCasePanel(false)}
+        >
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", damping: 20 }}
+            className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-card border-r shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="absolute top-2 right-2 z-10">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMobileCasePanel(false)}
+                data-testid="button-close-case-mobile"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <CaseContextPanel
+              scenario={session.scenario}
+              currentDecision={currentDecision}
+              totalDecisions={totalDecisions}
+            />
+          </motion.div>
+        </motion.div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         <motion.aside
@@ -301,17 +348,13 @@ export default function Simulation() {
           animate={{ x: 0, opacity: 1 }}
           className="w-80 border-r bg-card hidden lg:flex flex-col"
         >
-          <KPIDashboard
-            kpis={kpis}
-            previousKpis={previousKpis}
-            indicators={indicators}
-            previousIndicators={previousIndicators}
-            scenarioTitle={session.scenario?.title}
-            role={session.scenario?.initialState?.role}
-            objective={session.scenario?.initialState?.objective}
-            currentDecision={currentDecision}
-            totalDecisions={totalDecisions}
-          />
+          {session.scenario && (
+            <CaseContextPanel
+              scenario={session.scenario}
+              currentDecision={currentDecision}
+              totalDecisions={totalDecisions}
+            />
+          )}
         </motion.aside>
 
         <main className="flex-1 flex flex-col min-w-0">
