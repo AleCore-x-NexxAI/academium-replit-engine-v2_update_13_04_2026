@@ -22,7 +22,6 @@ import {
   Sparkles,
   PenTool,
 } from "lucide-react";
-import AIAuthoringChat from "@/components/AIAuthoringChat";
 import CanonicalCaseCreator from "@/components/CanonicalCaseCreator";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -2143,7 +2142,7 @@ function ScenarioListItem({
   );
 }
 
-type AuthoringMode = "list" | "manual" | "ai-assisted" | "canonical";
+type AuthoringMode = "list" | "manual" | "canonical";
 
 export default function Studio() {
   const [, navigate] = useLocation();
@@ -2265,19 +2264,6 @@ export default function Studio() {
                 onClose={() => setAuthoringMode("list")}
               />
             </motion.div>
-          ) : authoringMode === "ai-assisted" ? (
-            <motion.div
-              key="ai-chat"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="h-[calc(100vh-12rem)]"
-            >
-              <AIAuthoringChat
-                onScenarioPublished={handleAIPublished}
-                onClose={() => setAuthoringMode("list")}
-              />
-            </motion.div>
           ) : (
             <motion.div
               key="scenario-list"
@@ -2292,11 +2278,11 @@ export default function Studio() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                 <Card
                   className="p-6 cursor-pointer hover-elevate border-2 border-primary/30 hover:border-primary/50 bg-primary/5"
                   onClick={() => setAuthoringMode("canonical")}
-                  data-testid="card-canonical-case-mode"
+                  data-testid="card-ai-authoring-mode"
                 >
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -2304,29 +2290,11 @@ export default function Studio() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold">Caso Canónico POC</h3>
+                        <h3 className="font-semibold">AI Conversacional</h3>
                         <Badge variant="secondary" className="text-xs">Recomendado</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Genera un caso completo con estructura canónica: 3 decisiones, contexto estilo Harvard, en español.
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-
-                <Card
-                  className="p-6 cursor-pointer hover-elevate border-2 border-transparent hover:border-primary/20"
-                  onClick={() => setAuthoringMode("ai-assisted")}
-                  data-testid="card-ai-authoring-mode"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <Sparkles className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">AI Conversacional</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Chatea con IA para generar escenarios desde casos de estudio o documentos.
+                        Genera un caso completo con IA: contexto estilo Harvard, 3 decisiones, 5 indicadores POC, todo en español.
                       </p>
                     </div>
                   </div>
