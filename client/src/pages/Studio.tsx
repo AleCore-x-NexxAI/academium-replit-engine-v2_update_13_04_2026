@@ -23,6 +23,7 @@ import {
   PenTool,
 } from "lucide-react";
 import AIAuthoringChat from "@/components/AIAuthoringChat";
+import CanonicalCaseCreator from "@/components/CanonicalCaseCreator";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -2142,7 +2143,7 @@ function ScenarioListItem({
   );
 }
 
-type AuthoringMode = "list" | "manual" | "ai-assisted";
+type AuthoringMode = "list" | "manual" | "ai-assisted" | "canonical";
 
 export default function Studio() {
   const [, navigate] = useLocation();
@@ -2231,21 +2232,19 @@ export default function Studio() {
             </Button>
             <div className="flex items-center gap-2">
               <Brain className="w-6 h-6 text-primary" />
-              <span className="text-xl font-bold">Authoring Studio</span>
+              <span className="text-xl font-bold">Estudio de Autoría</span>
             </div>
           </div>
 
           {authoringMode === "list" && (
             <div className="flex items-center gap-2">
               <Button
-                variant="outline"
-                onClick={() => setAuthoringMode("ai-assisted")}
-                data-testid="button-ai-authoring"
+                onClick={() => setAuthoringMode("canonical")}
+                data-testid="button-canonical-case"
               >
                 <Sparkles className="w-4 h-4 mr-2" />
-                AI Assistant
+                Crear Caso
               </Button>
-              <CreateScenarioDialog onSuccess={() => refetch()} />
             </div>
           )}
         </div>
@@ -2253,7 +2252,20 @@ export default function Studio() {
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <AnimatePresence mode="wait">
-          {authoringMode === "ai-assisted" ? (
+          {authoringMode === "canonical" ? (
+            <motion.div
+              key="canonical-creator"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="h-[calc(100vh-12rem)]"
+            >
+              <CanonicalCaseCreator
+                onScenarioPublished={handleAIPublished}
+                onClose={() => setAuthoringMode("list")}
+              />
+            </motion.div>
+          ) : authoringMode === "ai-assisted" ? (
             <motion.div
               key="ai-chat"
               initial={{ opacity: 0, x: 20 }}
@@ -2274,26 +2286,47 @@ export default function Studio() {
               exit={{ opacity: 0, x: 20 }}
             >
               <div className="mb-8">
-                <h1 className="text-2xl font-bold mb-2">Your Scenarios</h1>
+                <h1 className="text-2xl font-bold mb-2">Tus Escenarios</h1>
                 <p className="text-muted-foreground">
-                  Create and manage business simulation scenarios for your students.
+                  Crea y gestiona escenarios de simulación de negocios para tus estudiantes.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 <Card
-                  className="p-6 cursor-pointer hover-elevate border-2 border-transparent hover:border-primary/20"
-                  onClick={() => setAuthoringMode("ai-assisted")}
-                  data-testid="card-ai-authoring-mode"
+                  className="p-6 cursor-pointer hover-elevate border-2 border-primary/30 hover:border-primary/50 bg-primary/5"
+                  onClick={() => setAuthoringMode("canonical")}
+                  data-testid="card-canonical-case-mode"
                 >
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <Sparkles className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold mb-1">AI-Assisted Creation</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold">Caso Canónico POC</h3>
+                        <Badge variant="secondary" className="text-xs">Recomendado</Badge>
+                      </div>
                       <p className="text-sm text-muted-foreground">
-                        Chat with AI to generate rich scenarios from case studies, documents, or descriptions.
+                        Genera un caso completo con estructura canónica: 3 decisiones, contexto estilo Harvard, en español.
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card
+                  className="p-6 cursor-pointer hover-elevate border-2 border-transparent hover:border-primary/20"
+                  onClick={() => setAuthoringMode("ai-assisted")}
+                  data-testid="card-ai-authoring-mode"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <Sparkles className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold mb-1">AI Conversacional</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Chatea con IA para generar escenarios desde casos de estudio o documentos.
                       </p>
                     </div>
                   </div>
@@ -2310,16 +2343,16 @@ export default function Studio() {
                           <PenTool className="w-6 h-6 text-muted-foreground" />
                         </div>
                         <div>
-                          <h3 className="font-semibold mb-1">Manual Creation</h3>
+                          <h3 className="font-semibold mb-1">Creación Manual</h3>
                           <p className="text-sm text-muted-foreground">
-                            Build a scenario from scratch using the comprehensive form with all fields.
+                            Construye un escenario desde cero con el formulario completo.
                           </p>
                         </div>
                       </div>
                     </DialogTrigger>
                     <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Create New Scenario</DialogTitle>
+                        <DialogTitle>Crear Nuevo Escenario</DialogTitle>
                       </DialogHeader>
                       <ManualScenarioForm onSuccess={() => { refetch(); }} />
                     </DialogContent>
@@ -2335,7 +2368,7 @@ export default function Studio() {
                 </div>
               ) : scenarios && scenarios.length > 0 ? (
                 <div className="space-y-4">
-                  <h2 className="text-lg font-semibold">Published Scenarios</h2>
+                  <h2 className="text-lg font-semibold">Escenarios Publicados</h2>
                   {scenarios.map((scenario) => (
                     <motion.div
                       key={scenario.id}
@@ -2349,9 +2382,9 @@ export default function Studio() {
               ) : (
                 <Card className="p-12 text-center">
                   <BookOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <h3 className="text-lg font-medium mb-2">No Scenarios Yet</h3>
+                  <h3 className="text-lg font-medium mb-2">Sin Escenarios Todavía</h3>
                   <p className="text-sm text-muted-foreground mb-6">
-                    Use AI assistance or manual creation above to build your first scenario.
+                    Usa la creación con IA o manual para construir tu primer escenario.
                   </p>
                 </Card>
               )}

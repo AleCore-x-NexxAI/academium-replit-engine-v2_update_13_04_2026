@@ -1167,7 +1167,6 @@ Be constructive and educational, not judgmental.`;
 
       const updatedDraft = await storage.updateScenarioDraft(draftId, {
         generatedScenario: scenarioData,
-        updatedAt: new Date(),
       });
 
       res.json({ draft: updatedDraft });
