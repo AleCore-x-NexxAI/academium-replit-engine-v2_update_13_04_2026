@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Brain,
   ArrowLeft,
   Plus,
   Upload,
@@ -16,7 +15,6 @@ import {
   Trash2,
   Edit,
   Eye,
-  BookOpen,
   X,
   File,
   Sparkles,
@@ -2212,8 +2210,8 @@ export default function Studio() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b sticky top-0 bg-background z-50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <header className="border-b sticky top-0 bg-background z-[1000]">
+        <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"
@@ -2229,27 +2227,12 @@ export default function Studio() {
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <div className="flex items-center gap-2">
-              <Brain className="w-6 h-6 text-primary" />
-              <span className="text-xl font-bold">Estudio de Autoría</span>
-            </div>
+            <span className="font-semibold" data-testid="text-page-title">Crear Simulación</span>
           </div>
-
-          {authoringMode === "list" && (
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => setAuthoringMode("canonical")}
-                data-testid="button-canonical-case"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                Crear Caso
-              </Button>
-            </div>
-          )}
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-4xl mx-auto px-6 py-8">
         <AnimatePresence mode="wait">
           {authoringMode === "canonical" ? (
             <motion.div
@@ -2264,95 +2247,52 @@ export default function Studio() {
                 onClose={() => setAuthoringMode("list")}
               />
             </motion.div>
+          ) : authoringMode === "manual" ? (
+            <motion.div
+              key="manual-form"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <ManualScenarioForm onSuccess={() => { setAuthoringMode("list"); refetch(); }} />
+            </motion.div>
           ) : (
             <motion.div
-              key="scenario-list"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
+              key="path-selection"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="flex flex-col items-center justify-center min-h-[60vh]"
             >
-              <div className="mb-8">
-                <h1 className="text-2xl font-bold mb-2">Tus Escenarios</h1>
-                <p className="text-muted-foreground">
-                  Crea y gestiona escenarios de simulación de negocios para tus estudiantes.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
                 <Card
-                  className="p-6 cursor-pointer hover-elevate"
+                  className="p-8 cursor-pointer hover-elevate flex flex-col items-center text-center"
                   onClick={() => setAuthoringMode("canonical")}
-                  data-testid="card-ai-authoring-mode"
+                  data-testid="card-create-with-ai"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">Crear con Asistencia IA</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Genera un caso completo conversando con IA. Tú siempre tienes el control final.
-                      </p>
-                    </div>
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                    <Sparkles className="w-8 h-8 text-primary" />
                   </div>
-                </Card>
-
-                <Card
-                  className="p-6 cursor-pointer hover-elevate"
-                  data-testid="card-manual-authoring-mode"
-                >
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <PenTool className="w-6 h-6 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold mb-1">Crear Manualmente</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Construye un escenario desde cero con control total del contenido.
-                          </p>
-                        </div>
-                      </div>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Crear Nuevo Escenario</DialogTitle>
-                      </DialogHeader>
-                      <ManualScenarioForm onSuccess={() => { refetch(); }} />
-                    </DialogContent>
-                  </Dialog>
-                </Card>
-              </div>
-
-              {scenariosLoading ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-24 rounded-lg" />
-                  ))}
-                </div>
-              ) : scenarios && scenarios.length > 0 ? (
-                <div className="space-y-4">
-                  <h2 className="text-lg font-semibold">Escenarios Publicados</h2>
-                  {scenarios.map((scenario) => (
-                    <motion.div
-                      key={scenario.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                    >
-                      <ScenarioListItem scenario={scenario} onDelete={() => refetch()} />
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <Card className="p-12 text-center">
-                  <BookOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                  <h3 className="text-lg font-medium mb-2">Sin Escenarios Todavía</h3>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    Usa la creación con IA o manual para construir tu primer escenario.
+                  <h3 className="text-lg font-semibold mb-2">Crear con IA</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Comienza desde un borrador generado por IA que puedes editar libremente
                   </p>
                 </Card>
-              )}
+
+                <Card
+                  className="p-8 cursor-pointer hover-elevate flex flex-col items-center text-center"
+                  onClick={() => setAuthoringMode("manual")}
+                  data-testid="card-create-manually"
+                >
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                    <PenTool className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Crear Manualmente</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Construye tu simulación paso a paso
+                  </p>
+                </Card>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
