@@ -95,3 +95,14 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
   - "Generar Borrador" button (disabled until topic entered)
 - **Removed per Visual Specs**: "Contexto Adicional" textarea, "El caso generado incluirá" explanation list, decorative header/icons
 - **UX Philosophy**: "This helps me get started — I'm still in charge." No rubrics, no learning objectives, no grading criteria asked upfront.
+
+### Screen 4B - Manual Case Creation (January 2026)
+- **ManualCaseCreator component** (`/studio` → "Crear Manualmente"): Simplified form replacing complex ManualScenarioForm
+- **Core Required Sections**:
+  1. Case Title + Case Context textarea with guidance "Establece la situación para los estudiantes"
+  2. Decision Points (exactly 3): Decision 1 = multiple choice with 3 options, Decisions 2-3 = short written response
+  3. Consequences: Narrative textarea + optional simple indicators (morale, budget toggles)
+- **Optional Section** (collapsed by default): Ethics note and Instructor notes (private)
+- **Footer Actions**: "Guardar Borrador" and "Publicar" buttons
+- **NOT included per spec**: Rubrics, Scores, Weights, Complex branching logic, More than 3 decisions
+- **UX Philosophy**: "This is manageable." Total control without overload.
