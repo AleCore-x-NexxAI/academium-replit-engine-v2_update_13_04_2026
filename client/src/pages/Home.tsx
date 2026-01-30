@@ -12,14 +12,12 @@ import {
   Star,
   BookOpen,
   ChevronRight,
-  LayoutDashboard,
   Pencil,
   Bug,
   BarChart3,
   CheckCircle2,
   Calendar,
   Sparkles,
-  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -217,43 +215,37 @@ function ProfessorWelcome({ userName }: { userName: string }) {
           </Link>
         </motion.div>
 
-        {/* Help Card - Warmer framing */}
+        {/* My Simulations Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <Card className="p-6 h-full" data-testid="card-get-help">
-            {/* Visual help hint */}
-            <div className="bg-muted/50 rounded-lg p-3 mb-4 border border-dashed border-muted-foreground/20">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <HelpCircle className="w-3 h-3 text-muted-foreground/40" />
-                  <div className="h-2 w-24 bg-muted-foreground/15 rounded" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <HelpCircle className="w-3 h-3 text-muted-foreground/40" />
-                  <div className="h-2 w-20 bg-muted-foreground/15 rounded" />
+          <Link href="/professor">
+            <Card className="p-6 h-full hover-elevate cursor-pointer" data-testid="card-my-simulations">
+              {/* Visual list hint */}
+              <div className="bg-muted/50 rounded-lg p-3 mb-4 border border-dashed border-muted-foreground/20">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded bg-primary/40" />
+                    <div className="h-2 w-20 bg-muted-foreground/20 rounded" />
+                    <div className="ml-auto h-4 w-12 bg-muted-foreground/10 rounded text-[8px] flex items-center justify-center text-muted-foreground/50">Listo</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded bg-muted-foreground/30" />
+                    <div className="h-2 w-16 bg-muted-foreground/15 rounded" />
+                    <div className="ml-auto h-4 w-14 bg-muted-foreground/10 rounded text-[8px] flex items-center justify-center text-muted-foreground/50">Borrador</div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-1" data-testid="text-help-title">¿Quieres saber más?</h3>
-              <p className="text-sm text-muted-foreground mb-3" data-testid="text-help-description">
-                Respuestas rápidas a lo esencial
-              </p>
-              <div className="text-xs text-muted-foreground/70 space-y-1">
-                <p className="flex items-center gap-1 justify-center" data-testid="text-help-faq-1">
-                  <ChevronRight className="w-3 h-3" />
-                  ¿Qué es una simulación?
-                </p>
-                <p className="flex items-center gap-1 justify-center" data-testid="text-help-faq-2">
-                  <ChevronRight className="w-3 h-3" />
-                  ¿Cuánto tiempo toma?
+              <div className="text-center">
+                <h3 className="text-lg font-semibold mb-1" data-testid="text-my-simulations-title">Mis Simulaciones</h3>
+                <p className="text-sm text-muted-foreground" data-testid="text-my-simulations-description">
+                  Ver o editar tus casos existentes
                 </p>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </Link>
         </motion.div>
       </div>
 
@@ -387,17 +379,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Minimal header for first-time flow - only show essential navigation */}
-            {/* Dashboard link is subtle, not prominent */}
-            {isProfessor && (
-              <Button variant="ghost" size="sm" asChild className="text-muted-foreground" data-testid="link-professor-dashboard">
-                <Link href="/professor">
-                  <LayoutDashboard className="w-4 h-4 mr-1.5" />
-                  Mis Simulaciones
-                </Link>
-              </Button>
-            )}
-
+            {/* Minimal header for first-time flow */}
             {showRoleSwitcher && user && <RoleSwitcher user={user} />}
 
             {user?.isSuperAdmin && (
