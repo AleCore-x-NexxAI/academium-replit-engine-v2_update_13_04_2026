@@ -72,17 +72,16 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
   - GET `/api/professor/sessions/:id/conversation` - Full decision history for a session
 
 ### Professor First-Time Flow UX (January 2026)
-- **Home Page Redesign**: Professors see a calm landing page supporting their emotional journey:
+- **Home Page Redesign**: Professors see a calm landing page with three cards matching Visual Specs:
   1. Curiosity – "What is this?" → Hero tagline + visual simulation preview
   2. Safety – "Can I explore without breaking anything?" → Safety message at bottom
   3. Control – "I decide how to use this." → Two equal paths (AI/Manual) in Create card
-  4. Confidence – "I can do this alone if needed." → Help card without shame
-- **First Screen Shows ONLY**:
-  - Calm hero section with tagline "Aprendizaje experiencial para tus estudiantes"
-  - Three action cards: Explorar un Ejemplo, Crear Simulación, ¿Quieres saber más?
-  - Visual previews in cards (simulation mockup, AI/Manual icons, FAQ hints)
+- **First Screen Shows ONLY Three Cards**:
+  - Card 1: "Explorar un Ejemplo" → /explore (visual simulation mockup)
+  - Card 2: "Crear Simulación" → /studio (AI sparkles + Manual pencil icons)
+  - Card 3: "Mis Simulaciones" → /professor (visual list hint with "Listo"/"Borrador" badges)
   - Safety message: "Explora libremente. Nada aquí es permanente."
-- **First Screen Does NOT Show**: Dashboards, metrics, scenario grids, completed sessions, "Crear Escenario" buttons
+- **First Screen Does NOT Show**: Dashboards, metrics, scenario grids, completed sessions, help cards, header navigation links
 - **ExploreExample Page** (`/explore`): Read-only preview of POC simulation showing decision structure, aligned to canonical "Crisis de Lanzamiento de Producto" scenario
-- **Simplified Header**: Only "Mis Simulaciones" link (goes to /professor), avatar, and logout
-- **Dashboard Access**: Scenario lists and stats are on /professor page, not home page
+- **Simplified Header**: Only SIMULEARN logo, avatar, and logout (no navigation links)
+- **Dashboard Access**: Scenario lists and stats are on /professor page, accessed via Card 3
