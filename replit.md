@@ -85,3 +85,4 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
 - **ExploreExample Page** (`/explore`): Read-only preview showing case context, 3 decision points, and indicator badges. No tutorials, no editing, no scoring - just "what students experience"
 - **Simplified Header**: Only SIMULEARN logo, avatar, and logout (no navigation links)
 - **Dashboard Access**: Scenario lists and stats are on /professor page, accessed via Card 3
+- **Studio Path Selection** (`/studio`): Shows two equal cards - "Crear con IA" and "Crear Manualmente" with same visual weight. No recommendations, no difficulty labels, no skill assumptions. Professor feels "I choose how I work."
