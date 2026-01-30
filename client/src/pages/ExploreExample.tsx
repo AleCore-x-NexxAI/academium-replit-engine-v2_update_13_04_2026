@@ -7,11 +7,7 @@ import {
   Building2,
   User,
   MessageSquare,
-  Play,
-  ChevronRight,
-  Eye,
   Clock,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,13 +73,9 @@ export default function ExploreExample() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <div className="flex items-center gap-2">
-              <Eye className="w-5 h-5 text-primary" />
-              <span className="font-semibold" data-testid="text-preview-title">Vista Previa de Ejemplo</span>
-            </div>
+            <span className="font-semibold" data-testid="text-preview-title">Simulación de Ejemplo</span>
           </div>
-          <Badge variant="secondary" className="flex items-center gap-1" data-testid="badge-readonly">
-            <Clock className="w-3 h-3" />
+          <Badge variant="secondary" data-testid="badge-readonly">
             Solo lectura
           </Badge>
         </div>
@@ -95,14 +87,6 @@ export default function ExploreExample() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <div className="mb-8">
-            <p className="text-muted-foreground mb-2">
-              Esta es una vista previa de cómo los estudiantes experimentan una simulación.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Explora la estructura sin compromiso. Nada aquí es permanente ni afecta nada.
-            </p>
-          </div>
 
           <Card className="mb-8">
             <CardHeader className="pb-4">
@@ -165,11 +149,8 @@ export default function ExploreExample() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-primary" />
-                Estructura de Decisiones
+                Puntos de Decisión
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Los estudiantes toman exactamente 3 decisiones, cada una construyendo sobre la anterior.
-              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {EXAMPLE_CASE.decisionPoints.map((decision, index) => (
@@ -199,50 +180,27 @@ export default function ExploreExample() {
 
           <Card className="mb-8">
             <CardHeader>
-              <CardTitle className="text-lg">Indicadores del Sistema</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Cada decisión afecta estos indicadores. No hay respuestas correctas — solo trade-offs.
-              </p>
+              <CardTitle className="text-lg">Indicadores</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="flex flex-wrap gap-2">
                 {EXAMPLE_CASE.indicators.map((indicator) => (
-                  <div key={indicator.id} className="text-center p-3 rounded-lg bg-muted/50" data-testid={`card-indicator-${indicator.id}`}>
-                    <p className="text-sm font-medium" data-testid={`text-indicator-label-${indicator.id}`}>{indicator.label}</p>
-                    <p className="text-xs text-muted-foreground" data-testid={`text-indicator-description-${indicator.id}`}>{indicator.description}</p>
-                  </div>
+                  <Badge key={indicator.id} variant="outline" data-testid={`badge-indicator-${indicator.id}`}>
+                    {indicator.label}
+                  </Badge>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-muted/30 border-dashed">
-            <CardContent className="p-6">
-              <div className="text-center space-y-4">
-                <CheckCircle2 className="w-10 h-10 text-primary mx-auto" />
-                <div>
-                  <h3 className="font-semibold mb-1">¿Listo para explorar más?</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Puedes crear tu propia simulación o simplemente volver cuando estés listo.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <Link href="/studio">
-                    <Button data-testid="button-create-simulation">
-                      <Play className="w-4 h-4 mr-2" />
-                      Crear Simulación
-                    </Button>
-                  </Link>
-                  <Link href="/">
-                    <Button variant="outline" data-testid="button-back-to-home">
-                      Volver al Inicio
-                      <ChevronRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex justify-center">
+            <Link href="/">
+              <Button variant="outline" data-testid="button-back-to-home">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Volver al Inicio
+              </Button>
+            </Link>
+          </div>
         </motion.div>
       </main>
     </div>
