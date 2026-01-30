@@ -82,6 +82,6 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
   - Card 3: "Mis Simulaciones" → /professor (visual list hint with "Listo"/"Borrador" badges)
   - Safety message: "Explora libremente. Nada aquí es permanente."
 - **First Screen Does NOT Show**: Dashboards, metrics, scenario grids, completed sessions, help cards, header navigation links
-- **ExploreExample Page** (`/explore`): Read-only preview of POC simulation showing decision structure, aligned to canonical "Crisis de Lanzamiento de Producto" scenario
+- **ExploreExample Page** (`/explore`): Read-only preview showing case context, 3 decision points, and indicator badges. No tutorials, no editing, no scoring - just "what students experience"
 - **Simplified Header**: Only SIMULEARN logo, avatar, and logout (no navigation links)
 - **Dashboard Access**: Scenario lists and stats are on /professor page, accessed via Card 3
