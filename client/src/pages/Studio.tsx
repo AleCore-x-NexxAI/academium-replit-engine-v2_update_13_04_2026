@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import CanonicalCaseCreator from "@/components/CanonicalCaseCreator";
 import ManualCaseCreator from "@/components/ManualCaseCreator";
+import { AssistantIcon } from "@/components/AssistantIcon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -2302,6 +2303,11 @@ export default function Studio() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Floating Assistant Icon - visible during creation modes */}
+      {(authoringMode === "canonical" || authoringMode === "manual") && (
+        <AssistantIcon />
+      )}
     </div>
   );
 }

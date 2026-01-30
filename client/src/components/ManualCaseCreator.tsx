@@ -24,6 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { HelpIcon } from "@/components/HelpIcon";
 
 interface ManualCaseCreatorProps {
   onSuccess: () => void;
@@ -228,7 +229,10 @@ export default function ManualCaseCreator({
       <div className="flex-1 overflow-y-auto p-6 space-y-8">
         {/* Case Title */}
         <div className="space-y-2">
-          <Label htmlFor="title">Título del Caso</Label>
+          <div className="flex items-center gap-1">
+            <Label htmlFor="title">Título del Caso</Label>
+            <HelpIcon content="Un nombre corto y descriptivo que los estudiantes verán al iniciar la simulación." />
+          </div>
           <Input
             id="title"
             value={formData.title}
@@ -242,11 +246,9 @@ export default function ManualCaseCreator({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">Contexto del Caso</h3>
+            <HelpIcon content="Establece la situación empresarial. Incluye la empresa, el mercado, y el desafío que enfrentan los estudiantes." />
             <Badge variant="secondary" className="text-xs">Requerido</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Establece la situación para los estudiantes
-          </p>
           <Textarea
             value={formData.caseContext}
             onChange={(e) => setFormData(prev => ({ ...prev, caseContext: e.target.value }))}
@@ -260,6 +262,7 @@ export default function ManualCaseCreator({
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">Puntos de Decisión</h3>
+            <HelpIcon content="Los estudiantes tomarán 3 decisiones durante la simulación. La primera es de opción múltiple; las siguientes son respuestas escritas." />
             <Badge variant="secondary" className="text-xs">3 decisiones</Badge>
           </div>
 
@@ -310,13 +313,13 @@ export default function ManualCaseCreator({
 
         {/* Section 3: Consequences */}
         <div className="space-y-4">
-          <h3 className="font-semibold">Consecuencias</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">Consecuencias</h3>
+            <HelpIcon content="Describe el impacto general de las decisiones. Los indicadores son opcionales y muestran métricas simples." />
+          </div>
           
           <div className="space-y-2">
             <Label>Narrativa de consecuencias</Label>
-            <p className="text-sm text-muted-foreground">
-              Describe cómo las decisiones afectan el resultado general
-            </p>
             <Textarea
               value={formData.consequenceNarrative}
               onChange={(e) => setFormData(prev => ({ ...prev, consequenceNarrative: e.target.value }))}
@@ -328,7 +331,10 @@ export default function ManualCaseCreator({
 
           {/* Simple Indicators */}
           <div className="space-y-3">
-            <Label>Indicadores simples (opcional)</Label>
+            <div className="flex items-center gap-1">
+              <Label>Indicadores simples (opcional)</Label>
+              <HelpIcon content="Activa indicadores para mostrar cambios visuales en métricas como moral o presupuesto." />
+            </div>
             <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <Switch

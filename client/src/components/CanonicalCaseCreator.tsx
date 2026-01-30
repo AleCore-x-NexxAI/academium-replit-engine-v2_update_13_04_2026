@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { HelpIcon } from "@/components/HelpIcon";
 import type { GeneratedScenarioData, DecisionPoint, Indicator } from "@shared/schema";
 
 interface CanonicalCaseCreatorProps {
@@ -289,7 +290,10 @@ export default function CanonicalCaseCreator({
           <div className="max-w-md mx-auto space-y-6">
             <div className="space-y-4">
               <div>
-                <Label htmlFor="topic">Tema del Caso</Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor="topic">Tema del Caso</Label>
+                  <HelpIcon content="Describe brevemente el tema central. Por ejemplo: dilema de expansión, crisis de liderazgo, decisión de inversión." />
+                </div>
                 <Input
                   id="topic"
                   value={topic}
@@ -301,7 +305,10 @@ export default function CanonicalCaseCreator({
               </div>
 
               <div>
-                <Label htmlFor="discipline">Disciplina / Contexto del Curso</Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor="discipline">Disciplina / Contexto del Curso</Label>
+                  <HelpIcon content="Selecciona el área académica principal. Esto ayuda a generar un contexto relevante para tu curso." />
+                </div>
                 <Select value={discipline} onValueChange={setDiscipline}>
                   <SelectTrigger className="mt-1" data-testid="select-discipline">
                     <SelectValue />
@@ -318,7 +325,10 @@ export default function CanonicalCaseCreator({
               </div>
 
               <div>
-                <Label htmlFor="targetLevel">Nivel Objetivo</Label>
+                <div className="flex items-center gap-1">
+                  <Label htmlFor="targetLevel">Nivel Objetivo</Label>
+                  <HelpIcon content="Define el nivel de complejidad y profundidad del caso según tu audiencia estudiantil." />
+                </div>
                 <Select value={targetLevel} onValueChange={setTargetLevel}>
                   <SelectTrigger className="mt-1" data-testid="select-target-level">
                     <SelectValue />
