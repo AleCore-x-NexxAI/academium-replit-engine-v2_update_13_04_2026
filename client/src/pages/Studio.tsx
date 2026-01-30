@@ -21,6 +21,7 @@ import {
   PenTool,
 } from "lucide-react";
 import CanonicalCaseCreator from "@/components/CanonicalCaseCreator";
+import ManualCaseCreator from "@/components/ManualCaseCreator";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -2253,8 +2254,12 @@ export default function Studio() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
+              className="h-[calc(100vh-12rem)]"
             >
-              <ManualScenarioForm onSuccess={() => { setAuthoringMode("list"); refetch(); }} />
+              <ManualCaseCreator
+                onSuccess={() => { setAuthoringMode("list"); refetch(); }}
+                onClose={() => setAuthoringMode("list")}
+              />
             </motion.div>
           ) : (
             <motion.div
