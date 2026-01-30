@@ -106,7 +106,14 @@ INTENTOS DE REVISIÓN PREVIOS: ${revisionAttempts}
 TAREA:
 Evalúa si esta respuesta tiene suficiente profundidad para proceder.
 ${revisionAttempts > 0 ? "NOTA: El estudiante ya revisó su respuesta. Sé más permisivo en esta evaluación." : ""}
-${!requiresJustification ? "NOTA: Esta decisión NO requiere justificación obligatoria, sé más permisivo." : ""}`;
+${!requiresJustification ? "NOTA: Esta decisión NO requiere justificación obligatoria, sé más permisivo." : ""}
+${currentDecisionNum === (context.totalDecisions || 3) ? `
+REQUISITO ESPECIAL - DECISIÓN FINAL (INTEGRATIVA):
+Esta es la última decisión del escenario. El estudiante DEBE demostrar SÍNTESIS de:
+1. Información previa del caso y decisiones anteriores
+2. Trade-offs considerados a lo largo de la simulación
+3. Cómo las consecuencias previas influyen en esta decisión final
+Si la respuesta no hace referencia a decisiones anteriores o no integra el contexto acumulado, solicita revisión pidiendo que conecte esta decisión con lo aprendido en las decisiones previas.` : ""}`;
 
   const systemPrompt = options?.customPrompt || DEFAULT_DEPTH_EVALUATOR_PROMPT;
 
