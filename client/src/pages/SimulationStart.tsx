@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Play, Brain, Target, Users, ArrowLeft, Loader2 } from "lucide-react";
+import { Play, Brain, Target, Users, ArrowLeft, Loader2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
-import type { Scenario } from "@shared/schema";
+import type { Scenario, User } from "@shared/schema";
 
 interface StartResponse {
   sessionId: string;
@@ -19,8 +19,17 @@ interface StartResponse {
 export default function SimulationStart() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
   const [, navigate] = useLocation();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const searchString = useSearch();
+  const isTestMode = new URLSearchParams(searchString).get("test") === "true";
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { toast } = useToast();
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["/api/auth/user"],
+    enabled: isAuthenticated,
+  });
+
+  const isProfessorOrAdmin = currentUser?.role === "professor" || currentUser?.role === "admin";
 
   const {
     data: scenario,
@@ -109,6 +118,48 @@ export default function SimulationStart() {
           </p>
           <Button onClick={() => navigate("/")}>Volver al Inicio</Button>
         </div>
+      </div>
+    );
+  }
+
+  // Show waiting message for students if simulation hasn't started
+  // Professors and admins can bypass this (test mode or actual testing)
+  if (!scenario.isStarted && !isProfessorOrAdmin && !isTestMode) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center max-w-md px-6"
+        >
+          <div className="w-20 h-20 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-6">
+            <Clock className="w-10 h-10 text-amber-600" />
+          </div>
+          <h2 className="text-2xl font-semibold mb-3" data-testid="text-waiting-title">
+            El profesor aún no ha iniciado la simulación
+          </h2>
+          <p className="text-muted-foreground mb-6" data-testid="text-waiting-description">
+            La simulación "{scenario.title}" estará disponible cuando tu profesor la inicie. 
+            Por favor, espera las instrucciones de tu profesor.
+          </p>
+          <Card className="p-4 bg-muted/50 mb-6">
+            <div className="flex items-start gap-3 text-left">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-1">¿Qué puedes hacer mientras tanto?</p>
+                <ul className="space-y-1">
+                  <li>• Revisar el material del curso</li>
+                  <li>• Preparar preguntas sobre el caso</li>
+                  <li>• Esperar el aviso de tu profesor</li>
+                </ul>
+              </div>
+            </div>
+          </Card>
+          <Button variant="outline" onClick={() => navigate("/")} data-testid="button-back-home">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Volver al Inicio
+          </Button>
+        </motion.div>
       </div>
     );
   }

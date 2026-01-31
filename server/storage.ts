@@ -58,6 +58,7 @@ export interface IStorage {
   updateUserViewingAs(id: string, viewingAs: "student" | "professor" | "admin" | null): Promise<User | undefined>;
 
   getScenario(id: string): Promise<Scenario | undefined>;
+  getScenarioByJoinCode(code: string): Promise<Scenario | undefined>;
   getPublishedScenarios(): Promise<Scenario[]>;
   getScenariosByAuthor(authorId: string): Promise<Scenario[]>;
   createScenario(scenario: InsertScenario): Promise<Scenario>;
@@ -194,6 +195,11 @@ export class DatabaseStorage implements IStorage {
 
   async getScenario(id: string): Promise<Scenario | undefined> {
     const [scenario] = await db.select().from(scenarios).where(eq(scenarios.id, id));
+    return scenario;
+  }
+
+  async getScenarioByJoinCode(code: string): Promise<Scenario | undefined> {
+    const [scenario] = await db.select().from(scenarios).where(eq(scenarios.joinCode, code));
     return scenario;
   }
 

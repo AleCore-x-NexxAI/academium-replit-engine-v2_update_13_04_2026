@@ -102,7 +102,8 @@ export default function ProfessorDashboard() {
             {scenarios.map((scenario) => (
               <Card 
                 key={scenario.id} 
-                className="hover-elevate"
+                className="hover-elevate cursor-pointer"
+                onClick={() => navigate(`/scenarios/${scenario.id}/manage`)}
                 data-testid={`card-simulation-${scenario.id}`}
               >
                 <CardContent className="py-4">
@@ -124,7 +125,10 @@ export default function ProfessorDashboard() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => navigate(`/studio?edit=${scenario.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/studio?edit=${scenario.id}`);
+                      }}
                       data-testid={`button-edit-${scenario.id}`}
                     >
                       <Edit className="w-4 h-4" />

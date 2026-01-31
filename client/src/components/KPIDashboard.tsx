@@ -30,25 +30,30 @@ interface IndicatorInfo {
 }
 
 const indicatorExplanations: Record<string, IndicatorInfo> = {
-  teamMorale: {
-    description: "Mide el nivel de motivación, compromiso y bienestar emocional del equipo de trabajo.",
-    upMeaning: "El equipo se siente más motivado, valorado y comprometido con el proyecto.",
-    downMeaning: "El equipo experimenta estrés, frustración o desmotivación ante las decisiones tomadas.",
-  },
-  budgetImpact: {
+  revenue: {
     description: "Refleja la salud financiera del proyecto y los recursos disponibles para la operación.",
     upMeaning: "Las decisiones han optimizado recursos o generado ahorros/ingresos adicionales.",
     downMeaning: "Las decisiones han generado costos adicionales o consumido más recursos de lo planeado.",
   },
-  operationalRisk: {
-    description: "Indica el nivel de incertidumbre y posibles problemas técnicos u operativos que enfrenta el proyecto.",
-    upMeaning: "El riesgo ha aumentado - hay más posibilidad de problemas técnicos o fallos operativos.",
-    downMeaning: "El riesgo ha disminuido - las decisiones han estabilizado la operación.",
+  morale: {
+    description: "Mide el nivel de motivación, compromiso y bienestar emocional del equipo de trabajo.",
+    upMeaning: "El equipo se siente más motivado, valorado y comprometido con el proyecto.",
+    downMeaning: "El equipo experimenta estrés, frustración o desmotivación ante las decisiones tomadas.",
   },
-  strategicFlexibility: {
-    description: "Mide la capacidad de adaptación y las opciones estratégicas disponibles para la organización.",
-    upMeaning: "Las decisiones han abierto nuevas opciones y aumentado la capacidad de adaptación.",
-    downMeaning: "Las decisiones han reducido opciones futuras o comprometido la capacidad de adaptación.",
+  reputation: {
+    description: "Mide la percepción pública y credibilidad de la organización en el mercado.",
+    upMeaning: "Las decisiones han mejorado la imagen pública y la credibilidad de la marca.",
+    downMeaning: "Las decisiones han afectado negativamente la percepción de la marca.",
+  },
+  efficiency: {
+    description: "Indica la optimización de procesos y el uso efectivo de recursos operativos.",
+    upMeaning: "Las operaciones son más ágiles y los procesos más eficientes.",
+    downMeaning: "Hay ineficiencias operativas o desperdicio de recursos.",
+  },
+  trust: {
+    description: "Mide el nivel de confianza que las partes interesadas tienen en la organización.",
+    upMeaning: "Los stakeholders confían más en las decisiones y dirección de la organización.",
+    downMeaning: "La confianza de los stakeholders ha disminuido debido a las decisiones tomadas.",
   },
 };
 
@@ -302,7 +307,7 @@ export function KPIDashboard({
   const kpiConfig = [
     {
       key: "revenue",
-      label: "Ingresos",
+      label: "Ingresos / Presupuesto",
       icon: <DollarSign className="w-4 h-4" />,
       format: "currency" as const,
       color: "bg-chart-1/10 text-chart-1",
@@ -316,21 +321,21 @@ export function KPIDashboard({
     },
     {
       key: "reputation",
-      label: "Reputación",
+      label: "Reputación de Marca",
       icon: <Star className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-3/10 text-chart-3",
     },
     {
       key: "efficiency",
-      label: "Eficiencia Operativa",
+      label: "Eficiencia Operacional",
       icon: <Gauge className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-4/10 text-chart-4",
     },
     {
       key: "trust",
-      label: "Confianza",
+      label: "Confianza de Stakeholders",
       icon: <Shield className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-5/10 text-chart-5",

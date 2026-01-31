@@ -1,0 +1,106 @@
+Role: Professor – Required Changes
+
+1. Explore Example (Read-only but Visible)
+	•	Keep Explore Example as read-only.
+	•	Professors must be able to see the full student UI.
+	•	Add a Start Example button.
+	•	When clicked, show a mock run exactly as a student would experience it.
+	•	This is for demo and understanding only, no data saved.
+
+⸻
+
+2. My Simulations – List Behavior
+
+Current issue:
+	•	Simulations appear as a list but are not clickable.
+	•	Edit sends the user back to Create Simulation.
+
+Required changes:
+	•	Each simulation in My Simulations must be clickable.
+	•	Clicking a simulation opens a Simulation Management View.
+	•	Replace current Edit behavior with proper editing of that simulation.
+
+⸻
+
+3. Simulation Management View (Professor)
+
+For each simulation, the professor must be able to:
+	•	Edit simulation content
+	•	View simulation details
+	•	Test simulation as a professor
+	•	Run it in real time as if they were a student
+	•	This is a test mode, no student data affected
+
+⸻
+
+4. Student Management (Critical)
+
+Inside each simulation, add a Students section.
+
+Professor must be able to:
+
+A. Add students by email
+	•	Add a single student by email
+	•	Trigger an automatic email:
+	•	Subject: You have been added to a simulation
+	•	Content: Professor name, simulation name, access info
+
+B. Bulk add students
+	•	Paste multiple emails at once
+	•	Send the same automatic email to all
+
+C. Join via code
+	•	Generate a unique simulation code
+	•	Students can enter this code on their dashboard to join
+	•	Similar behavior to Kahoot-style joining
+
+⸻
+
+5. Simulation Start Control
+	•	Students cannot start a simulation until the professor starts it.
+	•	Before start, students see:
+	•	“The professor has not started the simulation yet”
+	•	Add a Start Simulation button for the professor.
+	•	Once started:
+	•	Students gain access
+	•	Professor can see:
+	•	Enrolled students
+	•	Participation status
+
+⸻
+
+6. Indicators – Manual Creation Fix
+
+Current issue:
+	•	Manual creation only shows limited indicators.
+
+Required change:
+	•	Always show the same five indicators, everywhere:
+	1.	Revenue / Budget
+	2.	Team morale
+	3.	Brand reputation
+	4.	Operational efficiency
+	5.	Stakeholder trust
+
+This must apply to:
+	•	Manual creation
+	•	Editing
+	•	Testing
+	•	Running simulations
+
+No indicator should disappear based on creation method.
+
+⸻
+
+7. Summary of Missing Capabilities (Must Be Fixed)
+
+Right now, as a professor:
+	•	Cannot properly view examples
+	•	Cannot click simulations
+	•	Cannot edit simulations
+	•	Cannot test simulations
+	•	Cannot add students
+	•	Cannot start simulations
+	•	Cannot control student access
+
+All of the above must be resolved for the professor role to be usable.

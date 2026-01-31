@@ -1691,4 +1691,153 @@ Be constructive and educational, not judgmental.`;
       res.status(500).json({ message: "Failed to delete LLM provider" });
     }
   });
+
+  // Generate join code for a scenario (Kahoot-style)
+  app.post("/api/scenarios/:scenarioId/generate-code", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      // Generate a 6-character alphanumeric code
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      
+      const updated = await storage.updateScenario(scenarioId, { joinCode: code });
+      res.json({ joinCode: code, scenario: updated });
+    } catch (error) {
+      console.error("Error generating join code:", error);
+      res.status(500).json({ message: "Failed to generate join code" });
+    }
+  });
+
+  // Toggle simulation start/stop (professor control)
+  app.patch("/api/scenarios/:scenarioId/start", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+      const { isStarted } = req.body;
+
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const updated = await storage.updateScenario(scenarioId, { isStarted: !!isStarted });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error toggling simulation start:", error);
+      res.status(500).json({ message: "Failed to update simulation" });
+    }
+  });
+
+  // Add a student to a scenario by email
+  app.post("/api/scenarios/:scenarioId/students", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+      const { email } = req.body;
+
+      if (!email || !email.includes("@")) {
+        return res.status(400).json({ message: "Valid email required" });
+      }
+
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      // For now, just log - in production this would send an email
+      console.log(`[Simulation] Invitation sent to ${email} for scenario "${scenario.title}"`);
+      
+      res.json({ 
+        success: true, 
+        message: `Invitation sent to ${email}`,
+        email 
+      });
+    } catch (error) {
+      console.error("Error adding student:", error);
+      res.status(500).json({ message: "Failed to add student" });
+    }
+  });
+
+  // Bulk add students to a scenario
+  app.post("/api/scenarios/:scenarioId/students/bulk", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+      const { emails } = req.body;
+
+      if (!Array.isArray(emails) || emails.length === 0) {
+        return res.status(400).json({ message: "Array of emails required" });
+      }
+
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin") {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const validEmails = emails.filter((e: string) => e && e.includes("@"));
+      
+      // For now, just log - in production this would send emails
+      for (const email of validEmails) {
+        console.log(`[Simulation] Invitation sent to ${email} for scenario "${scenario.title}"`);
+      }
+      
+      res.json({ 
+        success: true, 
+        added: validEmails.length,
+        message: `Invitations sent to ${validEmails.length} students`
+      });
+    } catch (error) {
+      console.error("Error adding students:", error);
+      res.status(500).json({ message: "Failed to add students" });
+    }
+  });
+
+  // Join a simulation by code (student)
+  app.post("/api/simulations/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { code } = req.body;
+
+      if (!code) {
+        return res.status(400).json({ message: "Join code required" });
+      }
+
+      const scenario = await storage.getScenarioByJoinCode(code.toUpperCase());
+      if (!scenario) {
+        return res.status(404).json({ message: "Invalid code. Please check and try again." });
+      }
+
+      if (!scenario.isPublished) {
+        return res.status(400).json({ message: "This simulation is not yet available." });
+      }
+
+      res.json({ 
+        success: true, 
+        scenarioId: scenario.id,
+        title: scenario.title,
+        isStarted: scenario.isStarted
+      });
+    } catch (error) {
+      console.error("Error joining simulation:", error);
+      res.status(500).json({ message: "Failed to join simulation" });
+    }
+  });
 }

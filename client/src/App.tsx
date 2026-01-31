@@ -8,6 +8,7 @@ import Landing from "@/pages/Landing";
 import RoleSelection from "@/pages/RoleSelection";
 import Home from "@/pages/Home";
 import ExploreExample from "@/pages/ExploreExample";
+import DemoSimulation from "@/pages/DemoSimulation";
 import Simulation from "@/pages/Simulation";
 import SimulationStart from "@/pages/SimulationStart";
 import SessionResults from "@/pages/SessionResults";
@@ -16,6 +17,7 @@ import Analytics from "@/pages/Analytics";
 import ProfessorDashboard from "@/pages/ProfessorDashboard";
 import ScenarioEdit from "@/pages/ScenarioEdit";
 import ScenarioAnalytics from "@/pages/ScenarioAnalytics";
+import SimulationManagement from "@/pages/SimulationManagement";
 import BugReports from "@/pages/BugReports";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
@@ -34,6 +36,11 @@ function AuthenticatedApp() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/explore" component={ExploreExample} />
+        <Route path="/demo-simulation">
+          <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+            <DemoSimulation />
+          </RoleProtectedRoute>
+        </Route>
         <Route path="/simulation/start/:scenarioId" component={SimulationStart} />
         <Route path="/simulation/:sessionId/results" component={SessionResults} />
         <Route path="/simulation/:sessionId" component={Simulation} />
@@ -50,6 +57,11 @@ function AuthenticatedApp() {
         <Route path="/professor">
           <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
             <ProfessorDashboard />
+          </RoleProtectedRoute>
+        </Route>
+        <Route path="/scenarios/:scenarioId/manage">
+          <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+            <SimulationManagement />
           </RoleProtectedRoute>
         </Route>
         <Route path="/scenarios/:scenarioId/edit">

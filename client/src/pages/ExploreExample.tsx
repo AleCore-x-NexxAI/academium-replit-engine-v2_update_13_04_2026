@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   BookOpen,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   User,
   MessageSquare,
   Clock,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,14 +56,17 @@ TechSolutions ha invertido 18 meses y $2M en desarrollar CloudSync Pro. El equip
     },
   ],
   indicators: [
-    { id: "teamMorale", label: "Moral del Equipo", description: "Estado emocional y compromiso del equipo" },
-    { id: "budgetImpact", label: "Impacto Presupuestario", description: "Salud financiera y disponibilidad de recursos" },
-    { id: "operationalRisk", label: "Riesgo Operacional", description: "Nivel de incertidumbre y peligro operacional" },
-    { id: "strategicAlignment", label: "Alineación Estratégica", description: "Coherencia con objetivos organizacionales" },
+    { id: "revenue", label: "Ingresos / Presupuesto", description: "Salud financiera y disponibilidad de recursos" },
+    { id: "morale", label: "Moral del Equipo", description: "Estado emocional y compromiso del equipo" },
+    { id: "reputation", label: "Reputación de Marca", description: "Percepción pública y credibilidad de marca" },
+    { id: "efficiency", label: "Eficiencia Operacional", description: "Optimización de procesos y recursos" },
+    { id: "trust", label: "Confianza de Stakeholders", description: "Nivel de confianza de partes interesadas" },
   ],
 };
 
 export default function ExploreExample() {
+  const [, navigate] = useLocation();
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-[1000]">
@@ -193,13 +197,17 @@ export default function ExploreExample() {
             </CardContent>
           </Card>
 
-          <div className="flex justify-center">
+          <div className="flex justify-center gap-4">
             <Link href="/">
               <Button variant="outline" data-testid="button-back-to-home">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Volver al Inicio
               </Button>
             </Link>
+            <Button onClick={() => navigate("/demo-simulation")} data-testid="button-start-demo">
+              <Play className="w-4 h-4 mr-2" />
+              Iniciar Demo
+            </Button>
           </div>
         </motion.div>
       </main>

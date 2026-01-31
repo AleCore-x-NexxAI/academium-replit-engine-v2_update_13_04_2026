@@ -68,6 +68,8 @@ export const scenarios = pgTable("scenarios", {
   llmModel: varchar("llm_model", { length: 50 }).default("gpt-4o"), // LLM model for this scenario
   agentPrompts: jsonb("agent_prompts").$type<AgentPrompts>(), // Custom agent prompts (optional)
   isPublished: boolean("is_published").default(false).notNull(),
+  isStarted: boolean("is_started").default(false).notNull(), // Professor controls when students can start
+  joinCode: varchar("join_code", { length: 10 }), // Kahoot-style join code for students
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
