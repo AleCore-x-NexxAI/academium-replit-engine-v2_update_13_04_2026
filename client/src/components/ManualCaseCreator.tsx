@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Collapsible,
   CollapsibleContent,
@@ -38,20 +37,25 @@ interface DecisionPointData {
 }
 
 interface IndicatorData {
-  enabled: boolean;
+  id: string;
   label: string;
   initialValue: number;
 }
+
+const STANDARD_INDICATORS: IndicatorData[] = [
+  { id: "revenue", label: "Ingresos / Presupuesto", initialValue: 65 },
+  { id: "morale", label: "Moral del Equipo", initialValue: 70 },
+  { id: "reputation", label: "Reputación de Marca", initialValue: 75 },
+  { id: "efficiency", label: "Eficiencia Operacional", initialValue: 60 },
+  { id: "trust", label: "Confianza de Stakeholders", initialValue: 72 },
+];
 
 interface FormData {
   title: string;
   caseContext: string;
   decisions: DecisionPointData[];
   consequenceNarrative: string;
-  indicators: {
-    morale: IndicatorData;
-    budget: IndicatorData;
-  };
+  indicators: IndicatorData[];
   ethicsNote: string;
   instructorNotes: string;
 }
@@ -72,10 +76,7 @@ export default function ManualCaseCreator({
       { prompt: "", format: "short_response" },
     ],
     consequenceNarrative: "",
-    indicators: {
-      morale: { enabled: false, label: "Moral del Equipo", initialValue: 75 },
-      budget: { enabled: false, label: "Presupuesto", initialValue: 100000 },
-    },
+    indicators: [...STANDARD_INDICATORS],
     ethicsNote: "",
     instructorNotes: "",
   });
@@ -98,15 +99,6 @@ export default function ManualCaseCreator({
     });
   };
 
-  const toggleIndicator = (key: "morale" | "budget") => {
-    setFormData(prev => ({
-      ...prev,
-      indicators: {
-        ...prev.indicators,
-        [key]: { ...prev.indicators[key], enabled: !prev.indicators[key].enabled },
-      },
-    }));
-  };
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -118,13 +110,9 @@ export default function ManualCaseCreator({
           role: "Gerente",
           objective: "Tomar decisiones estratégicas",
           introText: formData.caseContext,
-          kpis: {
-            revenue: formData.indicators.budget.enabled ? formData.indicators.budget.initialValue : 100000,
-            morale: formData.indicators.morale.enabled ? formData.indicators.morale.initialValue : 75,
-            reputation: 75,
-            efficiency: 75,
-            trust: 75,
-          },
+          kpis: Object.fromEntries(
+            formData.indicators.map(ind => [ind.id, ind.initialValue])
+          ),
         },
         decisionPoints: formData.decisions.map((d, i) => ({
           id: `decision-${i + 1}`,
@@ -164,13 +152,9 @@ export default function ManualCaseCreator({
           role: "Gerente",
           objective: "Tomar decisiones estratégicas",
           introText: formData.caseContext,
-          kpis: {
-            revenue: formData.indicators.budget.enabled ? formData.indicators.budget.initialValue : 100000,
-            morale: formData.indicators.morale.enabled ? formData.indicators.morale.initialValue : 75,
-            reputation: 75,
-            efficiency: 75,
-            trust: 75,
-          },
+          kpis: Object.fromEntries(
+            formData.indicators.map(ind => [ind.id, ind.initialValue])
+          ),
         },
         decisionPoints: formData.decisions.map((d, i) => ({
           id: `decision-${i + 1}`,
@@ -329,30 +313,24 @@ export default function ManualCaseCreator({
             />
           </div>
 
-          {/* Simple Indicators */}
+          {/* Standard Indicators (Always 5) */}
           <div className="space-y-3">
             <div className="flex items-center gap-1">
-              <Label>Indicadores simples (opcional)</Label>
-              <HelpIcon content="Activa indicadores para mostrar cambios visuales en métricas como moral o presupuesto." />
+              <Label>Indicadores de Simulación</Label>
+              <HelpIcon content="Estos 5 indicadores estándar se mostrarán en todas las simulaciones para medir el impacto de las decisiones." />
             </div>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.indicators.morale.enabled}
-                  onCheckedChange={() => toggleIndicator("morale")}
-                  data-testid="switch-indicator-morale"
-                />
-                <span className="text-sm">Moral del equipo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.indicators.budget.enabled}
-                  onCheckedChange={() => toggleIndicator("budget")}
-                  data-testid="switch-indicator-budget"
-                />
-                <span className="text-sm">Presupuesto</span>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {formData.indicators.map((indicator) => (
+                <div key={indicator.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  <span className="text-sm font-medium">{indicator.label}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">Inicial: {indicator.initialValue}%</span>
+                </div>
+              ))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Los 5 indicadores estándar siempre se incluirán automáticamente en la simulación.
+            </p>
           </div>
         </div>
 

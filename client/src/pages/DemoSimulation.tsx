@@ -128,6 +128,46 @@ export default function DemoSimulation() {
   const [currentFeedback, setCurrentFeedback] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
 
+  const [inputWarning, setInputWarning] = useState<string | null>(null);
+
+  const validateInput = (input: string): { valid: boolean; message?: string } => {
+    const trimmedInput = input.trim().toLowerCase();
+    
+    if (!trimmedInput || trimmedInput.length < 5) {
+      return { valid: false, message: "Por favor, proporciona una respuesta más detallada relacionada con el caso." };
+    }
+
+    const offensivePatterns = [
+      /\b(idiota|pendejo|estupido|tonto|imbecil|mierda|carajo|puta|joder|cabron|maldito)\b/i,
+      /\b(idiot|stupid|dumb|ass|fuck|shit|damn|bastard)\b/i,
+    ];
+    
+    for (const pattern of offensivePatterns) {
+      if (pattern.test(trimmedInput)) {
+        return { 
+          valid: false, 
+          message: "El lenguaje inapropiado no está permitido. Por favor, proporciona una respuesta profesional relacionada con el caso de estudio." 
+        };
+      }
+    }
+
+    const caseKeywords = ["equipo", "lanzamiento", "producto", "decision", "cliente", "empresa", "vulnerabilidad", 
+                          "seguridad", "riesgo", "comunicar", "ceo", "ventas", "marketing", "estrategia", "proyecto",
+                          "plan", "opcion", "alternativa", "solucion", "problema", "impacto", "resultado", "tiempo",
+                          "recurso", "presupuesto", "stakeholder", "reputacion", "confianza", "moral", "eficiencia"];
+    
+    const hasRelevantContent = caseKeywords.some(keyword => trimmedInput.includes(keyword)) || trimmedInput.length > 30;
+    
+    if (!hasRelevantContent) {
+      return { 
+        valid: false, 
+        message: "Tu respuesta no parece estar relacionada con el contexto del caso. Por favor, proporciona una respuesta relevante a la situación presentada." 
+      };
+    }
+
+    return { valid: true };
+  };
+
   const handleSubmitDecision = useCallback(async () => {
     if (currentDecision >= DEMO_DECISIONS.length) return;
     
@@ -138,6 +178,15 @@ export default function DemoSimulation() {
     
     if (!userResponse.trim()) return;
 
+    if (decision.format !== "multiple_choice") {
+      const validation = validateInput(userResponse);
+      if (!validation.valid) {
+        setInputWarning(validation.message || "Por favor, proporciona una respuesta válida.");
+        return;
+      }
+    }
+
+    setInputWarning(null);
     setIsProcessing(true);
     setCurrentFeedback(null);
 
@@ -335,12 +384,24 @@ export default function DemoSimulation() {
                   {currentDecisionData.format === "written" && (
                     <Textarea
                       value={writtenResponse}
-                      onChange={(e) => setWrittenResponse(e.target.value)}
+                      onChange={(e) => {
+                        setWrittenResponse(e.target.value);
+                        if (inputWarning) setInputWarning(null);
+                      }}
                       placeholder={currentDecisionData.placeholder || "Escribe tu respuesta..."}
                       rows={4}
                       className="resize-none"
                       data-testid="input-written-response"
                     />
+                  )}
+
+                  {inputWarning && (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm" data-testid="text-input-warning">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{inputWarning}</span>
+                      </div>
+                    </div>
                   )}
 
                   <Button

@@ -1,0 +1,57 @@
+Role: Student – Required Changes
+
+1. Visibility of Simulations
+
+Current issues
+	•	As a student, I can see the simulation
+“Es momento de integrar inteligencia artificial en el marketing”
+even though:
+	•	No student was added to that simulation.
+	•	The simulation “Crisis de lanzamiento de productos” should be always available, but its behavior needs to be clarified.
+
+Required rules
+	1.	Global demo simulation
+	•	“Crisis de lanzamiento de productos” must:
+	•	Be visible to all students by default.
+	•	Be always open, since it is not tied to any specific teacher.
+	•	Appear in the student dashboard even if they are not added to any other simulation.
+	2.	All other simulations
+	•	Any simulation created by a teacher (for example
+“Es momento de integrar inteligencia artificial en el marketing”) must:
+	•	Not appear in the student dashboard by default.
+	•	Only become visible to a student when:
+	•	The student is explicitly added by email, or
+	•	The student joins using a simulation code.
+	•	If the student has not been added and has not joined with a code:
+	•	The simulation must be completely hidden from that student.
+
+⸻
+
+2. Student UI – Join by Code
+
+Current behavior
+	•	As a student, I can see teacher simulations even without being added.
+	•	There is no clear way to join a simulation using a code.
+
+Required behavior
+	1.	Join simulation entry point
+	•	On the main student dashboard, add a clear action:
+	•	Button or link: “Unirse a simulación”.
+	•	When the student clicks it, show:
+	•	A simple input field to enter a simulation code.
+	•	A Confirm / Join button.
+	2.	Join logic
+	•	When a valid code is entered:
+	•	Add that student to the simulation.
+	•	Show the simulation in their list.
+	•	When the code is invalid or expired:
+	•	Show an error message.
+	•	Do not add any simulation to the list.
+	3.	Access rules
+	•	A student should see in their list:
+	•	The global demo simulation
+“Crisis de lanzamiento de productos”.
+	•	Any simulations where:
+	•	They were added by email, or
+	•	They joined via a valid code.
+	•	They should never see any other simulations.

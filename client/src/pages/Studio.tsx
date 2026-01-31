@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -2142,11 +2142,13 @@ function ScenarioListItem({
   );
 }
 
-type AuthoringMode = "list" | "manual" | "canonical";
+type AuthoringMode = "list" | "manual" | "canonical" | "edit";
 
 export default function Studio() {
   const [, navigate] = useLocation();
-  const [authoringMode, setAuthoringMode] = useState<AuthoringMode>("list");
+  const searchString = useSearch();
+  const editScenarioId = new URLSearchParams(searchString).get("edit");
+  const [authoringMode, setAuthoringMode] = useState<AuthoringMode>(editScenarioId ? "edit" : "list");
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -2158,6 +2160,14 @@ export default function Studio() {
   } = useQuery<Scenario[]>({
     queryKey: ["/api/scenarios/authored"],
     enabled: isAuthenticated,
+  });
+
+  const {
+    data: editingScenario,
+    isLoading: editScenarioLoading,
+  } = useQuery<Scenario>({
+    queryKey: ["/api/scenarios", editScenarioId],
+    enabled: !!editScenarioId && isAuthenticated,
   });
 
   useEffect(() => {
@@ -2261,6 +2271,83 @@ export default function Studio() {
                 onSuccess={() => { setAuthoringMode("list"); refetch(); }}
                 onClose={() => setAuthoringMode("list")}
               />
+            </motion.div>
+          ) : authoringMode === "edit" ? (
+            <motion.div
+              key="edit-scenario"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              {editScenarioLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : editingScenario ? (
+                <div className="space-y-6">
+                  <Card className="p-6">
+                    <h2 className="text-xl font-semibold mb-4">Editar Simulación</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Título</label>
+                        <p className="text-lg font-semibold">{editingScenario.title}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Dominio</label>
+                        <p className="text-sm">{editingScenario.domain}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Descripción</label>
+                        <p className="text-sm">{editingScenario.description}</p>
+                      </div>
+                      {editingScenario.initialState?.caseContext && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Contexto del Caso</label>
+                          <p className="text-sm whitespace-pre-wrap">{editingScenario.initialState.caseContext}</p>
+                        </div>
+                      )}
+                      {(editingScenario as any).decisionPoints && (editingScenario as any).decisionPoints.length > 0 && (
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Puntos de Decisión ({(editingScenario as any).decisionPoints.length})</label>
+                          <div className="space-y-2 mt-2">
+                            {(editingScenario as any).decisionPoints.map((dp: any, idx: number) => (
+                              <Card key={idx} className="p-3 bg-muted/50">
+                                <p className="text-sm font-medium">Decisión {idx + 1}: {dp.prompt}</p>
+                                <p className="text-xs text-muted-foreground">Formato: {dp.format === "multiple_choice" ? "Opción múltiple" : "Respuesta escrita"}</p>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-3 mt-6 pt-4 border-t">
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          navigate("/studio");
+                          setAuthoringMode("list");
+                        }}
+                      >
+                        Volver al Listado
+                      </Button>
+                      <Button onClick={() => navigate(`/scenarios/${editScenarioId}/manage`)}>
+                        Gestionar Simulación
+                      </Button>
+                    </div>
+                  </Card>
+                  <p className="text-sm text-muted-foreground text-center">
+                    La edición completa estará disponible próximamente. Usa "Gestionar Simulación" para ver y administrar esta simulación.
+                  </p>
+                </div>
+              ) : (
+                <Card className="p-6 text-center">
+                  <p className="text-muted-foreground">No se encontró la simulación solicitada.</p>
+                  <Button className="mt-4" onClick={() => { navigate("/studio"); setAuthoringMode("list"); }}>
+                    Volver al Listado
+                  </Button>
+                </Card>
+              )}
             </motion.div>
           ) : (
             <motion.div

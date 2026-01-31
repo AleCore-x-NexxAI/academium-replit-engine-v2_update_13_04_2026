@@ -13,7 +13,6 @@ import {
   UserPlus,
   Loader2,
   BarChart3,
-  Hash,
   MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,11 +51,6 @@ interface ConversationData {
   turns: Turn[];
 }
 
-interface ThemesData {
-  themes: { word: string; count: number }[];
-  totalResponses: number;
-  completedSessions: number;
-}
 
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: string }) {
   return (
@@ -190,10 +184,6 @@ export default function ScenarioAnalytics() {
     enabled: !!scenarioId && !!user,
   });
 
-  const { data: themesData, isLoading: themesLoading } = useQuery<ThemesData>({
-    queryKey: ["/api/professor/scenarios", scenarioId, "themes"],
-    enabled: !!scenarioId && !!user,
-  });
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ sessionId, status }: { sessionId: string; status: string }) => {
@@ -298,49 +288,6 @@ export default function ScenarioAnalytics() {
           <StatCard label="Completadas" value={completedSessions.length} icon={CheckCircle} color="bg-green-500" />
         </div>
 
-        {/* Aggregated Themes Section */}
-        {themesData && themesData.themes.length > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Hash className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Temas Frecuentes en Respuestas</h2>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Palabras más comunes en {themesData.totalResponses} respuestas de {themesData.completedSessions} sesiones completadas
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {themesData.themes.map((theme) => {
-                const maxCount = themesData.themes[0]?.count || 1;
-                const intensity = Math.max(0.3, theme.count / maxCount);
-                return (
-                  <Badge 
-                    key={theme.word} 
-                    variant="outline"
-                    className="px-3 py-1"
-                    style={{ opacity: 0.5 + intensity * 0.5 }}
-                  >
-                    <span className="font-medium">{theme.word}</span>
-                    <span className="ml-2 text-muted-foreground text-xs">({theme.count})</span>
-                  </Badge>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-
-        {themesLoading && (
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Hash className="w-5 h-5 text-primary" />
-              <Skeleton className="h-6 w-48" />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-20" />
-              ))}
-            </div>
-          </Card>
-        )}
 
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">Estudiantes Participantes</h2>

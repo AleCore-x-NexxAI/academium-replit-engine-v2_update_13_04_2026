@@ -1,0 +1,109 @@
+1. Inappropriate Input Handling – Wrong Behavior
+
+What actually happened (exact)
+	•	As a professor, I typed “idiota”.
+	•	The system responded:
+“Parece que hubo un problema con tu entrada…”
+	•	Then I typed “pendejo”.
+	•	The system responded:
+“Parece que tu última entrada no está relacionada con el contexto del caso de estudio…”
+	•	After that, the system moved on to the next decision as if nothing happened.
+
+Why this is wrong
+	•	The system ignored the inappropriate language.
+	•	It did not enforce any guardrails.
+	•	It allowed the simulation to continue without a valid response.
+	•	It treated the input as noise instead of correcting behavior.
+
+Required fix
+
+When a user enters offensive or inappropriate language or anything not relevant:
+	•	Do NOT advance to the next decision
+	•	Show a clear warning message, for example:
+	•	Remind the user that inappropriate language is not allowed or say your response is not relevant
+	•	Ask them to provide a proper response related to the case. Remember the checking agent please
+	•	Block progression until:
+	•	The user submits a meaningful, relevant answer
+	•	The simulation must stay on the same decision step
+
+This applies to:
+	•	Professor testing mode
+	•	Student mode
+	•	Any free-text input
+
+⸻
+
+2. Edit Simulation – Broken Flow
+
+Current behavior
+	•	Clicking Editar sends the user to:
+	•	Crear con IA
+	•	Crear manualmente
+	•	It does not load the existing simulation data.
+
+Required fix
+	•	Editar must open the specific simulation selected
+	•	Preload all existing data:
+	•	Scenarios
+	•	Decisions
+	•	Indicators
+	•	Configuration
+	•	The user must be editing, not recreating
+
+⸻
+
+3. Manual Creation – Indicators Still Wrong
+
+Current behavior
+	•	In Crear caso manualmente it still shows:
+	•	“Indicadores simples (opcional)”
+	•	Moral del equipo
+	•	Presupuesto
+
+Required fix
+	•	Remove “indicadores simples” entirely
+	•	Indicators must never be optional
+	•	Always show only these five, no more, no less:
+	1.	Presupuesto / Revenue
+	2.	Moral del equipo
+	3.	Reputación de marca
+	4.	Eficiencia operativa
+	5.	Confianza de stakeholders
+
+This must apply to:
+	•	Manual creation
+	•	Editing
+	•	Testing
+	•	Running simulations
+
+⸻
+
+4. Analytics – Language and Labels Incorrect
+
+Current issues
+	•	Analytics view is partially in English
+	•	It shows a section called:
+	•	“Temas frecuentes en respuestas”
+
+Required fix
+	•	Analytics must be 100% in Spanish
+	•	Remove “Temas frecuentes en respuestas” completely
+	•	Analytics should show only:
+	•	Estudiantes
+	•	Participantes
+	•	En progreso
+	•	Completadas
+	•	Total estudiantes
+
+Nothing else.
+
+⸻
+
+5. Summary of Required Fixes
+	•	Enforce guardrails on offensive language
+	•	Block simulation progression on invalid input
+	•	Fix Edit flow to actually edit simulations
+	•	Force the five indicators everywhere
+	•	Clean and localize analytics for teachers
+
+These are blocking issues for professor usability and simulation integrity.
