@@ -138,15 +138,11 @@ export async function setupAuth(app: Express) {
     
     console.log(`[Auth] /api/login - role: ${role}, isValidAdminVerification: ${isValidAdminVerification}`);
     
-    // OIDC auth options - force fresh login with account selection
-    const authOptions = {
-      prompt: "select_account login",
-      scope: ["openid", "email", "profile", "offline_access"],
-      max_age: 0, // Force re-authentication
-    } as any; // Type assertion needed - these are valid OIDC params not in TS types
-    
     ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, authOptions)(req, res, next);
+    passport.authenticate(`replitauth:${req.hostname}`, {
+      prompt: "login consent",
+      scope: ["openid", "email", "profile", "offline_access"],
+    })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
