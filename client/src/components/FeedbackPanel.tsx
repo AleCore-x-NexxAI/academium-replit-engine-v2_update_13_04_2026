@@ -26,7 +26,7 @@ export function FeedbackPanel({
   maxRevisions = 2,
 }: FeedbackPanelProps) {
   return (
-    <div className="h-full flex flex-col p-6 overflow-y-auto">
+    <div className="flex flex-col p-6">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-6">
         Observaciones
       </h3>
