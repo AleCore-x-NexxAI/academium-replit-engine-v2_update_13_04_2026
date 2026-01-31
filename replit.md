@@ -42,6 +42,21 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
 
 ## Recent Changes
 
+### POC Tier-Based Metric System & Explainability (January 2026)
+- **Tier-Based Metric Changes**: Metrics limited to max 2-3 changes per turn with magnitude tiers:
+  - Tier 1: ±1-3 (minor impact)
+  - Tier 2: ±4-7 (moderate impact)
+  - Tier 3: ±8-12 (major impact, rare)
+- **Post-LLM Enforcement**: domainExpert.ts validates LLM output - clamps values to ±12, limits to max 3 non-zero metrics
+- **"Why?" Explainability**: Each metric change includes:
+  - `shortReason`: One-line explanation visible in KPIDashboard
+  - `causalChain`: 2-4 bullet expandable explanation with full causality
+  - `tier`: Tier classification (1-3)
+- **KPIDashboard Integration**: Now rendered in Simulation.tsx right panel with expandable "¿Por qué?" buttons
+- **Spanish-Only Guardrail**: POC_SPANISH_ONLY added to guardrails.ts enforcing zero English leakage
+- **Simplified Student UI**: Removed rubric button, hints button, and "Suggested Actions" panel from InputConsole
+- **Score-Free Results**: SessionResults shows indicator evolution and narrative feedback only - no grades visible
+
 ### Session Management & Exit Flow (January 2026)
 - **Exit = Immediate Abandonment**: Clicking "Salir y perder progreso" immediately abandons the session via POST `/api/simulations/:sessionId/abandon`. No resume functionality exists - exiting always means permanent loss of progress.
 - **Exit Confirmation Dialog**: Warning dialog appears with "Salir y perder progreso" and "Continuar simulación" options. Browser `beforeunload` event warns about refresh/tab close.
