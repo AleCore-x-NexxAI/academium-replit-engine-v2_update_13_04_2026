@@ -69,3 +69,15 @@ All simulation views display exactly 5 standard business indicators with consist
 - `/scenarios/:id/manage` - Simulation management view
 - `/simulation/start/:id` - Simulation start page (shows waiting message for students if not started)
 - `/studio` - Professor authoring studio for creating scenarios
+
+### Authentication Improvements
+- **Fresh Login Flow**: Every login now forces account selection (`prompt: select_account login`, `max_age: 0`)
+- **Session Cleanup on Re-login**: If user is already logged in and starts a new login, old session is destroyed first
+- **Complete Logout**: Logout clears all cookies (session, pendingRole, isVerifiedAdmin) and destroys session before redirecting to Replit's end session endpoint
+- **Account Switching**: Users can now log out and log in with a different account without manually clearing browser cookies
+
+### Student Enrollment System
+- **Global Demo Scenarios**: Scenarios marked with `isGlobalDemo=true` are visible to all students automatically
+- **Join by Code**: Students can join simulations using a 10-character code provided by professors
+- **studentEnrollments Table**: Tracks student access via email invitation or join code
+- **Filtered Scenario View**: Students only see global demos + simulations they're enrolled in

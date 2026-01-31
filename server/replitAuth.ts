@@ -138,11 +138,29 @@ export async function setupAuth(app: Express) {
     
     console.log(`[Auth] /api/login - role: ${role}, isValidAdminVerification: ${isValidAdminVerification}`);
     
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      prompt: "login consent",
+    // OIDC auth options - force fresh login with account selection
+    const authOptions = {
+      prompt: "select_account login",
       scope: ["openid", "email", "profile", "offline_access"],
-    })(req, res, next);
+      max_age: 0, // Force re-authentication
+    } as any; // Type assertion needed - these are valid OIDC params not in TS types
+    
+    // If user is already logged in and starting a new login flow, log them out first
+    // This ensures they can choose a different account
+    if (req.isAuthenticated()) {
+      req.logout(() => {
+        // Clear session completely
+        req.session.destroy(() => {
+          // Now proceed with new login
+          ensureStrategy(req.hostname);
+          passport.authenticate(`replitauth:${req.hostname}`, authOptions)(req, res, next);
+        });
+      });
+      return;
+    }
+    
+    ensureStrategy(req.hostname);
+    passport.authenticate(`replitauth:${req.hostname}`, authOptions)(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
@@ -189,13 +207,22 @@ export async function setupAuth(app: Express) {
   });
 
   app.get("/api/logout", (req, res) => {
+    // Clear all auth-related cookies
+    res.clearCookie("pendingRole");
+    res.clearCookie("isVerifiedAdmin");
+    res.clearCookie("connect.sid"); // Session cookie
+    
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
+      // Destroy the session completely
+      req.session.destroy(() => {
+        // Redirect to Replit's end session endpoint to clear their session too
+        res.redirect(
+          client.buildEndSessionUrl(config, {
+            client_id: process.env.REPL_ID!,
+            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          }).href
+        );
+      });
     });
   });
 }
