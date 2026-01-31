@@ -1,0 +1,263 @@
+ScenarioX — POC-Simulation Engine
+POC Engine Specification (Build-Ready, Engine-Training
+Version) — v1.1 (Aligned)
+Document Status: Canonical for POC build (Phase 1)
+Pairs With: 3A — ScenarioX Simulation Engine — Canonical Specification (End-State)
+Primary Purpose: Train the engine + guide the build so the POC behaves exactly as intended.
+POC Profile: Reliability + flow + completion > depth. No grading features exposed.
+Purpose of this Document
+Why this matters:
+This document locks the POC version of ScenarioX’s simulation engine. The POC is not trying
+to prove every feature. It’s proving the core loop:
+decision → world responds → metrics move with clear causality → next decision
+becomes more informed.
+This spec is intentionally rigid. Anything not explicitly included is out-of-scope for POC.
+1) POC Non-Negotiables (Design Principles)
+1.1 Comfort + Control (First 2–3 minutes)
+● Students must feel the simulation is simple, calm, and fair.
+● The system must never imply the student is “stupid,” “wrong,” or “failed.”
+● Every response must feel like: “You’re driving. I’m the instrument.”
+ScenarioX — Simulation Engine (…
+1.2 The Engine Must Never Feel Random
+Every decision produces:
+1. a world consequence (narrative reality shifts)
+2. metric changes (with explicit reasons)
+3. a lightweight competency signal (optional, non-dominant)
+4. a next prompt (forward motion)
+ScenarioX — Simulation Engine (…
+1.3 No Answer-Giving (Hard Rule)
+● No “Suggested Actions” panel.
+● The system can guide reflection, but must not hand the solution.
+ScenarioX — Simulation Engine (…
+1.4 Metrics Must Always Explain “Why”
+If a metric changes, the student can always access:
+● the delta (what changed), and
+● the cause (why it changed based on their decision).
+ScenarioX — Simulation Engine (…
+1.5 POC Integrity Posture (Hard Rule)
+● No rubrics visible.
+● No scoring visible.
+● No “grade” language.
+● The engine never provides “the correct answer.”
+2) POC Scope (In / Out)
+2.1 In Scope (POC)
+● Exactly one scenario (Case 001).
+● Exactly 3 turns (locked).
+● Decision modes by turn (locked):
+○ Turn 1: Multiple Choice
+○ Turn 2: Free Response
+○ Turn 3: Free Response
+● Stable engine response structure (same format each turn).
+● Metric side panel using the fixed POC metric set.
+● Decision feedback that is consistent and explainable.
+● Hint button exists (optional, non-answer giving).
+● Competency profile may display (lightweight), but must not dominate.
+ScenarioX — Simulation Engine (…
+2.2 Out of Scope (POC)
+● Student case creation (can be “Coming Soon,” not functional).
+● Full analytics dashboards.
+● Grading automation.
+● Deep authored branching trees.
+● Anything that turns this into “assessment-first.”
+ScenarioX — Simulation Engine (…
+3) Research-Anchored Foundations (POC Translation)
+Why this matters:
+This is the “defensibility bridge” — it forces the POC behavior to match the canon, without
+adding complexity.
+3.1 Pedagogical foundations embodied in POC behavior (named)
+● Active Learning: decisions drive the experience (not passive content).
+● Experiential Learning (Kolb): each turn includes consequence + reflection cue.
+● Constructivism: the engine probes reasoning, not recall.
+● Microlearning / Chunking: 3-turn structure prevents overload and protects completion.
+● Scaffolding / ZPD: Turn 1 reduces cognitive load; Turns 2–3 increase depth.
+3.2 Psychological foundations protected in POC behavior (named)
+● Cognitive Load Theory: Turn 1 is MC onboarding; UI is consistent; prompts are short.
+● Self-Efficacy: low-effort handling is supportive and structured (no shame).
+● Psychological Safety: profanity/trolling is redirected; tone stays academic.
+● Priming/Framing: no grading cues; no scoreboard vibe; no “right answer” language.
+4) POC Scenario Package (What the Engine Receives)
+Why this matters:
+The engine can only be consistent if the scenario input is structured.
+Required Scenario Inputs
+● Title + short description
+● Student role + objective
+● Baseline metrics (starting values)
+● Turn prompts (3 total)
+● Multiple-choice options for Turn 1 (with mappings)
+● Constraints & stakeholders (as narrative facts)
+● “Truth anchors” (facts that must not be contradicted)
+ScenarioX — Simulation Engine (…
+POC Addition (Hard):
+● Turn 1 MC options must each include tradeoff signature + tiered metric impact (see
+Section 5/6).
+5) Decision Inputs (Locked for POC)
+5.1 Turn 1 — Multiple Choice (Onboarding Turn)
+Purpose: reduce cognitive load and create a smooth entry into “how this works.”
+Engine requirement: each choice must map to:
+● intent label (what they’re trying to do)
+● trade-off signature (what they prioritize)
+● expected metric impacts (direction + magnitude tier)
+● competency emphasis (lightweight)
+ScenarioX — Simulation Engine (…
+5.2 Turns 2–3 — Free Response (Depth Turns)
+Purpose: reveal reasoning quality and decision-making maturity.
+Engine must extract:
+● decision intent (what they chose to do)
+● justification quality (how they argued it)
+● trade-offs recognized (did they acknowledge risks)
+● stakeholder awareness
+● ethical/legal awareness (if relevant)
+ScenarioX — Simulation Engine (…
+POC Constraint (Hard):
+If input is vague/low-effort, the engine must use the Acknowledge → Gap → Prompt pattern
+(Appendix A).
+6) Metric System (POC Locked Set)
+6.1 POC Metrics (Side Panel)
+Use this fixed set in POC:
+● Revenue / Budget
+● Team Morale
+● Brand Reputation
+● Operational Efficiency
+● Stakeholder Trust
+ScenarioX — Simulation Engine (…
+6.2 KPI Movement Limit (Hard)
+● A decision may move max 2–3 metrics per turn.
+● If more would logically change, the engine must prioritize the most direct 2–3 and explain
+why.
+(This prevents “random-feeling math.”)
+6.3 Metric Movement Is Not Random — Tier Model (POC Rules)
+Step 1 — Classify Decision Impact Level (Tier)
+● Tier 0: 0 change
+● Tier 1: ±1 to ±3
+● Tier 2: ±4 to ±7
+● Tier 3: ±8 to ±12 (rare; must be event-level)
+ScenarioX — Simulation Engine (…
+Rule: POC should mostly live in Tier 1–2. Tier 3 is rare and must be justified by a major
+escalation.
+Step 2 — Direction Comes From Trade-Off Signature
+Examples:
+● speed/efficiency at cost of people → Efficiency up, Morale down
+● transparency/ethics at cost of short-term performance → Trust/Reputation up,
+Revenue/Efficiency may drop
+● cost cutting → Budget up, Morale/Reputation may drop depending on approach
+ScenarioX — Simulation Engine (…
+Step 3 — “Why This Number” Justification Rule
+Engine must produce:
+Decision → Mechanism → Metric effect → Magnitude justification
+ScenarioX — Simulation Engine (…
+7) Metric Explainability (Mandatory UI/Engine Behavior)
+7.1 Short Reason (Always Visible)
+One line per metric that changed:
+● “Trust +6: proactive transparency reduced stakeholder uncertainty.”
+ScenarioX — Simulation Engine (…
+7.2 Expanded Reason (Accessible via “Why?” icon)
+2–4 bullet causal chain:
+● What you did
+● What that triggered
+● Why the metric moved
+● Why the magnitude was minor/moderate/major
+ScenarioX — Simulation Engine (…
+8) Feedback System (POC — No Rubric Panel)
+8.1 Rubric Panel = Hidden (POC Lock)
+● UI must not show a Rubric button/panel in POC.
+● Engine may use internal rubric/consistency logic, but student sees feedback, not
+“grading structure.”
+ScenarioX — Simulation Engine (…
+8.2 Feedback Must Always Include (POC Format)
+● Intent read: what your decision signals
+● Strength: what it improved
+● Trade-off: what it risked
+● Reflection cue: what to consider next
+ScenarioX — Simulation Engine (…
+8.3 Tone Rules (Hard)
+● No blame, no condescension.
+● Coach-like, grounded, realistic.
+● Never implies there is a single “right” answer.
+ScenarioX — Simulation Engine (…
+9) Hint System
+Why this matters: Hints can quietly turn ScenarioX into a tutor. In the POC, the default must
+preserve student ownership and professor authority.
+9.1 Default State (Hard)
+● Hints are OFF by default in the POC deployment.
+● Hints can be enabled explicitly (toggle) for the POC if the professor wants additional
+scaffolding.
+9.2 What Hints Are Allowed To Do (When Enabled)
+● Clarify constraints, stakeholders, objective, and what information is missing.
+● Provide framing questions or frameworks (e.g., “What are the tradeoffs?”).
+● Encourage structured justification.
+9.3 What Hints Must Never Do
+● Provide “the best action” or “recommended choice.”
+● Suggest what the professor wants.
+● Reveal “correct answers.”
+● Become a “Suggested Actions” panel.
+9.4 Behavior When Hints Are OFF (Default)
+If a student is stuck or asks for help:
+● The engine uses Acknowledge → Gap → Prompt and/or redirects:
+○ “Ask your professor for guidance on course content; I can help you structure your
+reasoning.”
+10) Branching Model (POC)
+POC uses soft branching:
+● same main storyline
+● consequences shift via:
+○ metric values
+○ stakeholder tone
+○ urgency
+○ constraints in next turn
+No dead ends. Bad decisions create harder constraints, not termination.
+11) Logging (POC Minimum)
+Log per turn:
+● scenario id + turn number
+● decision input (MC choice or free response)
+● extracted intent label
+● metric deltas + tier classification per metric
+● feedback summary (short)
+● competency signal (if enabled)
+POC Addition (Recommended):
+● store “Why?” expanded causal chain (so we can audit explainability later)
+12) Default Settings Contract (POC)
+Why this matters: Defaults are the product. This prevents dev interpretation.
+● Mode default: Hybrid
+● Turn count: 3 locked
+● Decision formats: MC → FR → FR locked
+● Metrics: fixed 5
+● Hint: OFF by default (toggle can enable for the POC)
+● Max KPI changes/turn: 2–3
+● Scoring: OFF
+● Rubric panel: HIDDEN
+● “Correct answer” language: FORBIDDEN
+● Profanity mirroring: NEVER
+● Language: Spanish for Boyacá POC deployment (English remains supported in
+canonical, but POC deployment selects one)
+13) POC Acceptance Criteria (How We Know It Works)
+POC is successful if:
+1. Turn structure is consistent every time.
+2. Metric movement is explainable with “why + why this magnitude.”
+3. No answer-giving UI (“Suggested actions” removed).
+4. Turn 1 feels easy (MC onboarding).
+5. Turns 2–3 show depth (free response interpretation works).
+6. System feels fair, calm, and in control.
+7. The engine successfully redirects profanity/trolling without escalation.
+8. Spanish output is consistent (no English leakage).
+ScenarioX — Simulation Engine (…
+14) POC Summary (Lock)
+ScenarioX POC is a 3-turn decision simulation:
+● Turn 1: multiple choice onboarding,
+● Turns 2–3: free response depth,
+● metrics move using a transparent tier model,
+● feedback teaches trade-offs without giving answers,
+● rubric stays hidden to avoid “assessment-first.”
+ScenarioX — Simulation Engine (…
+Appendix A — POC Language Guardrails (Minimal)
+● Hard bans: “correct/wrong,” “best answer,” “you should have,” “score/grade” language.
+● Student support pattern: Acknowledge → Gap → Prompt.
+● Profanity script (Spanish): “Entiendo la frustración. Mantengamos un tono académico
+para avanzar. Elige una opción y explica tu razó
+● When hints are OFF: Engine may suggest asking the professor for content guidance,
+but still supports reasoning structure.n en 2–4 líneas.”
+Appendix B — POC Mini Golden Runs (6 Tests)
+1. Strong reasoning (Hybrid) → clear tradeoffs + Tier 1–2 deltas
+2. Risky but thoughtful → trust/reputation down with explainable why
+3. Low-effort “no sé” → supportive re-anchor + structure requirement
+4. Profanity → redirect, no mirroring
+5. “What does professor want?” → refuse, reframe to tradeoffs
+6. Spanish consistency → zero English leakage
