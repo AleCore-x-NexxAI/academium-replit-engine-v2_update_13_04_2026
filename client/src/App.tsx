@@ -21,6 +21,7 @@ import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { BugReportButton } from "@/components/BugReportButton";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import { RoleProtectedRoute } from "@/components/RoleProtectedRoute";
 import type { User } from "@shared/schema";
 
 function AuthenticatedApp() {
@@ -36,13 +37,45 @@ function AuthenticatedApp() {
         <Route path="/simulation/start/:scenarioId" component={SimulationStart} />
         <Route path="/simulation/:sessionId/results" component={SessionResults} />
         <Route path="/simulation/:sessionId" component={Simulation} />
-        <Route path="/studio" component={Studio} />
-        <Route path="/analytics" component={Analytics} />
-        <Route path="/professor" component={ProfessorDashboard} />
-        <Route path="/scenarios/:scenarioId/edit" component={ScenarioEdit} />
-        <Route path="/scenarios/:scenarioId/analytics" component={ScenarioAnalytics} />
-        <Route path="/bug-reports" component={BugReports} />
-        <Route path="/settings" component={Settings} />
+        <Route path="/studio">
+          <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+            <Studio />
+          </RoleProtectedRoute>
+        </Route>
+        <Route path="/analytics">
+          <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+            <Analytics />
+          </RoleProtectedRoute>
+        </Route>
+        <Route path="/professor">
+          <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+            <ProfessorDashboard />
+          </RoleProtectedRoute>
+        </Route>
+        <Route path="/scenarios/:scenarioId/edit">
+          {(params) => (
+            <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+              <ScenarioEdit />
+            </RoleProtectedRoute>
+          )}
+        </Route>
+        <Route path="/scenarios/:scenarioId/analytics">
+          {(params) => (
+            <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+              <ScenarioAnalytics />
+            </RoleProtectedRoute>
+          )}
+        </Route>
+        <Route path="/bug-reports">
+          <RoleProtectedRoute allowedRoles={["admin"]}>
+            <BugReports />
+          </RoleProtectedRoute>
+        </Route>
+        <Route path="/settings">
+          <RoleProtectedRoute allowedRoles={["admin"]}>
+            <Settings />
+          </RoleProtectedRoute>
+        </Route>
         <Route component={NotFound} />
       </Switch>
       {user?.isSuperAdmin && <BugReportButton />}
