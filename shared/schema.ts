@@ -69,9 +69,19 @@ export const scenarios = pgTable("scenarios", {
   agentPrompts: jsonb("agent_prompts").$type<AgentPrompts>(), // Custom agent prompts (optional)
   isPublished: boolean("is_published").default(false).notNull(),
   isStarted: boolean("is_started").default(false).notNull(), // Professor controls when students can start
+  isGlobalDemo: boolean("is_global_demo").default(false).notNull(), // Global demo visible to all students
   joinCode: varchar("join_code", { length: 10 }), // Kahoot-style join code for students
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Student Enrollments table - Tracks which students are in which simulations
+export const studentEnrollments = pgTable("student_enrollments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").references(() => users.id).notNull(),
+  scenarioId: varchar("scenario_id").references(() => scenarios.id).notNull(),
+  enrolledAt: timestamp("enrolled_at").defaultNow(),
+  enrolledVia: varchar("enrolled_via", { length: 20 }).default("email").notNull(), // "email" | "code"
 });
 
 // Simulation Sessions table - Active simulations
@@ -144,6 +154,18 @@ export const usersRelations = relations(users, ({ many }) => ({
   scenarios: many(scenarios),
   simulationSessions: many(simulationSessions),
   bugReports: many(bugReports),
+  enrollments: many(studentEnrollments),
+}));
+
+export const studentEnrollmentsRelations = relations(studentEnrollments, ({ one }) => ({
+  student: one(users, {
+    fields: [studentEnrollments.studentId],
+    references: [users.id],
+  }),
+  scenario: one(scenarios, {
+    fields: [studentEnrollments.scenarioId],
+    references: [scenarios.id],
+  }),
 }));
 
 export const bugReportsRelations = relations(bugReports, ({ one }) => ({
@@ -449,3 +471,10 @@ export type InsertBugReport = z.infer<typeof insertBugReportSchema>;
 export type BugReport = typeof bugReports.$inferSelect;
 export type InsertLlmProvider = z.infer<typeof insertLlmProviderSchema>;
 export type LlmProvider = typeof llmProviders.$inferSelect;
+
+export const insertStudentEnrollmentSchema = createInsertSchema(studentEnrollments).omit({
+  id: true,
+  enrolledAt: true,
+});
+export type InsertStudentEnrollment = z.infer<typeof insertStudentEnrollmentSchema>;
+export type StudentEnrollment = typeof studentEnrollments.$inferSelect;

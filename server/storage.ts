@@ -6,6 +6,7 @@ import {
   scenarioDrafts,
   bugReports,
   llmProviders,
+  studentEnrollments,
   type User,
   type UpsertUser,
   type Scenario,
@@ -24,9 +25,10 @@ import {
   type InsertBugReport,
   type LlmProvider,
   type InsertLlmProvider,
+  type StudentEnrollment,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, or, inArray } from "drizzle-orm";
 
 export interface AnalyticsData {
   totalSessions: number;
@@ -110,6 +112,14 @@ export interface IStorage {
   
   // User profile operations
   updateUserProfile(id: string, data: { firstName?: string; lastName?: string }): Promise<User | undefined>;
+  
+  // Student Enrollment operations
+  getStudentEnrollments(studentId: string): Promise<{ scenarioId: string }[]>;
+  isStudentEnrolled(studentId: string, scenarioId: string): Promise<boolean>;
+  enrollStudent(studentId: string, scenarioId: string, via: "email" | "code"): Promise<void>;
+  enrollStudentsByEmail(scenarioId: string, emails: string[]): Promise<{ added: number; notFound: string[] }>;
+  getScenariosForStudent(studentId: string): Promise<Scenario[]>;
+  getGlobalDemoScenarios(): Promise<Scenario[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -680,6 +690,113 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return updated;
+  }
+
+  // Student Enrollment operations
+  async getStudentEnrollments(studentId: string): Promise<{ scenarioId: string }[]> {
+    const enrollments = await db
+      .select({ scenarioId: studentEnrollments.scenarioId })
+      .from(studentEnrollments)
+      .where(eq(studentEnrollments.studentId, studentId));
+    return enrollments;
+  }
+
+  async isStudentEnrolled(studentId: string, scenarioId: string): Promise<boolean> {
+    const [enrollment] = await db
+      .select()
+      .from(studentEnrollments)
+      .where(
+        and(
+          eq(studentEnrollments.studentId, studentId),
+          eq(studentEnrollments.scenarioId, scenarioId)
+        )
+      );
+    return !!enrollment;
+  }
+
+  async enrollStudent(studentId: string, scenarioId: string, via: "email" | "code"): Promise<void> {
+    const existing = await this.isStudentEnrolled(studentId, scenarioId);
+    if (!existing) {
+      await db.insert(studentEnrollments).values({
+        studentId,
+        scenarioId,
+        enrolledVia: via,
+      });
+    }
+  }
+
+  async enrollStudentsByEmail(scenarioId: string, emails: string[]): Promise<{ added: number; notFound: string[] }> {
+    const notFound: string[] = [];
+    let added = 0;
+
+    for (const email of emails) {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email.toLowerCase().trim()));
+      
+      if (user) {
+        const existing = await this.isStudentEnrolled(user.id, scenarioId);
+        if (!existing) {
+          await db.insert(studentEnrollments).values({
+            studentId: user.id,
+            scenarioId,
+            enrolledVia: "email",
+          });
+          added++;
+        }
+      } else {
+        notFound.push(email);
+      }
+    }
+
+    return { added, notFound };
+  }
+
+  async getScenariosForStudent(studentId: string): Promise<Scenario[]> {
+    // Get scenarios where student is enrolled
+    const enrollments = await this.getStudentEnrollments(studentId);
+    const enrolledScenarioIds = enrollments.map(e => e.scenarioId);
+    
+    // Get global demo scenarios
+    const globalDemos = await this.getGlobalDemoScenarios();
+    
+    // Get enrolled scenarios
+    let enrolledScenarios: Scenario[] = [];
+    if (enrolledScenarioIds.length > 0) {
+      enrolledScenarios = await db
+        .select()
+        .from(scenarios)
+        .where(
+          and(
+            inArray(scenarios.id, enrolledScenarioIds),
+            eq(scenarios.isPublished, true)
+          )
+        );
+    }
+    
+    // Combine and dedupe by ID
+    const allScenarios = [...globalDemos];
+    for (const scenario of enrolledScenarios) {
+      if (!allScenarios.some(s => s.id === scenario.id)) {
+        allScenarios.push(scenario);
+      }
+    }
+    
+    return allScenarios;
+  }
+
+  async getGlobalDemoScenarios(): Promise<Scenario[]> {
+    const demos = await db
+      .select()
+      .from(scenarios)
+      .where(
+        and(
+          eq(scenarios.isGlobalDemo, true),
+          eq(scenarios.isPublished, true)
+        )
+      );
+    return demos;
   }
 }
 

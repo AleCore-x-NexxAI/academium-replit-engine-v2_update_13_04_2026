@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   Play,
@@ -20,16 +20,21 @@ import {
   Sparkles,
   Lock,
   AlertTriangle,
+  UserPlus,
+  Loader2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Scenario, SimulationSession } from "@shared/schema";
 
 const domainIcons: Record<string, React.ReactNode> = {
@@ -336,6 +341,11 @@ function SessionCard({ session }: { session: SimulationSession & { scenario?: Sc
 export default function Home() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  
+  // Join simulation state
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
 
   const {
     data: scenarios,
@@ -354,6 +364,37 @@ export default function Home() {
     queryKey: ["/api/simulations/sessions"],
     enabled: !!user,
   });
+
+  const joinMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const response = await apiRequest("POST", "/api/scenarios/join", { code });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Unido exitosamente",
+        description: `Te has unido a "${data.scenario.title}"`,
+      });
+      setShowJoinModal(false);
+      setJoinCode("");
+      setJoinError("");
+      queryClient.invalidateQueries({ queryKey: ["/api/scenarios"] });
+    },
+    onError: (error: any) => {
+      const message = error?.message || "Código inválido o expirado";
+      setJoinError(message);
+    },
+  });
+
+  const handleJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCode.trim()) {
+      setJoinError("Ingresa un código");
+      return;
+    }
+    setJoinError("");
+    joinMutation.mutate(joinCode.trim().toUpperCase());
+  };
 
   useEffect(() => {
     if (scenariosError && isUnauthorizedError(scenariosError as Error)) {
@@ -439,13 +480,106 @@ export default function Home() {
               <p className="text-sm text-muted-foreground mb-2">
                 Simulaciones de decisiones empresariales
               </p>
-              <h1 className="text-3xl font-bold mb-2" data-testid="text-student-welcome">
-                Bienvenido/a, {user?.firstName || ""}
-              </h1>
-              <p className="text-muted-foreground max-w-lg">
-                Cada escenario es un mundo donde tomas decisiones reales. No hay respuestas correctas — lo importante es tu razonamiento.
-              </p>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h1 className="text-3xl font-bold mb-2" data-testid="text-student-welcome">
+                    Bienvenido/a, {user?.firstName || ""}
+                  </h1>
+                  <p className="text-muted-foreground max-w-lg">
+                    Cada escenario es un mundo donde tomas decisiones reales. No hay respuestas correctas — lo importante es tu razonamiento.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => setShowJoinModal(true)}
+                  variant="outline"
+                  className="shrink-0"
+                  data-testid="button-join-simulation"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Unirse a Simulación
+                </Button>
+              </div>
             </motion.div>
+
+            {/* Join Simulation Modal */}
+            {showJoinModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="w-full max-w-md"
+                >
+                  <Card className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Unirse a Simulación</h3>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setShowJoinModal(false);
+                          setJoinCode("");
+                          setJoinError("");
+                        }}
+                        data-testid="button-close-join-modal"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Ingresa el código que te proporcionó tu profesor para unirte a una simulación.
+                    </p>
+                    <form onSubmit={handleJoinSubmit}>
+                      <Input
+                        value={joinCode}
+                        onChange={(e) => {
+                          setJoinCode(e.target.value.toUpperCase());
+                          setJoinError("");
+                        }}
+                        placeholder="Ej: ABC123"
+                        className="text-center text-lg tracking-widest uppercase mb-2"
+                        maxLength={10}
+                        autoFocus
+                        data-testid="input-join-code"
+                      />
+                      {joinError && (
+                        <p className="text-sm text-destructive mb-3" data-testid="text-join-error">
+                          {joinError}
+                        </p>
+                      )}
+                      <div className="flex gap-2 mt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            setShowJoinModal(false);
+                            setJoinCode("");
+                            setJoinError("");
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="submit"
+                          className="flex-1"
+                          disabled={joinMutation.isPending}
+                          data-testid="button-submit-join-code"
+                        >
+                          {joinMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Uniendo...
+                            </>
+                          ) : (
+                            "Unirse"
+                          )}
+                        </Button>
+                      </div>
+                    </form>
+                  </Card>
+                </motion.div>
+              </div>
+            )}
 
             {completedSessions.length > 0 && (
               <section className="mb-12">

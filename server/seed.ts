@@ -66,6 +66,8 @@ const POC_SCENARIO = {
     ],
   },
   isPublished: true,
+  isGlobalDemo: true, // Visible to all students by default
+  isStarted: true, // Always available
 };
 
 // Sample scenarios disabled - using POC scenario only

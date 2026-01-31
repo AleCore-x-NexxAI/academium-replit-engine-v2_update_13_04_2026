@@ -254,13 +254,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/scenarios", isAuthenticated, async (req, res) => {
+  app.get("/api/scenarios", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user?.claims?.sub;
+      const user = userId ? await storage.getUser(userId) : null;
+      
+      // For students: only show global demos + enrolled scenarios
+      if (user && user.role === "student") {
+        const scenarios = await storage.getScenariosForStudent(userId);
+        return res.json(scenarios);
+      }
+      
+      // For professors/admins: show all published scenarios
       const scenarios = await storage.getPublishedScenarios();
       res.json(scenarios);
     } catch (error) {
       console.error("Error fetching scenarios:", error);
       res.status(500).json({ message: "Failed to fetch scenarios" });
+    }
+  });
+
+  // Student join simulation by code
+  app.post("/api/scenarios/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const { code } = req.body;
+      
+      if (!code) {
+        return res.status(400).json({ message: "Código requerido" });
+      }
+      
+      // Find scenario by join code
+      const scenario = await storage.getScenarioByJoinCode(code.toUpperCase());
+      
+      if (!scenario) {
+        return res.status(404).json({ message: "Código inválido o expirado" });
+      }
+      
+      if (!scenario.isPublished) {
+        return res.status(400).json({ message: "Esta simulación no está disponible" });
+      }
+      
+      // Enroll student
+      await storage.enrollStudent(userId, scenario.id, "code");
+      
+      res.json({ 
+        success: true, 
+        scenario: {
+          id: scenario.id,
+          title: scenario.title,
+          description: scenario.description,
+          domain: scenario.domain
+        }
+      });
+    } catch (error) {
+      console.error("Error joining simulation:", error);
+      res.status(500).json({ message: "Error al unirse a la simulación" });
     }
   });
 
