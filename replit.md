@@ -26,8 +26,17 @@ The system employs event-driven updates with optimistic UI, a hierarchical agent
 ## External Dependencies
 
 ### Third-Party Services
-- **Replit Infrastructure**: Replit Auth (OpenID Connect), Replit Object Storage (via Google Cloud Storage client), Replit AI Integrations (OpenAI proxy).
-- **AI/LLM Services**: OpenAI API (GPT-4o, GPT-4o-mini).
+- **Replit Infrastructure**: Replit Auth (OpenID Connect), Replit Object Storage (via Google Cloud Storage client), Replit AI Integrations (OpenAI and Gemini proxies).
+- **AI/LLM Services**: OpenAI API (GPT-4o, GPT-4o-mini) and Google Gemini API (gemini-2.5-flash, gemini-2.5-pro) with automatic failover.
+
+### LLM Provider Architecture
+- **Unified Provider Layer** (`server/llm/provider.ts`): Abstraction supporting both OpenAI and Gemini
+- **Automatic Failover**: If primary provider fails (rate limit, timeout), automatically switches to secondary
+- **Retry with Backoff**: Exponential backoff with 3 retries per provider before failover
+- **Rate Limiting**: Max 3 concurrent requests per provider to prevent quota exhaustion
+- **Model Mapping**: Automatic equivalent model selection during failover (gpt-4o ↔ gemini-2.5-pro)
+- **Provider Stats**: Logging for latency, success/failure, and failover tracking
+- **Graceful Degradation**: Users see "thinking" animation during retries, no error messages during failover
 
 ### Database
 - **PostgreSQL**: Accessed via Neon serverless driver.

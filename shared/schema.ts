@@ -478,3 +478,6 @@ export const insertStudentEnrollmentSchema = createInsertSchema(studentEnrollmen
 });
 export type InsertStudentEnrollment = z.infer<typeof insertStudentEnrollmentSchema>;
 export type StudentEnrollment = typeof studentEnrollments.$inferSelect;
+
+// Re-export chat models for Gemini integration
+export * from "./models/chat";
