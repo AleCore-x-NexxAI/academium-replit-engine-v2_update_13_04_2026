@@ -24,7 +24,7 @@ export default function Landing() {
             <span className="text-xl font-bold">SIMULEARN</span>
           </div>
           <Button asChild data-testid="button-login">
-            <a href="/api/login">
+            <a href="/select-role">
               Iniciar Sesión
               <ArrowRight className="w-4 h-4 ml-2" />
             </a>
@@ -58,7 +58,7 @@ export default function Landing() {
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Button size="lg" asChild data-testid="button-get-started">
-                  <a href="/api/login">
+                  <a href="/select-role">
                     <Play className="w-5 h-5 mr-2" />
                     Inicia Tu Primera Simulación
                   </a>
@@ -198,7 +198,7 @@ export default function Landing() {
                 asChild
                 data-testid="button-start-now"
               >
-                <a href="/api/login">
+                <a href="/select-role">
                   Comenzar Gratis
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </a>

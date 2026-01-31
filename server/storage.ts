@@ -53,6 +53,7 @@ export interface SessionWithUserInfo extends SimulationSession {
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  upsertUserWithRole(id: string, role: "student" | "professor" | "admin", isSuperAdmin: boolean): Promise<User | undefined>;
   updateUserRole(id: string, role: "student" | "professor" | "admin"): Promise<User | undefined>;
   updateUserViewingAs(id: string, viewingAs: "student" | "professor" | "admin" | null): Promise<User | undefined>;
 
@@ -117,14 +118,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    // MVP Phase: Check if user exists first
+    // Check if user exists first
     const existingUser = await this.getUser(userData.id as string);
     
-    // For NEW users during MVP phase: make them superadmins by default
+    // For NEW users: default to student role (NOT superadmin) unless role is explicitly provided
     const insertData = existingUser ? userData : {
       ...userData,
-      role: "admin" as const,
-      isSuperAdmin: true,
+      role: userData.role || "student" as const,
+      isSuperAdmin: userData.isSuperAdmin ?? false,
     };
     
     const [user] = await db
@@ -133,12 +134,39 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({
         target: users.id,
         set: {
-          ...userData, // Only update basic profile info, don't change role/superadmin on existing users
+          // Only update basic profile info, don't change role/superadmin on existing users
+          email: userData.email,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          profileImageUrl: userData.profileImageUrl,
           updatedAt: new Date(),
         },
       })
       .returning();
     return user;
+  }
+
+  async upsertUserWithRole(id: string, role: "student" | "professor" | "admin", isSuperAdmin: boolean): Promise<User | undefined> {
+    // Check if user exists
+    const existingUser = await this.getUser(id);
+    
+    if (!existingUser) {
+      // This shouldn't happen - user should be created by upsertUser first
+      return undefined;
+    }
+    
+    // Only update role if user was just created (check if role is still default)
+    // This prevents changing role on subsequent logins
+    if (existingUser.role === "student" && !existingUser.isSuperAdmin) {
+      const [user] = await db
+        .update(users)
+        .set({ role, isSuperAdmin, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      return user;
+    }
+    
+    return existingUser;
   }
 
   async updateUserRole(id: string, role: "student" | "professor" | "admin"): Promise<User | undefined> {

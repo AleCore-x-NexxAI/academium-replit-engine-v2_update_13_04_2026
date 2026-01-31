@@ -50,13 +50,15 @@ function updateUserSession(
   user.expires_at = user.claims?.exp;
 }
 
-async function upsertUser(claims: any) {
+async function upsertUser(claims: any, role?: "student" | "professor" | "admin", isSuperAdmin?: boolean) {
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
+    role: role,
+    isSuperAdmin: isSuperAdmin,
   });
 }
 
@@ -74,6 +76,7 @@ export async function setupAuth(app: Express) {
   ) => {
     const user = {};
     updateUserSession(user, tokens);
+    // Note: Role is handled in callback route after session is available
     await upsertUser(tokens.claims());
     verified(null, user);
   };
@@ -101,6 +104,15 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
+    const role = req.query.role as string | undefined;
+    const verified = req.query.verified === "true";
+    
+    // Store role selection in session for use after callback
+    if (role && ["student", "professor", "admin"].includes(role)) {
+      (req.session as any).pendingRole = role;
+      (req.session as any).isVerifiedAdmin = role === "admin" && verified;
+    }
+    
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
       prompt: "login consent",
@@ -110,9 +122,31 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
+    passport.authenticate(`replitauth:${req.hostname}`, async (err: any, user: any, info: any) => {
+      if (err || !user) {
+        return res.redirect("/api/login");
+      }
+      
+      req.logIn(user, async (loginErr) => {
+        if (loginErr) {
+          return res.redirect("/api/login");
+        }
+        
+        // Apply the pending role from session
+        const pendingRole = (req.session as any).pendingRole as "student" | "professor" | "admin" | undefined;
+        const isVerifiedAdmin = (req.session as any).isVerifiedAdmin === true;
+        
+        if (pendingRole && user.claims?.sub) {
+          const isSuperAdmin = pendingRole === "admin" && isVerifiedAdmin;
+          await storage.upsertUserWithRole(user.claims.sub, pendingRole, isSuperAdmin);
+          
+          // Clear the pending role from session
+          delete (req.session as any).pendingRole;
+          delete (req.session as any).isVerifiedAdmin;
+        }
+        
+        return res.redirect("/");
+      });
     })(req, res, next);
   });
 

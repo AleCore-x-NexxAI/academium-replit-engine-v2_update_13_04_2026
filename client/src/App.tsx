@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import Landing from "@/pages/Landing";
+import RoleSelection from "@/pages/RoleSelection";
 import Home from "@/pages/Home";
 import ExploreExample from "@/pages/ExploreExample";
 import Simulation from "@/pages/Simulation";
@@ -61,6 +62,7 @@ function Router() {
     return (
       <Switch>
         <Route path="/" component={Landing} />
+        <Route path="/select-role" component={RoleSelection} />
         <Route path="/bug-reports" component={BugReports} />
         <Route component={Landing} />
       </Switch>

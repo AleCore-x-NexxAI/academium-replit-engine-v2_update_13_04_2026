@@ -112,6 +112,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Verify super admin code (before login)
+  app.post("/api/auth/verify-admin-code", async (req, res) => {
+    try {
+      const { code } = req.body;
+      const adminCode = process.env.SUPER_ADMIN_CODE;
+      
+      if (!adminCode) {
+        console.error("SUPER_ADMIN_CODE environment variable not set");
+        return res.status(500).json({ valid: false, message: "Admin code not configured" });
+      }
+      
+      const valid = code === adminCode;
+      res.json({ valid });
+    } catch (error) {
+      console.error("Error verifying admin code:", error);
+      res.status(500).json({ valid: false, message: "Verification failed" });
+    }
+  });
+
   // ==================== Agent Configuration Endpoints ====================
   
   // Get all default agent prompts (superadmin only)
