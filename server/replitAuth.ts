@@ -145,20 +145,6 @@ export async function setupAuth(app: Express) {
       max_age: 0, // Force re-authentication
     } as any; // Type assertion needed - these are valid OIDC params not in TS types
     
-    // If user is already logged in and starting a new login flow, log them out first
-    // This ensures they can choose a different account
-    if (req.isAuthenticated()) {
-      req.logout(() => {
-        // Clear session completely
-        req.session.destroy(() => {
-          // Now proceed with new login
-          ensureStrategy(req.hostname);
-          passport.authenticate(`replitauth:${req.hostname}`, authOptions)(req, res, next);
-        });
-      });
-      return;
-    }
-    
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, authOptions)(req, res, next);
   });
