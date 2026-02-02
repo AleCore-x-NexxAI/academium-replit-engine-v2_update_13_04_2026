@@ -51,27 +51,27 @@ export function OnboardingModal({ user }: OnboardingModalProps) {
   const steps = [
     {
       icon: Crown,
-      title: "Welcome, Super Admin!",
-      description: "You've been granted full access to ScenarioX as a beta tester. This means you can explore all features from every perspective - student, professor, and administrator.",
-      highlight: "Thank you for helping us test this platform!",
+      title: "¡Bienvenido, Super Administrador!",
+      description: "Se te ha otorgado acceso completo a ScenarioX como probador beta. Esto significa que puedes explorar todas las funciones desde cada perspectiva: estudiante, profesor y administrador.",
+      highlight: "¡Gracias por ayudarnos a probar esta plataforma!",
     },
     {
       icon: Eye,
-      title: "Switch Views Freely",
-      description: "Use the role switcher in the top navigation to experience the platform as different user types. Try the student simulation experience, explore professor tools, or manage users as an admin.",
-      highlight: "Click your role badge to switch views anytime.",
+      title: "Cambia de Vista Libremente",
+      description: "Usa el selector de rol en la navegación superior para experimentar la plataforma como diferentes tipos de usuario. Prueba la experiencia de simulación del estudiante, explora las herramientas del profesor o gestiona usuarios como administrador.",
+      highlight: "Haz clic en tu insignia de rol para cambiar de vista en cualquier momento.",
     },
     {
       icon: TestTube,
-      title: "Test Everything",
-      description: "Try creating scenarios, running simulations, checking analytics, and using all features. Your feedback is invaluable for improving the platform before launch.",
-      highlight: "Don't hold back - try to break things!",
+      title: "Prueba Todo",
+      description: "Intenta crear escenarios, ejecutar simulaciones, revisar analíticas y usar todas las funciones. Tu retroalimentación es invaluable para mejorar la plataforma antes del lanzamiento.",
+      highlight: "¡No te contengas - intenta romper cosas!",
     },
     {
       icon: Bug,
-      title: "Report Bugs Easily",
-      description: "Found something broken or confusing? Click the bug icon in the bottom-right corner to submit a report. We'll receive it immediately and work on fixing it.",
-      highlight: "Every bug report helps us improve!",
+      title: "Reporta Errores Fácilmente",
+      description: "¿Encontraste algo roto o confuso? Haz clic en el ícono de error en la esquina inferior derecha para enviar un reporte. Lo recibiremos inmediatamente y trabajaremos en solucionarlo.",
+      highlight: "¡Cada reporte de error nos ayuda a mejorar!",
     },
   ];
 
@@ -121,7 +121,7 @@ export function OnboardingModal({ user }: OnboardingModalProps) {
             onClick={handleClose}
             data-testid="button-onboarding-skip"
           >
-            Skip tour
+            Omitir tour
           </Button>
           <Button
             onClick={handleNext}
@@ -129,13 +129,13 @@ export function OnboardingModal({ user }: OnboardingModalProps) {
           >
             {step < steps.length - 1 ? (
               <>
-                Next
+                Siguiente
                 <ArrowRight className="h-4 w-4 ml-2" />
               </>
             ) : (
               <>
                 <Check className="h-4 w-4 mr-2" />
-                Get Started
+                Comenzar
               </>
             )}
           </Button>

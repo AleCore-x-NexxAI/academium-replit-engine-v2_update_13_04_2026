@@ -146,16 +146,13 @@ export default function RoleSelection() {
           </Button>
         </div>
       </header>
-
       <main className="max-w-4xl mx-auto px-6 py-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <h1 className="text-3xl md:text-4xl font-bold mb-4">
-            ¿Cómo quieres usar ScenarioX?
-          </h1>
+          <h1 className="text-3xl md:text-4xl font-bold mb-4">Elige tu rol</h1>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             Selecciona tu rol para personalizar tu experiencia. Esto determinará
             las funciones disponibles en tu cuenta.
@@ -218,7 +215,6 @@ export default function RoleSelection() {
           contacta al administrador del sistema.
         </motion.p>
       </main>
-
       <Dialog open={showCodeDialog} onOpenChange={setShowCodeDialog}>
         <DialogContent>
           <DialogHeader>
