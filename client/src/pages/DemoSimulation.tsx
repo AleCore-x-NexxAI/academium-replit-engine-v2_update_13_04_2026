@@ -70,6 +70,14 @@ const DEMO_DECISIONS = [
   },
 ];
 
+const INITIAL_INDICATOR_VALUES: Record<string, number> = {
+  revenue: 65,
+  morale: 70,
+  reputation: 75,
+  efficiency: 60,
+  trust: 72,
+};
+
 const STANDARD_INDICATORS = [
   { id: "revenue", label: "Ingresos / Presupuesto", value: 65, previousValue: 65 },
   { id: "morale", label: "Moral del Equipo", value: 70, previousValue: 70 },
@@ -503,22 +511,125 @@ export default function DemoSimulation() {
             )}
 
             {isComplete && (
-              <div className="border-t p-4 bg-background">
-                <div className="max-w-2xl mx-auto text-center">
-                  <div className="p-6 rounded-lg bg-green-500/10 border border-green-500/30">
-                    <CheckCircle2 className="w-12 h-12 text-green-600 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Demo Completado</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Has experimentado el flujo completo de simulación que verán tus estudiantes.
-                    </p>
-                    <div className="flex gap-3 justify-center">
-                      <Button variant="outline" onClick={() => navigate("/explore")}>
-                        Volver al Ejemplo
-                      </Button>
-                      <Button onClick={() => navigate("/")}>
-                        Ir al Inicio
-                      </Button>
+              <div className="flex-1 overflow-auto p-6 bg-background">
+                <div className="max-w-3xl mx-auto space-y-8">
+                  {/* Header */}
+                  <div className="text-center space-y-3">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-2">
+                      <CheckCircle2 className="w-8 h-8 text-primary" />
                     </div>
+                    <h2 className="text-2xl font-bold" data-testid="text-summary-title">
+                      Resumen de tu simulación
+                    </h2>
+                    <p className="text-muted-foreground max-w-lg mx-auto">
+                      Has navegado con criterio una situación compleja. Aquí está el impacto de tus decisiones.
+                    </p>
+                  </div>
+
+                  {/* Final Indicators Snapshot */}
+                  <Card>
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Target className="w-5 h-5 text-primary" />
+                        Indicadores Finales
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {indicators.slice(0, 4).map((indicator) => {
+                          const totalChange = indicator.value - INITIAL_INDICATOR_VALUES[indicator.id];
+                          return (
+                            <div key={indicator.id} className="p-4 rounded-lg bg-muted/50 space-y-2">
+                              <p className="text-sm text-muted-foreground">{indicator.label}</p>
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-bold">{indicator.value}%</span>
+                                {totalChange !== 0 && (
+                                  <Badge 
+                                    variant="secondary" 
+                                    className={`text-xs ${
+                                      totalChange > 0 
+                                        ? "bg-green-500/15 text-green-700" 
+                                        : "bg-red-500/15 text-red-700"
+                                    }`}
+                                  >
+                                    {totalChange > 0 ? "+" : ""}{totalChange}
+                                  </Badge>
+                                )}
+                              </div>
+                              <Progress 
+                                value={indicator.value} 
+                                className={`h-2 ${totalChange > 0 ? "[&>div]:bg-green-500" : totalChange < 0 ? "[&>div]:bg-red-500" : ""}`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Compact Decision Recap */}
+                  <Card>
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5 text-primary" />
+                        Tus Decisiones
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {history.filter(h => h.role === "user").map((decision, index) => (
+                          <div key={index} className="flex gap-4 items-start">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium mb-1">Decisión {index + 1}</p>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {decision.content.length > 150 
+                                  ? decision.content.substring(0, 150) + "..." 
+                                  : decision.content}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Accomplishment Close */}
+                  <div className="text-center p-6 rounded-xl bg-primary/5 border border-primary/20">
+                    <p className="text-lg font-medium mb-2">
+                      Completaste la simulación con éxito
+                    </p>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                      Cada decisión que tomaste reveló cómo diferentes factores se conectan en situaciones reales. 
+                      Esta experiencia refleja lo que verán tus estudiantes.
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                    <Button 
+                      onClick={() => {
+                        const historySection = document.querySelector('[data-testid="simulation-history"]');
+                        if (historySection) {
+                          historySection.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="min-w-[200px]"
+                      data-testid="button-review-decisions"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Revisar mis decisiones
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => navigate("/")}
+                      className="min-w-[200px]"
+                      data-testid="button-back-home"
+                    >
+                      Volver al inicio
+                    </Button>
                   </div>
                 </div>
               </div>
