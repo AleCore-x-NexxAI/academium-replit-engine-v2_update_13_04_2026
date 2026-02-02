@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useImperativeHandle, forwardRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -38,6 +38,10 @@ import type { GeneratedScenarioData, DecisionPoint, Indicator } from "@shared/sc
 interface CanonicalCaseCreatorProps {
   onScenarioPublished: () => void;
   onClose: () => void;
+}
+
+export interface CanonicalCaseCreatorRef {
+  handleBack: () => boolean; // Returns true if handled internally, false if should close
 }
 
 interface CanonicalCaseData {
@@ -112,10 +116,10 @@ function EditableSection({
   );
 }
 
-export default function CanonicalCaseCreator({
+const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCreatorProps>(({
   onScenarioPublished,
   onClose,
-}: CanonicalCaseCreatorProps) {
+}, ref) => {
   const [topic, setTopic] = useState("");
   const [discipline, setDiscipline] = useState("Negocios");
   const [targetLevel, setTargetLevel] = useState("Pregrado");
@@ -126,6 +130,21 @@ export default function CanonicalCaseCreator({
   const [scenarioData, setScenarioData] = useState<GeneratedScenarioData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const { toast } = useToast();
+
+  // Expose handleBack method to parent
+  useImperativeHandle(ref, () => ({
+    handleBack: () => {
+      // If we have a draft, go back to input form (preserve state)
+      if (canonicalCase) {
+        setCanonicalCase(null);
+        setScenarioData(null);
+        setDraftId(null);
+        return true; // Handled internally
+      }
+      // Otherwise, tell parent to close
+      return false;
+    }
+  }));
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -734,4 +753,6 @@ export default function CanonicalCaseCreator({
       </div>
     </Card>
   );
-}
+});
+
+export default CanonicalCaseCreator;

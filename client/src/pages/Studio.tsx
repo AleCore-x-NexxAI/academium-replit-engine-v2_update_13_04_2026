@@ -20,7 +20,7 @@ import {
   Sparkles,
   PenTool,
 } from "lucide-react";
-import CanonicalCaseCreator from "@/components/CanonicalCaseCreator";
+import CanonicalCaseCreator, { type CanonicalCaseCreatorRef } from "@/components/CanonicalCaseCreator";
 import ManualCaseCreator from "@/components/ManualCaseCreator";
 import { AssistantIcon } from "@/components/AssistantIcon";
 import { Button } from "@/components/ui/button";
@@ -2149,6 +2149,7 @@ export default function Studio() {
   const searchString = useSearch();
   const editScenarioId = new URLSearchParams(searchString).get("edit");
   const [authoringMode, setAuthoringMode] = useState<AuthoringMode>(editScenarioId ? "edit" : "list");
+  const canonicalCreatorRef = useRef<CanonicalCaseCreatorRef>(null);
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -2229,7 +2230,15 @@ export default function Studio() {
               variant="ghost"
               size="icon"
               onClick={() => {
-                if (authoringMode !== "list") {
+                // Handle back navigation based on current mode
+                if (authoringMode === "canonical") {
+                  // Try to go back within the canonical creator first
+                  const handled = canonicalCreatorRef.current?.handleBack();
+                  if (!handled) {
+                    // If not handled internally, go to path selection
+                    setAuthoringMode("list");
+                  }
+                } else if (authoringMode !== "list") {
                   setAuthoringMode("list");
                 } else {
                   navigate("/");
@@ -2255,6 +2264,7 @@ export default function Studio() {
               className="h-[calc(100vh-12rem)]"
             >
               <CanonicalCaseCreator
+                ref={canonicalCreatorRef}
                 onScenarioPublished={handleAIPublished}
                 onClose={() => setAuthoringMode("list")}
               />
