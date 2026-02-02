@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   ChevronDown,
@@ -30,34 +29,30 @@ interface ManualCaseCreatorProps {
   onClose: () => void;
 }
 
-interface DecisionPointData {
-  prompt: string;
-  format: "multiple_choice" | "short_response";
-  options?: string[]; // For multiple choice
-}
+const POC_METRICS = [
+  { id: "metric1", label: "Métrica 1" },
+  { id: "metric2", label: "Métrica 2" },
+  { id: "metric3", label: "Métrica 3" },
+  { id: "metric4", label: "Métrica 4" },
+];
 
-interface IndicatorData {
-  id: string;
-  label: string;
-  initialValue: number;
-}
-
-const STANDARD_INDICATORS: IndicatorData[] = [
-  { id: "revenue", label: "Ingresos / Presupuesto", initialValue: 65 },
-  { id: "morale", label: "Moral del Equipo", initialValue: 70 },
-  { id: "reputation", label: "Reputación de Marca", initialValue: 75 },
-  { id: "efficiency", label: "Eficiencia Operacional", initialValue: 60 },
-  { id: "trust", label: "Confianza de Stakeholders", initialValue: 72 },
+const TRADEOFF_OPTIONS = [
+  { id: "cost_quality", label: "Costo vs. Calidad" },
+  { id: "speed_safety", label: "Velocidad vs. Seguridad" },
+  { id: "short_long", label: "Corto vs. Largo Plazo" },
+  { id: "individual_collective", label: "Individual vs. Colectivo" },
+  { id: "innovation_stability", label: "Innovación vs. Estabilidad" },
+  { id: "profit_ethics", label: "Rentabilidad vs. Ética" },
 ];
 
 interface FormData {
   title: string;
   caseContext: string;
-  decisions: DecisionPointData[];
-  consequenceNarrative: string;
-  indicators: IndicatorData[];
-  ethicsNote: string;
-  instructorNotes: string;
+  studentRole: string;
+  tradeoffs: string[];
+  restrictions: string;
+  learningObjectives: string;
+  stakeholders: string;
 }
 
 export default function ManualCaseCreator({
@@ -70,35 +65,24 @@ export default function ManualCaseCreator({
   const [formData, setFormData] = useState<FormData>({
     title: "",
     caseContext: "",
-    decisions: [
-      { prompt: "", format: "multiple_choice", options: ["", "", ""] },
-      { prompt: "", format: "short_response" },
-      { prompt: "", format: "short_response" },
-    ],
-    consequenceNarrative: "",
-    indicators: [...STANDARD_INDICATORS],
-    ethicsNote: "",
-    instructorNotes: "",
+    studentRole: "",
+    tradeoffs: [],
+    restrictions: "",
+    learningObjectives: "",
+    stakeholders: "",
   });
 
-  const updateDecision = (index: number, field: keyof DecisionPointData, value: string | string[]) => {
+  const toggleTradeoff = (id: string) => {
     setFormData(prev => {
-      const newDecisions = [...prev.decisions];
-      newDecisions[index] = { ...newDecisions[index], [field]: value };
-      return { ...prev, decisions: newDecisions };
+      const current = prev.tradeoffs;
+      if (current.includes(id)) {
+        return { ...prev, tradeoffs: current.filter(t => t !== id) };
+      } else if (current.length < 2) {
+        return { ...prev, tradeoffs: [...current, id] };
+      }
+      return prev;
     });
   };
-
-  const updateMultipleChoiceOption = (decisionIndex: number, optionIndex: number, value: string) => {
-    setFormData(prev => {
-      const newDecisions = [...prev.decisions];
-      const options = [...(newDecisions[decisionIndex].options || ["", "", ""])];
-      options[optionIndex] = value;
-      newDecisions[decisionIndex] = { ...newDecisions[decisionIndex], options };
-      return { ...prev, decisions: newDecisions };
-    });
-  };
-
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -107,22 +91,20 @@ export default function ManualCaseCreator({
         description: formData.caseContext.slice(0, 200) || "Caso en desarrollo",
         domain: "Negocios",
         initialState: {
-          role: "Gerente",
+          role: formData.studentRole || "Profesional",
           objective: "Tomar decisiones estratégicas",
           introText: formData.caseContext,
-          kpis: Object.fromEntries(
-            formData.indicators.map(ind => [ind.id, ind.initialValue])
-          ),
+          kpis: {
+            metric1: 50,
+            metric2: 50,
+            metric3: 50,
+            metric4: 50,
+          },
         },
-        decisionPoints: formData.decisions.map((d, i) => ({
-          id: `decision-${i + 1}`,
-          prompt: d.prompt,
-          format: d.format,
-          options: d.options?.filter(o => o.trim()),
-        })),
-        consequenceNarrative: formData.consequenceNarrative,
-        ethicsNote: formData.ethicsNote || undefined,
-        instructorNotes: formData.instructorNotes || undefined,
+        tradeoffs: formData.tradeoffs,
+        restrictions: formData.restrictions || undefined,
+        learningObjectives: formData.learningObjectives || undefined,
+        stakeholders: formData.stakeholders || undefined,
         isPublished: false,
       });
       return response.json();
@@ -149,22 +131,20 @@ export default function ManualCaseCreator({
         description: formData.caseContext.slice(0, 200),
         domain: "Negocios",
         initialState: {
-          role: "Gerente",
+          role: formData.studentRole || "Profesional",
           objective: "Tomar decisiones estratégicas",
           introText: formData.caseContext,
-          kpis: Object.fromEntries(
-            formData.indicators.map(ind => [ind.id, ind.initialValue])
-          ),
+          kpis: {
+            metric1: 50,
+            metric2: 50,
+            metric3: 50,
+            metric4: 50,
+          },
         },
-        decisionPoints: formData.decisions.map((d, i) => ({
-          id: `decision-${i + 1}`,
-          prompt: d.prompt,
-          format: d.format,
-          options: d.options?.filter(o => o.trim()),
-        })),
-        consequenceNarrative: formData.consequenceNarrative,
-        ethicsNote: formData.ethicsNote || undefined,
-        instructorNotes: formData.instructorNotes || undefined,
+        tradeoffs: formData.tradeoffs,
+        restrictions: formData.restrictions || undefined,
+        learningObjectives: formData.learningObjectives || undefined,
+        stakeholders: formData.stakeholders || undefined,
         isPublished: true,
       });
       return response.json();
@@ -188,9 +168,8 @@ export default function ManualCaseCreator({
     return (
       formData.title.trim().length >= 3 &&
       formData.caseContext.trim().length >= 20 &&
-      formData.decisions[0].prompt.trim().length >= 10 &&
-      formData.decisions[1].prompt.trim().length >= 10 &&
-      formData.decisions[2].prompt.trim().length >= 10
+      formData.studentRole.trim().length >= 2 &&
+      formData.tradeoffs.length >= 1
     );
   };
 
@@ -210,7 +189,7 @@ export default function ManualCaseCreator({
       </div>
 
       {/* Scrollable Form Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Case Title */}
         <div className="space-y-2">
           <div className="flex items-center gap-1">
@@ -226,14 +205,15 @@ export default function ManualCaseCreator({
           />
         </div>
 
-        {/* Section 1: Case Context */}
-        <div className="space-y-3">
+        {/* Case Context */}
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold">Contexto del Caso</h3>
-            <HelpIcon content="Establece la situación empresarial. Incluye la empresa, el mercado, y el desafío que enfrentan los estudiantes." />
+            <Label htmlFor="context">Contexto del Caso</Label>
+            <HelpIcon content="Establece la situación. Incluye la empresa, el mercado, y el desafío que enfrentan los estudiantes." />
             <Badge variant="secondary" className="text-xs">Requerido</Badge>
           </div>
           <Textarea
+            id="context"
             value={formData.caseContext}
             onChange={(e) => setFormData(prev => ({ ...prev, caseContext: e.target.value }))}
             placeholder="Describe el contexto empresarial, la empresa, el mercado y la situación que enfrentan los estudiantes..."
@@ -242,99 +222,75 @@ export default function ManualCaseCreator({
           />
         </div>
 
-        {/* Section 2: Decision Points */}
-        <div className="space-y-4">
+        {/* Student Role */}
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold">Puntos de Decisión</h3>
-            <HelpIcon content="Los estudiantes tomarán 3 decisiones durante la simulación. La primera es de opción múltiple; las siguientes son respuestas escritas." />
-            <Badge variant="secondary" className="text-xs">3 decisiones</Badge>
+            <Label htmlFor="role">Rol del Estudiante</Label>
+            <HelpIcon content="El papel que asumirá el estudiante durante la simulación." />
+            <Badge variant="secondary" className="text-xs">Requerido</Badge>
           </div>
-
-          {formData.decisions.map((decision, index) => (
-            <Card key={index} className="p-4 space-y-3" data-testid={`decision-card-${index + 1}`}>
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Decisión {index + 1}</span>
-                <Badge variant="outline">
-                  {decision.format === "multiple_choice" ? "Opción múltiple" : "Respuesta escrita"}
-                </Badge>
-              </div>
-              
-              <div className="space-y-2">
-                <Label>Pregunta o situación</Label>
-                <Textarea
-                  value={decision.prompt}
-                  onChange={(e) => updateDecision(index, "prompt", e.target.value)}
-                  placeholder={
-                    index === 0 
-                      ? "¿Qué estrategia inicial adoptarías para el lanzamiento?" 
-                      : index === 1
-                        ? "Ante la reacción del mercado, ¿cómo ajustarías tu enfoque?"
-                        : "¿Qué decisión final tomarías para resolver la crisis?"
-                  }
-                  className="min-h-[80px]"
-                  data-testid={`input-decision-prompt-${index + 1}`}
-                />
-              </div>
-
-              {/* Multiple choice options for Decision 1 */}
-              {decision.format === "multiple_choice" && (
-                <div className="space-y-2">
-                  <Label>Opciones de respuesta</Label>
-                  {(decision.options || ["", "", ""]).map((option, optIndex) => (
-                    <Input
-                      key={optIndex}
-                      value={option}
-                      onChange={(e) => updateMultipleChoiceOption(index, optIndex, e.target.value)}
-                      placeholder={`Opción ${String.fromCharCode(65 + optIndex)}`}
-                      data-testid={`input-option-${index + 1}-${optIndex + 1}`}
-                    />
-                  ))}
-                </div>
-              )}
-            </Card>
-          ))}
+          <Input
+            id="role"
+            value={formData.studentRole}
+            onChange={(e) => setFormData(prev => ({ ...prev, studentRole: e.target.value }))}
+            placeholder="Ej: Gerente de Marketing, Director de Operaciones, CEO"
+            data-testid="input-student-role"
+          />
         </div>
 
-        {/* Section 3: Consequences */}
-        <div className="space-y-4">
+        {/* Tradeoff Focus */}
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold">Consecuencias</h3>
-            <HelpIcon content="Describe el impacto general de las decisiones. Los indicadores son opcionales y muestran métricas simples." />
+            <Label>Desafío Central / Enfoque de Tradeoff</Label>
+            <HelpIcon content="Selecciona 1 o 2 tensiones que los estudiantes deberán balancear durante la simulación." />
+            <Badge variant="secondary" className="text-xs">Elige 1–2</Badge>
           </div>
-          
-          <div className="space-y-2">
-            <Label>Narrativa de consecuencias</Label>
-            <Textarea
-              value={formData.consequenceNarrative}
-              onChange={(e) => setFormData(prev => ({ ...prev, consequenceNarrative: e.target.value }))}
-              placeholder="Las decisiones del estudiante impactarán en..."
-              className="min-h-[80px]"
-              data-testid="input-consequence-narrative"
-            />
+          <div className="flex flex-wrap gap-2">
+            {TRADEOFF_OPTIONS.map((option) => (
+              <Badge
+                key={option.id}
+                variant={formData.tradeoffs.includes(option.id) ? "default" : "outline"}
+                className={`cursor-pointer transition-colors ${
+                  formData.tradeoffs.includes(option.id) 
+                    ? "bg-primary text-primary-foreground" 
+                    : "hover-elevate"
+                } ${formData.tradeoffs.length >= 2 && !formData.tradeoffs.includes(option.id) ? "opacity-50 cursor-not-allowed" : ""}`}
+                onClick={() => toggleTradeoff(option.id)}
+                data-testid={`chip-tradeoff-${option.id}`}
+              >
+                {option.label}
+              </Badge>
+            ))}
           </div>
-
-          {/* Standard Indicators (Always 5) */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-1">
-              <Label>Indicadores de Simulación</Label>
-              <HelpIcon content="Estos 5 indicadores estándar se mostrarán en todas las simulaciones para medir el impacto de las decisiones." />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {formData.indicators.map((indicator) => (
-                <div key={indicator.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                  <div className="w-2 h-2 rounded-full bg-primary" />
-                  <span className="text-sm font-medium">{indicator.label}</span>
-                  <span className="text-xs text-muted-foreground ml-auto">Inicial: {indicator.initialValue}%</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Los 5 indicadores estándar siempre se incluirán automáticamente en la simulación.
-            </p>
-          </div>
+          {formData.tradeoffs.length === 0 && (
+            <p className="text-xs text-muted-foreground">Selecciona al menos un enfoque de tradeoff.</p>
+          )}
         </div>
 
-        {/* Section 4: Optional (Collapsed) */}
+        {/* POC Metrics (Read-only) */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-1">
+            <Label>Métricas de Simulación</Label>
+            <HelpIcon content="Métricas POC que se mostrarán durante la simulación. Son de solo lectura en esta versión." />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {POC_METRICS.map((metric) => (
+              <Badge
+                key={metric.id}
+                variant="secondary"
+                className="cursor-default"
+                data-testid={`chip-metric-${metric.id}`}
+              >
+                {metric.label}
+              </Badge>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Las 4 métricas POC se incluirán automáticamente en la simulación.
+          </p>
+        </div>
+
+        {/* Optional Fields (Collapsed) */}
         <Collapsible open={optionalOpen} onOpenChange={setOptionalOpen}>
           <CollapsibleTrigger asChild>
             <Button
@@ -342,7 +298,7 @@ export default function ManualCaseCreator({
               className="w-full justify-between"
               data-testid="button-toggle-optional"
             >
-              <span className="font-semibold">Opcional</span>
+              <span className="font-medium text-muted-foreground">Campos opcionales</span>
               {optionalOpen ? (
                 <ChevronUp className="w-4 h-4" />
               ) : (
@@ -351,26 +307,54 @@ export default function ManualCaseCreator({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 pt-4">
+            {/* Restrictions */}
             <div className="space-y-2">
-              <Label htmlFor="ethics">Nota de ética</Label>
+              <div className="flex items-center gap-1">
+                <Label htmlFor="restrictions">Restricciones</Label>
+                <HelpIcon content="Limitaciones o reglas que los estudiantes deben respetar durante la simulación." />
+                <Badge variant="outline" className="text-xs">Opcional</Badge>
+              </div>
               <Textarea
-                id="ethics"
-                value={formData.ethicsNote}
-                onChange={(e) => setFormData(prev => ({ ...prev, ethicsNote: e.target.value }))}
-                placeholder="Consideraciones éticas que los estudiantes deben tener en cuenta..."
+                id="restrictions"
+                value={formData.restrictions}
+                onChange={(e) => setFormData(prev => ({ ...prev, restrictions: e.target.value }))}
+                placeholder="Ej: Presupuesto limitado, plazo de 3 meses, no despedir personal..."
                 className="min-h-[80px]"
-                data-testid="input-ethics-note"
+                data-testid="input-restrictions"
               />
             </div>
+
+            {/* Learning Objectives */}
             <div className="space-y-2">
-              <Label htmlFor="instructor">Notas del instructor (privadas)</Label>
+              <div className="flex items-center gap-1">
+                <Label htmlFor="objectives">Objetivos de Aprendizaje</Label>
+                <HelpIcon content="Lo que esperas que los estudiantes aprendan o desarrollen con esta simulación." />
+                <Badge variant="outline" className="text-xs">Opcional</Badge>
+              </div>
               <Textarea
-                id="instructor"
-                value={formData.instructorNotes}
-                onChange={(e) => setFormData(prev => ({ ...prev, instructorNotes: e.target.value }))}
-                placeholder="Notas privadas para otros instructores o para ti mismo..."
+                id="objectives"
+                value={formData.learningObjectives}
+                onChange={(e) => setFormData(prev => ({ ...prev, learningObjectives: e.target.value }))}
+                placeholder="Ej: Desarrollar pensamiento crítico, evaluar tradeoffs, gestionar stakeholders..."
                 className="min-h-[80px]"
-                data-testid="input-instructor-notes"
+                data-testid="input-learning-objectives"
+              />
+            </div>
+
+            {/* Stakeholders */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1">
+                <Label htmlFor="stakeholders">Stakeholders Clave</Label>
+                <HelpIcon content="Actores importantes en el escenario que los estudiantes deben considerar." />
+                <Badge variant="outline" className="text-xs">Recomendado</Badge>
+              </div>
+              <Textarea
+                id="stakeholders"
+                value={formData.stakeholders}
+                onChange={(e) => setFormData(prev => ({ ...prev, stakeholders: e.target.value }))}
+                placeholder="Ej: Junta directiva, empleados, clientes, proveedores, comunidad local..."
+                className="min-h-[80px]"
+                data-testid="input-stakeholders"
               />
             </div>
           </CollapsibleContent>
