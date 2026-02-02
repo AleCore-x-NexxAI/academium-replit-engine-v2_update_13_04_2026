@@ -59,7 +59,7 @@ const adminRoleOption: RoleOption = {
   id: "admin",
   title: "Super Administrador",
   description:
-    "Configuración del sistema y gestión de usuarios. (Acceso restringido)",
+    "Configuración del sistema y gestión de usuarios.",
   icon: <Shield className="w-5 h-5" />,
   color: "bg-muted text-muted-foreground",
   requiresCode: true,
