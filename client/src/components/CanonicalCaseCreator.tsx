@@ -119,6 +119,8 @@ export default function CanonicalCaseCreator({
   const [topic, setTopic] = useState("");
   const [discipline, setDiscipline] = useState("Negocios");
   const [targetLevel, setTargetLevel] = useState("Pregrado");
+  const [scenarioObjective, setScenarioObjective] = useState("");
+  const [tradeoffFocus, setTradeoffFocus] = useState<string[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [canonicalCase, setCanonicalCase] = useState<CanonicalCaseData | null>(null);
   const [scenarioData, setScenarioData] = useState<GeneratedScenarioData | null>(null);
@@ -131,6 +133,8 @@ export default function CanonicalCaseCreator({
         topic,
         discipline,
         targetLevel,
+        scenarioObjective,
+        tradeoffFocus,
       });
       return response.json() as Promise<GenerateResponse>;
     },
@@ -273,44 +277,97 @@ export default function CanonicalCaseCreator({
     }
   };
 
+  const SCENARIO_OBJECTIVES = [
+    { id: "decision_making", label: "Toma de decisiones" },
+    { id: "crisis_management", label: "Gestión de crisis" },
+    { id: "strategic_thinking", label: "Pensamiento estratégico" },
+    { id: "leadership", label: "Liderazgo" },
+    { id: "negotiation", label: "Negociación" },
+    { id: "ethical_dilemmas", label: "Dilemas éticos" },
+  ];
+
+  const TRADEOFF_OPTIONS = [
+    { id: "cost_quality", label: "Costo vs. Calidad" },
+    { id: "speed_accuracy", label: "Velocidad vs. Precisión" },
+    { id: "short_long_term", label: "Corto vs. Largo plazo" },
+    { id: "risk_reward", label: "Riesgo vs. Recompensa" },
+    { id: "individual_team", label: "Individual vs. Equipo" },
+    { id: "innovation_stability", label: "Innovación vs. Estabilidad" },
+  ];
+
+  const toggleTradeoff = (id: string) => {
+    if (tradeoffFocus.includes(id)) {
+      setTradeoffFocus(tradeoffFocus.filter((t) => t !== id));
+    } else if (tradeoffFocus.length < 2) {
+      setTradeoffFocus([...tradeoffFocus, id]);
+    }
+  };
+
   if (!canonicalCase) {
+    // Loading state - show full-screen loading UI
+    if (generateMutation.isPending) {
+      return (
+        <Card className="flex flex-col h-full">
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <div className="text-center space-y-6 max-w-md">
+              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold">Generando borrador…</h2>
+                <p className="text-muted-foreground">
+                  Esto puede tardar unos segundos. Podrás editar todo antes de publicar.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <span>Creando contexto, decisiones e indicadores</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
     return (
       <Card className="flex flex-col h-full">
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold">Creador de Casos Canónicos</h3>
+            <h3 className="font-semibold">Crear con IA</h3>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-creator">
             <X className="w-4 h-4" />
           </Button>
         </div>
 
-        <div className="flex-1 p-6 flex flex-col justify-center">
-          <div className="max-w-md mx-auto space-y-6">
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center gap-1">
-                  <Label htmlFor="topic">Tema del Caso</Label>
-                  <HelpIcon content="Describe brevemente el tema central. Por ejemplo: dilema de expansión, crisis de liderazgo, decisión de inversión." />
-                </div>
-                <Input
-                  id="topic"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="Decisión de expansión de mercado para una empresa mediana"
-                  className="mt-1"
-                  data-testid="input-case-topic"
-                />
+        <ScrollArea className="flex-1">
+          <div className="p-8 max-w-xl mx-auto space-y-8">
+            {/* Topic - larger, more prominent */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="topic" className="text-base font-semibold">Tema del Caso</Label>
+                <HelpIcon content="Describe brevemente el tema central. Por ejemplo: dilema de expansión, crisis de liderazgo, decisión de inversión." />
               </div>
+              <Textarea
+                id="topic"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="Describe el tema central de tu simulación. Ejemplo: Una empresa de tecnología debe decidir si lanzar un producto con vulnerabilidades conocidas ante la presión del mercado..."
+                className="min-h-[100px] text-base"
+                data-testid="input-case-topic"
+              />
+            </div>
 
-              <div>
-                <div className="flex items-center gap-1">
-                  <Label htmlFor="discipline">Disciplina / Contexto del Curso</Label>
-                  <HelpIcon content="Selecciona el área académica principal. Esto ayuda a generar un contexto relevante para tu curso." />
+            {/* Two columns for discipline and level */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="discipline" className="text-base font-semibold">Disciplina</Label>
+                  <HelpIcon content="Selecciona el área académica principal." />
                 </div>
                 <Select value={discipline} onValueChange={setDiscipline}>
-                  <SelectTrigger className="mt-1" data-testid="select-discipline">
+                  <SelectTrigger className="h-11" data-testid="select-discipline">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -324,13 +381,13 @@ export default function CanonicalCaseCreator({
                 </Select>
               </div>
 
-              <div>
-                <div className="flex items-center gap-1">
-                  <Label htmlFor="targetLevel">Nivel Objetivo</Label>
-                  <HelpIcon content="Define el nivel de complejidad y profundidad del caso según tu audiencia estudiantil." />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="targetLevel" className="text-base font-semibold">Nivel</Label>
+                  <HelpIcon content="Define el nivel de complejidad según tu audiencia." />
                 </div>
                 <Select value={targetLevel} onValueChange={setTargetLevel}>
-                  <SelectTrigger className="mt-1" data-testid="select-target-level">
+                  <SelectTrigger className="h-11" data-testid="select-target-level">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -342,26 +399,71 @@ export default function CanonicalCaseCreator({
               </div>
             </div>
 
-            <Button
-              onClick={() => generateMutation.mutate()}
-              disabled={!topic.trim() || generateMutation.isPending}
-              className="w-full"
-              data-testid="button-generate-draft"
-            >
-              {generateMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Generando borrador...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generar Borrador
-                </>
-              )}
-            </Button>
+            {/* NEW: Objetivo del escenario */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-semibold">Objetivo del escenario</Label>
+                <HelpIcon content="¿Qué competencia principal quieres que desarrollen los estudiantes?" />
+              </div>
+              <Select value={scenarioObjective} onValueChange={setScenarioObjective}>
+                <SelectTrigger className="h-11" data-testid="select-scenario-objective">
+                  <SelectValue placeholder="Selecciona un objetivo..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {SCENARIO_OBJECTIVES.map((obj) => (
+                    <SelectItem key={obj.id} value={obj.id}>{obj.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* NEW: Enfoque de tradeoff */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-semibold">Enfoque de tradeoff</Label>
+                <HelpIcon content="Selecciona 1-2 tensiones principales que el estudiante deberá navegar." />
+              </div>
+              <p className="text-sm text-muted-foreground">Selecciona hasta 2 opciones</p>
+              <div className="flex flex-wrap gap-2">
+                {TRADEOFF_OPTIONS.map((option) => {
+                  const isSelected = tradeoffFocus.includes(option.id);
+                  return (
+                    <Badge
+                      key={option.id}
+                      variant={isSelected ? "default" : "outline"}
+                      className={`cursor-pointer px-4 py-2 text-sm transition-all ${
+                        isSelected 
+                          ? "bg-primary text-primary-foreground" 
+                          : "hover:bg-primary/10"
+                      } ${tradeoffFocus.length >= 2 && !isSelected ? "opacity-50 cursor-not-allowed" : ""}`}
+                      onClick={() => toggleTradeoff(option.id)}
+                      data-testid={`chip-tradeoff-${option.id}`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 mr-1" />}
+                      {option.label}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Generate button */}
+            <div className="pt-4">
+              <Button
+                onClick={() => generateMutation.mutate()}
+                disabled={!topic.trim()}
+                className="w-full h-12 text-base"
+                data-testid="button-generate-draft"
+              >
+                <Sparkles className="w-5 h-5 mr-2" />
+                Generar Borrador
+              </Button>
+              <p className="text-sm text-muted-foreground text-center mt-3">
+                Nada se publica sin tu revisión.
+              </p>
+            </div>
           </div>
-        </div>
+        </ScrollArea>
       </Card>
     );
   }
