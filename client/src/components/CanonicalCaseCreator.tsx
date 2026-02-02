@@ -485,13 +485,25 @@ export default function CanonicalCaseCreator({
               setScenarioData(null);
               setDraftId(null);
               setTopic("");
+              setScenarioObjective("");
+              setTradeoffFocus([]);
             }}
             data-testid="button-regenerate"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Nuevo Caso
           </Button>
-          <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-editor">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => {
+              // Go back to AI input form (preserve state)
+              setCanonicalCase(null);
+              setScenarioData(null);
+              setDraftId(null);
+            }} 
+            data-testid="button-back-to-input"
+          >
             <X className="w-4 h-4" />
           </Button>
         </div>
