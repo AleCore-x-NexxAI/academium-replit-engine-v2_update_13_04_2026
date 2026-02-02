@@ -23,6 +23,7 @@ import {
   UserPlus,
   Loader2,
   X,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -159,109 +160,96 @@ function ProfessorWelcome({ userName }: { userName: string }) {
         </h1>
         <p className="text-muted-foreground max-w-lg mx-auto text-lg" data-testid="text-hero-subtitle">Convierte decisiones en aprendizaje observable.</p>
       </motion.div>
-      {/* Three Calm Actions */}
-      <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8">
-        {/* Explore Example Card - with visual preview */}
+
+      {/* Primary Action - Crear Simulación */}
+      <div className="max-w-2xl mx-auto mb-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Link href="/explore">
-            <Card className="p-6 h-full hover-elevate cursor-pointer" data-testid="card-explore-example">
-              {/* Visual simulation preview hint */}
-              <div className="bg-muted/50 rounded-lg p-3 mb-4 border border-dashed border-muted-foreground/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-primary/60" />
-                  <div className="h-2 w-16 bg-muted-foreground/20 rounded" />
+          <Link href="/studio">
+            <Card className="p-8 hover-elevate cursor-pointer" data-testid="card-create-simulation">
+              <div className="flex items-center gap-6">
+                {/* Visual creation hint */}
+                <div className="bg-primary/10 rounded-xl p-4 shrink-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span className="text-xs text-primary/80">IA</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Pencil className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Manual</span>
+                    </div>
+                  </div>
+                  <Plus className="w-8 h-8 mx-auto text-primary/50" />
                 </div>
-                <div className="space-y-1.5">
-                  <div className="h-2 w-full bg-muted-foreground/15 rounded" />
-                  <div className="h-2 w-3/4 bg-muted-foreground/15 rounded" />
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold mb-2" data-testid="text-create-title">Crear simulación</h3>
+                  <p className="text-muted-foreground" data-testid="text-create-description">
+                    Crea un escenario con ayuda de IA o manualmente.
+                  </p>
                 </div>
-                <div className="flex gap-2 mt-3">
-                  <div className="h-6 w-16 bg-primary/20 rounded text-[10px] flex items-center justify-center text-primary/70">Opción A</div>
-                  <div className="h-6 w-16 bg-muted-foreground/10 rounded text-[10px] flex items-center justify-center text-muted-foreground/50">Opción B</div>
-                </div>
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-semibold mb-1" data-testid="text-explore-title">Explorar un Ejemplo</h3>
-                <p className="text-sm text-muted-foreground" data-testid="text-explore-description">
-                  Ve lo que experimentan tus estudiantes
-                </p>
+                <ChevronRight className="w-6 h-6 text-muted-foreground shrink-0" />
               </div>
             </Card>
           </Link>
         </motion.div>
+      </div>
 
-        {/* Create Simulation Card */}
+      {/* Secondary Actions - Explorar demo + Mis simulaciones */}
+      <div className="grid md:grid-cols-2 gap-4 max-w-2xl mx-auto mb-8">
+        {/* Explorar demo */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Link href="/studio">
-            <Card className="p-6 h-full hover-elevate cursor-pointer" data-testid="card-create-simulation">
-              {/* Visual creation hint */}
-              <div className="bg-muted/50 rounded-lg p-3 mb-4 border border-dashed border-muted-foreground/20">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3 text-primary/60" />
-                    <span className="text-[10px] text-muted-foreground/60">IA</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Pencil className="w-3 h-3 text-muted-foreground/40" />
-                    <span className="text-[10px] text-muted-foreground/60">Manual</span>
-                  </div>
+          <Link href="/demo-simulation">
+            <Card className="p-5 h-full hover-elevate cursor-pointer" data-testid="card-explore-demo">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-chart-1/10 flex items-center justify-center shrink-0">
+                  <Play className="w-5 h-5 text-chart-1" />
                 </div>
-                <div className="text-center py-2">
-                  <Plus className="w-6 h-6 mx-auto text-muted-foreground/30" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold mb-0.5" data-testid="text-explore-title">Explorar demo</h3>
+                  <p className="text-sm text-muted-foreground" data-testid="text-explore-description">
+                    Vive el flujo como un estudiante.
+                  </p>
                 </div>
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-semibold mb-1" data-testid="text-create-title">Crear Simulación</h3>
-                <p className="text-sm text-muted-foreground" data-testid="text-create-description">
-                  Tú decides cómo hacerlo
-                </p>
+                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
               </div>
             </Card>
           </Link>
         </motion.div>
 
-        {/* My Simulations Card */}
+        {/* Mis simulaciones */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
           <Link href="/professor">
-            <Card className="p-6 h-full hover-elevate cursor-pointer" data-testid="card-my-simulations">
-              {/* Visual list hint */}
-              <div className="bg-muted/50 rounded-lg p-3 mb-4 border border-dashed border-muted-foreground/20">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded bg-primary/40" />
-                    <div className="h-2 w-20 bg-muted-foreground/20 rounded" />
-                    <div className="ml-auto h-4 w-12 bg-muted-foreground/10 rounded text-[8px] flex items-center justify-center text-muted-foreground/50">Listo</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded bg-muted-foreground/30" />
-                    <div className="h-2 w-16 bg-muted-foreground/15 rounded" />
-                    <div className="ml-auto h-4 w-14 bg-muted-foreground/10 rounded text-[8px] flex items-center justify-center text-muted-foreground/50">Borrador</div>
-                  </div>
+            <Card className="p-5 h-full hover-elevate cursor-pointer" data-testid="card-my-simulations">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-chart-2/10 flex items-center justify-center shrink-0">
+                  <FolderOpen className="w-5 h-5 text-chart-2" />
                 </div>
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-semibold mb-1" data-testid="text-my-simulations-title">Mis Simulaciones</h3>
-                <p className="text-sm text-muted-foreground" data-testid="text-my-simulations-description">
-                  Ver o editar tus casos existentes
-                </p>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold mb-0.5" data-testid="text-my-simulations-title">Mis simulaciones</h3>
+                  <p className="text-sm text-muted-foreground" data-testid="text-my-simulations-description">
+                    Gestiona borradores y publicados.
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
               </div>
             </Card>
           </Link>
         </motion.div>
       </div>
-      {/* Safety messaging */}
+
+      {/* Reassurance line */}
       <motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -269,7 +257,7 @@ function ProfessorWelcome({ userName }: { userName: string }) {
         className="text-center text-sm text-muted-foreground/60"
         data-testid="text-safety-message"
       >
-        Explora libremente. Nada aquí es permanente.
+        Explora sin riesgo. Puedes editar antes de publicar.
       </motion.p>
     </div>
   );
