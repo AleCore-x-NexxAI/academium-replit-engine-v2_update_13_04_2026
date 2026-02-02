@@ -176,15 +176,19 @@ export default function DemoSimulation() {
   const [currentFeedback, setCurrentFeedback] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
 
-  const [inputWarning, setInputWarning] = useState<string | null>(null);
+  const [inputWarning, setInputWarning] = useState<{ title: string; message: string } | null>(null);
   const [currentRationale, setCurrentRationale] = useState<Record<string, string[]> | null>(null);
   const [expandedIndicator, setExpandedIndicator] = useState<string | null>(null);
 
-  const validateInput = (input: string): { valid: boolean; message?: string } => {
+  const validateInput = (input: string): { valid: boolean; title?: string; message?: string } => {
     const trimmedInput = input.trim().toLowerCase();
     
     if (!trimmedInput || trimmedInput.length < 5) {
-      return { valid: false, message: "Por favor, proporciona una respuesta más detallada relacionada con el caso." };
+      return { 
+        valid: false, 
+        title: "Necesito un poco más de detalle",
+        message: "Para simular consecuencias y mostrar el impacto, necesito tu razonamiento. Responde en 3–6 frases." 
+      };
     }
 
     const offensivePatterns = [
@@ -196,7 +200,8 @@ export default function DemoSimulation() {
       if (pattern.test(trimmedInput)) {
         return { 
           valid: false, 
-          message: "El lenguaje inapropiado no está permitido. Por favor, proporciona una respuesta profesional relacionada con el caso de estudio." 
+          title: "Mantengamos un tono profesional",
+          message: "Por favor, reformula tu respuesta de manera respetuosa para continuar con la simulación." 
         };
       }
     }
@@ -211,7 +216,8 @@ export default function DemoSimulation() {
     if (!hasRelevantContent) {
       return { 
         valid: false, 
-        message: "Tu respuesta no parece estar relacionada con el contexto del caso. Por favor, proporciona una respuesta relevante a la situación presentada." 
+        title: "Necesito un poco más de detalle",
+        message: "Para simular consecuencias y mostrar el impacto, necesito tu razonamiento. Responde en 3–6 frases." 
       };
     }
 
@@ -231,7 +237,10 @@ export default function DemoSimulation() {
     if (decision.format !== "multiple_choice") {
       const validation = validateInput(userResponse);
       if (!validation.valid) {
-        setInputWarning(validation.message || "Por favor, proporciona una respuesta válida.");
+        setInputWarning({
+          title: validation.title || "Necesito un poco más de detalle",
+          message: validation.message || "Por favor, proporciona una respuesta válida."
+        });
         return;
       }
     }
@@ -462,10 +471,13 @@ export default function DemoSimulation() {
                     )}
 
                     {inputWarning && (
-                      <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive" data-testid="text-input-warning">
+                      <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30" data-testid="text-input-warning">
                         <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                          <span className="text-base">{inputWarning}</span>
+                          <HelpCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                          <div className="space-y-1">
+                            <p className="font-medium text-foreground">{inputWarning.title}</p>
+                            <p className="text-sm text-muted-foreground">{inputWarning.message}</p>
+                          </div>
                         </div>
                       </div>
                     )}
