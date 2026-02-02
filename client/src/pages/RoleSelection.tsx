@@ -135,7 +135,7 @@ export default function RoleSelection() {
               <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
                 <Brain className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold">SIMULEARN</span>
+              <span className="text-xl font-bold">ScenarioX</span>
             </a>
           </div>
           <Button variant="ghost" asChild>
@@ -154,7 +154,7 @@ export default function RoleSelection() {
           className="text-center mb-12"
         >
           <h1 className="text-3xl md:text-4xl font-bold mb-4">
-            ¿Cómo quieres usar SIMULEARN?
+            ¿Cómo quieres usar ScenarioX?
           </h1>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             Selecciona tu rol para personalizar tu experiencia. Esto determinará
@@ -228,7 +228,7 @@ export default function RoleSelection() {
             </DialogTitle>
             <DialogDescription>
               Para registrarte como Super Administrador, ingresa el código de
-              acceso proporcionado por el equipo de SIMULEARN.
+              acceso proporcionado por el equipo de ScenarioX.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

@@ -178,7 +178,7 @@ export default function SessionResults() {
           </Button>
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
-            <span className="font-semibold hidden sm:inline">SIMULEARN</span>
+            <span className="font-semibold hidden sm:inline">ScenarioX</span>
           </div>
         </div>
         <div className="text-center">

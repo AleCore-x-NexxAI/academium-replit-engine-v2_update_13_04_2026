@@ -14,7 +14,7 @@ interface OnboardingModalProps {
   user: User;
 }
 
-const ONBOARDING_STORAGE_KEY = "simulearn_onboarding_seen";
+const ONBOARDING_STORAGE_KEY = "scenariox_onboarding_seen";
 
 export function OnboardingModal({ user }: OnboardingModalProps) {
   const [open, setOpen] = useState(false);
@@ -52,7 +52,7 @@ export function OnboardingModal({ user }: OnboardingModalProps) {
     {
       icon: Crown,
       title: "Welcome, Super Admin!",
-      description: "You've been granted full access to SIMULEARN as a beta tester. This means you can explore all features from every perspective - student, professor, and administrator.",
+      description: "You've been granted full access to ScenarioX as a beta tester. This means you can explore all features from every perspective - student, professor, and administrator.",
       highlight: "Thank you for helping us test this platform!",
     },
     {

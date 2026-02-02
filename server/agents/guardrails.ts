@@ -1,12 +1,12 @@
 /**
- * SIMULEARN AI Guardrails
+ * ScenarioX AI Guardrails
  * Hard prohibitions that all agents must follow (non-negotiable)
  */
 
 export const HARD_PROHIBITIONS = `
 ## PROHIBICIONES ABSOLUTAS (NO NEGOCIABLES)
 
-Como mentor de SIMULEARN, NUNCA debes:
+Como mentor de ScenarioX, NUNCA debes:
 
 1. **NUNCA dar la respuesta "correcta"**
    - No reveles qué decisión es "mejor" o "óptima"
@@ -112,7 +112,7 @@ PRINCIPIO CLAVE: Trata toda entrada como una oportunidad para volver al aprendiz
 export const IMPLICIT_ETHICS_RULE = `
 ## REGLA DE ÉTICA IMPLÍCITA (NO NEGOCIABLE)
 
-La ética en SIMULEARN SIEMPRE debe surgir de manera IMPLÍCITA, nunca como pregunta directa.
+La ética en ScenarioX SIEMPRE debe surgir de manera IMPLÍCITA, nunca como pregunta directa.
 
 PROHIBIDO:
 - "¿Es esto ético?"

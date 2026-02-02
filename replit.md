@@ -1,7 +1,7 @@
-# SIMULEARN Engine
+# ScenarioX Engine
 
 ## Overview
-SIMULEARN is an AI-powered business simulation platform designed for experiential learning. It enables students to practice real-world decision-making within dynamic, text-based scenarios. Professors can author and customize simulation blueprints. The platform uses a multi-agent AI architecture to generate immersive narratives, evaluate student decisions, calculate business impacts, and provide real-time feedback. Its core capabilities include an interactive student "cockpit" with KPI dashboards, a professor authoring studio for scenario creation, and a multi-agent AI engine for narrative generation, competency assessment, and business logic. The project aims to provide an immersive and reflective learning experience, focusing on decision-making processes rather than direct scoring, and empowering educators with flexible content creation tools.
+ScenarioX is an AI-powered business simulation platform designed for experiential learning. It enables students to practice real-world decision-making within dynamic, text-based scenarios. Professors can author and customize simulation blueprints. The platform uses a multi-agent AI architecture to generate immersive narratives, evaluate student decisions, calculate business impacts, and provide real-time feedback. Its core capabilities include an interactive student "cockpit" with KPI dashboards, a professor authoring studio for scenario creation, and a multi-agent AI engine for narrative generation, competency assessment, and business logic. The project aims to provide an immersive and reflective learning experience, focusing on decision-making processes rather than direct scoring, and empowering educators with flexible content creation tools.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

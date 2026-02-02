@@ -163,8 +163,8 @@ async function ensureSystemUser() {
   if (systemUser.length === 0) {
     await db.insert(users).values({
       id: "system",
-      email: "system@simulearn.edu",
-      firstName: "SIMULEARN",
+      email: "system@scenariox.edu",
+      firstName: "ScenarioX",
       lastName: "System",
       role: "admin",
     });
@@ -217,14 +217,14 @@ export async function seedSampleScenarios() {
 const SAMPLE_PROFESSORS = [
   {
     id: "prof-demo-001",
-    email: "professor.johnson@simulearn.edu",
+    email: "professor.johnson@scenariox.edu",
     firstName: "Dr. Elizabeth",
     lastName: "Johnson",
     role: "professor" as const,
   },
   {
     id: "prof-demo-002", 
-    email: "professor.chen@simulearn.edu",
+    email: "professor.chen@scenariox.edu",
     firstName: "Dr. Michael",
     lastName: "Chen",
     role: "professor" as const,

@@ -1,5 +1,5 @@
 /**
- * SIMULEARN Engine Version Constants
+ * ScenarioX Engine Version Constants
  * 
  * VERSIONING NOTE (IMPORTANT):
  * This structure is LOCKED for POC v1.
