@@ -240,6 +240,8 @@ export interface Indicator {
   label: string;
   value: number; // 0-100 or absolute
   description?: string;
+  // S8.1: Directionality - tells students what "good" looks like
+  direction?: "up_better" | "down_better"; // ↑ mejor or ↓ mejor
 }
 
 export interface InitialState {

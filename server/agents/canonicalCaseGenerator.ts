@@ -240,11 +240,12 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
 
   const parsed = JSON.parse(response);
   
+  // S8.1: Default indicators with directionality
   const defaultIndicators: Indicator[] = [
-    { id: "teamMorale", label: "Moral del Equipo", value: 65, description: "Nivel de motivación y compromiso del equipo" },
-    { id: "budgetImpact", label: "Impacto Presupuestario", value: 70, description: "Estado del presupuesto disponible" },
-    { id: "operationalRisk", label: "Riesgo Operacional", value: 50, description: "Nivel de riesgo en operaciones" },
-    { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica" },
+    { id: "teamMorale", label: "Moral del Equipo", value: 65, description: "Nivel de motivación y compromiso del equipo", direction: "up_better" },
+    { id: "budgetImpact", label: "Impacto Presupuestario", value: 70, description: "Estado del presupuesto disponible", direction: "up_better" },
+    { id: "operationalRisk", label: "Riesgo Operacional", value: 50, description: "Nivel de riesgo en operaciones", direction: "down_better" },
+    { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica", direction: "up_better" },
   ];
 
   // S7.1: Default focus cues for each decision
@@ -277,12 +278,27 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
     });
   }
 
+  // S8.1: Map indicators with directionality
+  const directionDefaults: Record<string, "up_better" | "down_better"> = {
+    teamMorale: "up_better",
+    morale: "up_better",
+    budgetImpact: "up_better",
+    revenue: "up_better",
+    operationalRisk: "down_better",
+    risk: "down_better",
+    strategicFlexibility: "up_better",
+    reputation: "up_better",
+    trust: "up_better",
+    efficiency: "up_better",
+  };
+  
   const indicators: Indicator[] = (parsed.indicators || []).length >= 4 
     ? parsed.indicators.map((ind: any) => ({
         id: ind.id || "indicator",
         label: ind.label || "Indicador",
         value: typeof ind.value === "number" ? ind.value : 50,
         description: ind.description,
+        direction: ind.direction || directionDefaults[ind.id] || "up_better",
       }))
     : defaultIndicators;
 

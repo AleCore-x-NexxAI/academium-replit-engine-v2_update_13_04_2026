@@ -57,6 +57,19 @@ const indicatorExplanations: Record<string, IndicatorInfo> = {
   },
 };
 
+// S8.1: Default directionality for known indicators
+const indicatorDirectionality: Record<string, "up_better" | "down_better"> = {
+  revenue: "up_better",
+  morale: "up_better",
+  reputation: "up_better",
+  efficiency: "up_better",
+  trust: "up_better",
+  teamMorale: "up_better",
+  budgetImpact: "up_better", // Higher budget availability is better
+  operationalRisk: "down_better", // Lower risk is better
+  strategicFlexibility: "up_better",
+};
+
 interface IndicatorCardProps {
   indicatorId: string;
   label: string;
@@ -66,13 +79,19 @@ interface IndicatorCardProps {
   color: string;
   // POC "Why?" Explainability
   explanation?: MetricExplanation;
+  // S8.1: Directionality
+  direction?: "up_better" | "down_better";
 }
 
-function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation }: IndicatorCardProps) {
+function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction }: IndicatorCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const delta = previousValue !== undefined ? value - previousValue : 0;
-  const isPositive = delta > 0;
-  const isNegative = delta < 0;
+  
+  // S8.1: Determine if the change is "good" or "bad" based on directionality
+  const effectiveDirection = direction || indicatorDirectionality[indicatorId] || "up_better";
+  const isGoodChange = effectiveDirection === "up_better" ? delta > 0 : delta < 0;
+  const isBadChange = effectiveDirection === "up_better" ? delta < 0 : delta > 0;
+  
   const info = indicatorExplanations[indicatorId];
   const hasExplanation = explanation && delta !== 0;
 
@@ -81,38 +100,44 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
       className="p-5 transition-all duration-300"
       data-testid={`indicator-card-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
-      {/* S3.3: Larger indicator header */}
+      {/* S3.3: Larger indicator header with S8.1 directionality */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className={`${color} p-2 rounded-lg`}>{icon}</div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-foreground">
-              {label}
-            </span>
-            {info && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
-                    <HelpCircle className="w-3.5 h-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-xs p-3">
-                  <div className="space-y-2 text-xs">
-                    <p className="font-medium">{info.description}</p>
-                    <div className="pt-1 border-t border-border/50">
-                      <p className="text-chart-2 flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" />
-                        <span>{info.upMeaning}</span>
-                      </p>
-                      <p className="text-chart-4 flex items-center gap-1 mt-1">
-                        <TrendingDown className="w-3 h-3" />
-                        <span>{info.downMeaning}</span>
-                      </p>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-foreground">
+                {label}
+              </span>
+              {info && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs p-3">
+                    <div className="space-y-2 text-xs">
+                      <p className="font-medium">{info.description}</p>
+                      <div className="pt-1 border-t border-border/50">
+                        <p className="text-chart-2 flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          <span>{info.upMeaning}</span>
+                        </p>
+                        <p className="text-chart-4 flex items-center gap-1 mt-1">
+                          <TrendingDown className="w-3 h-3" />
+                          <span>{info.downMeaning}</span>
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            )}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            {/* S8.1: Directionality cue */}
+            <span className="text-xs text-muted-foreground" data-testid={`direction-${indicatorId}`}>
+              {effectiveDirection === "up_better" ? "↑ mejor" : "↓ mejor"}
+            </span>
           </div>
         </div>
       </div>
@@ -128,6 +153,7 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
           {value}
         </motion.span>
 
+        {/* S8.1: Delta styling respects directionality (green=good, red=bad) */}
         <AnimatePresence mode="wait">
           {delta !== 0 && (
             <motion.div
@@ -135,15 +161,15 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               className={`flex items-center gap-1 text-base font-semibold px-2 py-1 rounded-md ${
-                isPositive ? "text-chart-2 bg-chart-2/10" : isNegative ? "text-chart-4 bg-chart-4/10" : ""
+                isGoodChange ? "text-chart-2 bg-chart-2/10" : isBadChange ? "text-chart-4 bg-chart-4/10" : ""
               }`}
             >
-              {isPositive ? (
+              {delta > 0 ? (
                 <TrendingUp className="w-4 h-4" />
               ) : (
                 <TrendingDown className="w-4 h-4" />
               )}
-              <span>{isPositive ? "+" : ""}{delta}</span>
+              <span>{delta > 0 ? "+" : ""}{delta}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -384,11 +410,40 @@ export function KPIDashboard({
 
       {/* S3.3: Larger indicators with better spacing */}
       <div className="p-6 flex-1 overflow-y-auto">
-        <div className="flex items-center gap-2 mb-5">
-          <Activity className="w-5 h-5 text-primary" />
-          <h3 className="text-base font-semibold text-foreground">
-            {useIndicators ? "Indicadores" : "Indicadores Clave"}
-          </h3>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">
+              {useIndicators ? "Indicadores" : "Indicadores Clave"}
+            </h3>
+          </div>
+          {/* S8.1: Legend tooltip */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>Cómo leer</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs p-3">
+              <div className="space-y-2 text-xs">
+                <p className="font-medium">Cómo leer los indicadores</p>
+                <div className="space-y-1.5 pt-1 border-t border-border/50">
+                  <p className="flex items-center gap-2">
+                    <span className="text-chart-2 font-medium">↑ mejor</span>
+                    <span className="text-muted-foreground">Más alto es mejor</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="text-chart-4 font-medium">↓ mejor</span>
+                    <span className="text-muted-foreground">Más bajo es mejor</span>
+                  </p>
+                  <p className="pt-1 text-muted-foreground">
+                    Los cambios verdes son positivos para tu objetivo. Los rojos requieren atención.
+                  </p>
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="space-y-4">
           {useIndicators ? (
@@ -406,6 +461,7 @@ export function KPIDashboard({
                   icon={indicatorIcons[indicator.id] || <Gauge className="w-4 h-4" />}
                   color={indicatorColors[indicator.id] || "bg-muted text-muted-foreground"}
                   explanation={metricExplanations?.[indicator.id]}
+                  direction={indicator.direction}
                 />
               );
             })
