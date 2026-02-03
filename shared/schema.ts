@@ -230,6 +230,8 @@ export interface DecisionPoint {
   options?: string[]; // For multiple_choice format
   requiresJustification: boolean; // Whether student must explain their reasoning
   includesReflection: boolean; // Whether to prompt for reflection after consequences
+  // S7.1: Focus cue to help students orient their thinking (2-3 key dimensions)
+  focusCue?: string; // e.g., "Considera el impacto en el equipo, los plazos y el riesgo."
 }
 
 // POC Indicator - simpler than full KPI

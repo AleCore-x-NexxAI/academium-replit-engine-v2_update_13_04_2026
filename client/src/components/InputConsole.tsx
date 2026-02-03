@@ -183,6 +183,16 @@ export function InputConsole({
             <p className="text-base font-medium text-foreground leading-relaxed" data-testid="text-decision-prompt">
               {currentDecisionPoint.prompt}
             </p>
+            
+            {/* S7.1: Focus Cue - mentorship-style guidance */}
+            {currentDecisionPoint.focusCue && (
+              <div className="mt-3 pt-3 border-t border-primary/10">
+                <p className="text-sm text-muted-foreground italic" data-testid="text-focus-cue">
+                  {currentDecisionPoint.focusCue}
+                </p>
+              </div>
+            )}
+            
             {currentDecisionPoint.includesReflection && (
               <Badge variant="secondary" className="text-xs mt-3">
                 Incluye reflexión

@@ -123,6 +123,20 @@ Cada decisión DEBE cambiar AL MENOS UN indicador NEGATIVAMENTE.
 - NUNCA correctivo
 - PROHIBIDO: "Correcto", "Incorrecto", "Mejor", "Óptimo", "Deberías haber..."
 
+=== S7.1 FOCUS CUE (OBLIGATORIO en cada decisión) ===
+Cada punto de decisión DEBE incluir un "focusCue" que:
+- Destaque 2-3 dimensiones clave (stakeholders, restricciones, trade-offs, riesgos)
+- Permanezca NEUTRAL (no guía hacia una decisión específica)
+- Sea corto (1-2 líneas o 2-3 bullets)
+- Sienta como mentoría ("aquí está cómo enmarcar el problema"), no instrucción
+
+Formatos aceptables para focusCue:
+- Una oración: "Antes de decidir, considera el impacto en el equipo, los plazos y el riesgo."
+- Bullets: "Enfócate en: equipo / tiempo / riesgo."
+- Enmarcado breve: "La tensión principal aquí es equilibrar prioridades bajo presión."
+
+IMPORTANTE: El focusCue NUNCA implica una respuesta correcta.
+
 === FORMATO DE SALIDA JSON ===
 {
   "title": "Título compelling y específico en español",
@@ -137,21 +151,24 @@ Cada decisión DEBE cambiar AL MENOS UN indicador NEGATIVAMENTE.
       "prompt": "Pregunta de la decisión 1 - orientación estratégica",
       "options": ["Opción A: descripción", "Opción B: descripción", "Opción C: descripción"],
       "requiresJustification": false,
-      "includesReflection": false
+      "includesReflection": false,
+      "focusCue": "Antes de decidir, considera: [dimensión 1] / [dimensión 2] / [dimensión 3]."
     },
     {
       "number": 2,
       "format": "written",
       "prompt": "Pregunta de la decisión 2 - análisis justificado (cómo y por qué)",
       "requiresJustification": true,
-      "includesReflection": false
+      "includesReflection": false,
+      "focusCue": "La tensión principal aquí es equilibrar [X] con [Y]."
     },
     {
       "number": 3,
       "format": "written",
       "prompt": "Pregunta de la decisión 3 - integración de información y trade-offs",
       "requiresJustification": true,
-      "includesReflection": false
+      "includesReflection": false,
+      "focusCue": "Considera cómo tus decisiones anteriores afectan esta elección final."
     }
   ],
   "reflectionPrompt": "Pregunta de reflexión ligera",
@@ -230,6 +247,13 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
     { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica" },
   ];
 
+  // S7.1: Default focus cues for each decision
+  const defaultFocusCues = [
+    "Considera: impacto en el equipo / presión de tiempo / riesgos inmediatos.",
+    "La tensión principal aquí es equilibrar recursos con objetivos.",
+    "Piensa en cómo tus decisiones anteriores afectan esta elección final.",
+  ];
+  
   const decisionPoints: DecisionPoint[] = (parsed.decisionPoints || []).map((dp: any, index: number) => ({
     number: dp.number || index + 1,
     format: dp.format || (index === 0 ? "multiple_choice" : "written"),
@@ -237,6 +261,7 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
     options: dp.options || undefined,
     requiresJustification: dp.requiresJustification ?? (index > 0),
     includesReflection: dp.includesReflection ?? false,
+    focusCue: dp.focusCue || defaultFocusCues[index] || defaultFocusCues[0],
   }));
 
   while (decisionPoints.length < 3) {
@@ -248,6 +273,7 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
       options: num === 1 ? ["Opción A", "Opción B", "Opción C"] : undefined,
       requiresJustification: num > 1,
       includesReflection: false,
+      focusCue: defaultFocusCues[num - 1] || defaultFocusCues[0],
     });
   }
 
