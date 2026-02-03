@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { processStudentTurn, DEFAULT_DIRECTOR_PROMPT } from "./agents/director";
+import { processStudentTurn, processReflection, DEFAULT_DIRECTOR_PROMPT } from "./agents/director";
 import { DEFAULT_EVALUATOR_PROMPT } from "./agents/evaluator";
 import { DEFAULT_NARRATOR_PROMPT } from "./agents/narrator";
 import { DEFAULT_DOMAIN_EXPERT_PROMPT } from "./agents/domainExpert";
@@ -585,7 +585,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       };
 
-      const result = await processStudentTurn(context, revisionAttempts);
+      // S9.1: Check if we're in the reflection step (Step 4)
+      const isReflectionStep = session.currentState.isReflectionStep === true;
+      
+      let result;
+      if (isReflectionStep) {
+        // S9.1: Use loose reflection processing
+        result = await processReflection(context);
+      } else {
+        // Normal decision processing
+        result = await processStudentTurn(context, revisionAttempts);
+      }
 
       // If revision is required, don't save the turn yet - just update session state and return
       if (result.requiresRevision) {

@@ -134,15 +134,168 @@ function checkGameOver(kpis: KPIs, context?: AgentContext): boolean {
     kpis.revenue < 10000
   );
   
-  // Check for POC-style decision limit
-  if (context?.totalDecisions && context.totalDecisions > 0) {
-    const nextDecision = (context.currentDecision || 1) + 1;
-    if (nextDecision > context.totalDecisions) {
-      return true; // All decisions made
+  // S9.1: Decision limit check now handled separately from reflection step
+  // Game over from KPIs only - decision completion leads to reflection step instead
+  return kpiGameOver;
+}
+
+/**
+ * S9.1: Loose reflection validation
+ * Only reject: profanity, empty, or completely unrelated spam
+ * Accept everything else - we want authentic reflection, not quota-writing
+ */
+function validateReflection(input: string): { isValid: boolean; message?: string } {
+  const trimmed = input.trim();
+  
+  // Block empty
+  if (trimmed.length < 3) {
+    return { 
+      isValid: false, 
+      message: "Por favor, comparte una breve reflexión sobre tu experiencia." 
+    };
+  }
+  
+  // Block profanity (same patterns as inputValidator)
+  const OFFENSIVE_PATTERNS = [
+    /\b(mierda|puta|puto|cabrón|cabron|hijo\s*de\s*puta|verga|chingar|pinche|culero|joto|marica|maricón|maricon|zorra)\b/i,
+    /\b(fuck|fucking|bitch|bastard|dick|cock|pussy|cunt|retard)\b/i,
+    /\b(kill\s*(yourself|urself)|kys|die|hate\s*you)\b/i,
+  ];
+  
+  for (const pattern of OFFENSIVE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return { 
+        isValid: false, 
+        message: "Por favor, comparte una reflexión respetuosa sobre tu experiencia." 
+      };
     }
   }
   
-  return kpiGameOver;
+  // Block clear nonsense/gibberish
+  const NONSENSE_PATTERNS = [
+    /^[a-z]{1,2}$/i,
+    /^(asdf|qwer|zxcv|hjkl)+$/i,
+    /^[^a-záéíóúñü\s]{10,}$/i,
+    /^(.)\1{6,}$/i,
+  ];
+  
+  for (const pattern of NONSENSE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return { 
+        isValid: false, 
+        message: "Por favor, comparte tus pensamientos sobre la simulación." 
+      };
+    }
+  }
+  
+  // Accept everything else
+  return { isValid: true };
+}
+
+/**
+ * S9.1: Process reflection (Step 4)
+ * Loose validation - only reject profanity/empty/spam
+ * Non-blocking nudge for depth if desired
+ */
+export async function processReflection(
+  context: AgentContext
+): Promise<DirectorOutput> {
+  const validation = validateReflection(context.studentInput);
+  
+  if (!validation.isValid) {
+    // Reflection failed basic validation - ask again without harsh messaging
+    const updatedHistory: HistoryEntry[] = [
+      ...context.history as HistoryEntry[],
+      {
+        role: "user",
+        content: context.studentInput,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        role: "system",
+        content: validation.message || "Por favor, comparte una reflexión sobre tu experiencia.",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    
+    return {
+      narrative: {
+        text: validation.message || "Por favor, comparte una reflexión sobre tu experiencia.",
+        mood: "neutral",
+      },
+      kpiUpdates: {},
+      feedback: {
+        score: 0,
+        message: "",
+      },
+      isGameOver: false,
+      updatedState: {
+        turnCount: context.turnCount,
+        kpis: context.currentKpis,
+        indicators: context.indicators,
+        history: updatedHistory,
+        flags: [],
+        rubricScores: {},
+        currentDecision: context.currentDecision,
+        isComplete: false,
+        isReflectionStep: true, // Still in reflection step
+        reflectionCompleted: false,
+        pendingRevision: false,
+        revisionAttempts: 0,
+      },
+    };
+  }
+  
+  // Reflection is valid - complete the simulation
+  // S9.1 Optional nudge (non-blocking, just for the record)
+  const optionalNudge = "Si quieres, añade 1 aprendizaje y 1 cosa que harías distinto.";
+  
+  const completionMessage = `¡Gracias por compartir tu reflexión! Has completado la simulación.
+
+${context.studentInput.length < 50 ? `💡 ${optionalNudge}` : ""}
+
+Tu perspectiva es valiosa para el proceso de aprendizaje.`;
+
+  const newHistory: HistoryEntry[] = [
+    ...context.history as HistoryEntry[],
+    {
+      role: "user",
+      content: context.studentInput,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      role: "system",
+      content: completionMessage,
+      timestamp: new Date().toISOString(),
+    },
+  ];
+  
+  return {
+    narrative: {
+      text: completionMessage,
+      mood: "positive",
+    },
+    kpiUpdates: {},
+    feedback: {
+      score: 100,
+      message: "Reflexión completada",
+    },
+    isGameOver: true, // Simulation is now truly complete
+    updatedState: {
+      turnCount: context.turnCount + 1,
+      kpis: context.currentKpis,
+      indicators: context.indicators,
+      history: newHistory,
+      flags: [],
+      rubricScores: {},
+      currentDecision: context.currentDecision,
+      isComplete: true, // Now complete
+      isReflectionStep: false, // No longer in reflection step
+      reflectionCompleted: true, // Reflection done
+      pendingRevision: false,
+      revisionAttempts: 0,
+    },
+  };
 }
 
 export async function processStudentTurn(
@@ -300,8 +453,10 @@ export async function processStudentTurn(
   const currentDecisionNum = context.currentDecision || context.turnCount + 1;
   const nextDecision = currentDecisionNum + 1;
   const totalDecisions = context.totalDecisions || 0;
-  const simulationComplete = totalDecisions > 0 && nextDecision > totalDecisions;
-
+  const decisionsComplete = totalDecisions > 0 && nextDecision > totalDecisions;
+  
+  // S9.1: After all decisions, move to reflection step instead of completing
+  // Only mark isComplete if there's a game over from KPIs
   const updatedState: SimulationState = {
     turnCount: context.turnCount + 1,
     kpis: newKpis,
@@ -309,8 +464,11 @@ export async function processStudentTurn(
     history: newHistory,
     flags: [...(context.history as any).flags || [], ...evaluation.flags],
     rubricScores: evaluation.competencyScores,
-    currentDecision: simulationComplete ? totalDecisions : nextDecision,
-    isComplete: simulationComplete || isGameOver,
+    currentDecision: decisionsComplete ? totalDecisions : nextDecision,
+    // S9.1: If decisions are done but no game over, move to reflection step
+    isComplete: isGameOver, // Only complete on game over
+    isReflectionStep: decisionsComplete && !isGameOver, // Start reflection step
+    reflectionCompleted: false,
     pendingRevision: false,
     revisionAttempts: 0,
   };

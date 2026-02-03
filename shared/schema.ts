@@ -334,6 +334,9 @@ export interface SimulationState {
   rubricScores: Record<string, number>;
   currentDecision?: number; // Which decision point we're on (1, 2, 3, etc.)
   isComplete?: boolean; // Whether all decisions have been made
+  // S9.1: Reflection as separate Step 4 (post-case)
+  isReflectionStep?: boolean; // True when all 3 decisions are done, waiting for reflection
+  reflectionCompleted?: boolean; // True after student submits reflection
   // Weak answer revision tracking
   pendingRevision?: boolean; // Whether we're waiting for a revision
   revisionAttempts?: number; // How many times student has revised current decision
@@ -379,6 +382,8 @@ export interface TurnResponse {
   maxRevisions?: number;
   // POC "Why?" Explainability
   metricExplanations?: Record<string, MetricExplanation>;
+  // S9.1: Server state for reflection step tracking
+  updatedState?: SimulationState;
 }
 
 export interface ScoreSummary {

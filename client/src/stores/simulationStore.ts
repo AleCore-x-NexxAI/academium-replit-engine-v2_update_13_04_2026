@@ -26,6 +26,9 @@ interface SimulationStore {
   currentDecision: number;
   totalDecisions: number;
   decisionPoints: DecisionPoint[];
+  // S9.1: Reflection as separate Step 4
+  isReflectionStep: boolean;
+  reflectionCompleted: boolean;
   // Revision state for weak answer handling
   pendingRevision: boolean;
   revisionPrompt: string | null;
@@ -82,6 +85,9 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   currentDecision: 1,
   totalDecisions: 0,
   decisionPoints: [],
+  // S9.1: Reflection as separate Step 4
+  isReflectionStep: false,
+  reflectionCompleted: false,
   pendingRevision: false,
   revisionPrompt: null,
   revisionAttempts: 0,
@@ -123,8 +129,19 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
         };
       });
 
-      const newDecision = state.currentDecision + 1;
-      const isComplete = state.totalDecisions > 0 && newDecision > state.totalDecisions;
+      // S9.1: Check server response for reflection step state
+      const updatedState = response.updatedState;
+      const decisionsComplete = state.totalDecisions > 0 && 
+        (state.currentDecision >= state.totalDecisions);
+      
+      // S9.1: If decisions are complete and not yet in reflection, move to reflection
+      const enterReflectionStep = updatedState?.isReflectionStep || 
+        (decisionsComplete && !state.isReflectionStep && !response.isGameOver);
+      
+      // Only increment decision if not in reflection step
+      const newDecision = state.isReflectionStep 
+        ? state.currentDecision 
+        : state.currentDecision + 1;
 
       return {
         history: newHistory,
@@ -132,10 +149,13 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
         previousIndicators: state.indicators,
         indicators: newIndicators,
         currentFeedback: response.feedback,
-        isGameOver: response.isGameOver || isComplete,
+        isGameOver: response.isGameOver,
         competencyScores: response.competencyScores || state.competencyScores,
         options: response.options || [],
-        currentDecision: newDecision,
+        currentDecision: state.isReflectionStep ? state.currentDecision : newDecision,
+        // S9.1: Reflection step tracking from server state
+        isReflectionStep: updatedState?.isReflectionStep || enterReflectionStep || false,
+        reflectionCompleted: updatedState?.reflectionCompleted || false,
         // Clear revision state on successful turn
         pendingRevision: false,
         revisionPrompt: null,

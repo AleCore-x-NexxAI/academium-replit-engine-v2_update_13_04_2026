@@ -60,6 +60,9 @@ export default function Simulation() {
     currentDecision,
     totalDecisions,
     decisionPoints,
+    // S9.1: Reflection step tracking
+    isReflectionStep,
+    reflectionCompleted,
     pendingRevision,
     revisionPrompt,
     revisionAttempts,
@@ -313,7 +316,9 @@ export default function Simulation() {
             {session.scenario?.title || "Simulación"}
           </p>
           <p className="text-xs text-muted-foreground">
-            {totalDecisions > 0
+            {isReflectionStep
+              ? "Paso 4: Reflexión"
+              : totalDecisions > 0
               ? `Decisión ${currentDecision} de ${totalDecisions}`
               : `Turno ${session.currentState.turnCount + 1}`}
           </p>
@@ -423,6 +428,9 @@ export default function Simulation() {
             revisionAttempts={revisionAttempts}
             maxRevisions={maxRevisions}
             validationError={validationError}
+            // S9.1: Reflection as separate Step 4
+            isReflectionStep={isReflectionStep}
+            reflectionPrompt={session.scenario?.initialState?.reflectionPrompt}
           />
         </main>
 

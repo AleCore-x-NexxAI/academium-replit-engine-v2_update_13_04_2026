@@ -24,6 +24,9 @@ interface InputConsoleProps {
   revisionAttempts?: number;
   maxRevisions?: number;
   validationError?: string | null;
+  // S9.1: Reflection as separate Step 4
+  isReflectionStep?: boolean;
+  reflectionPrompt?: string;
 }
 
 export function InputConsole({
@@ -40,6 +43,9 @@ export function InputConsole({
   revisionAttempts = 0,
   maxRevisions = 1, // S4.1: Only 1 revision max
   validationError,
+  // S9.1: Reflection as separate Step 4
+  isReflectionStep = false,
+  reflectionPrompt,
 }: InputConsoleProps) {
   const [input, setInput] = useState("");
   const [selectedOption, setSelectedOption] = useState<string>("");
@@ -157,8 +163,41 @@ export function InputConsole({
         </motion.div>
       )}
 
+      {/* S9.1: Reflection Step Header (Step 4) - Separate from decisions */}
+      {isReflectionStep && !pendingRevision && !isGameOver && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4"
+        >
+          <Card className="p-5 bg-gradient-to-r from-chart-3/5 to-chart-3/10 border-chart-3/30 border-l-4 border-l-chart-3">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-chart-3/20 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-chart-3" />
+                </div>
+                <span className="text-sm font-semibold text-chart-3 uppercase tracking-wide">
+                  Paso 4: Reflexión
+                </span>
+              </div>
+              <Badge variant="outline" className="bg-background text-xs">
+                Final
+              </Badge>
+            </div>
+            <p className="text-base font-medium text-foreground leading-relaxed" data-testid="text-reflection-prompt">
+              {reflectionPrompt || "¿Qué aprendiste de esta experiencia? ¿Qué harías diferente?"}
+            </p>
+            <div className="mt-3 pt-3 border-t border-chart-3/10">
+              <p className="text-sm text-muted-foreground italic" data-testid="text-reflection-nudge">
+                Si quieres, añade 1 aprendizaje y 1 cosa que harías distinto.
+              </p>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
       {/* S3.1: Decision Header Block - Visually unmistakable task */}
-      {currentDecisionPoint?.prompt && !pendingRevision && (
+      {currentDecisionPoint?.prompt && !pendingRevision && !isReflectionStep && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}

@@ -90,3 +90,16 @@ All simulation views display exactly 5 standard business indicators with consist
 - **Join by Code**: Students can join simulations using a 10-character code provided by professors
 - **studentEnrollments Table**: Tracks student access via email invitation or join code
 - **Filtered Scenario View**: Students only see global demos + simulations they're enrolled in
+
+### Simulation Flow Structure (S9.1)
+- **3 Decisions + Reflection (Step 4)**: Simulations have exactly 3 decision points, followed by a separate reflection step
+- **Decision Points**: Each has a `focusCue` highlighting 2-3 key dimensions (stakeholders, constraints, trade-offs) in neutral, mentorship tone
+- **Reflection Step**: Appears as "Paso 4: Reflexión" after all decisions; very lax validation (only rejects profanity/empty/spam)
+- **Optional Nudge**: "Si quieres, añade 1 aprendizaje y 1 cosa que harías distinto" (non-blocking)
+- **State Tracking**: `isReflectionStep` and `reflectionCompleted` in SimulationState; `processReflection()` handles completion
+
+### Indicator Directionality (S8.1)
+- All indicators have a `direction` property: `"up_better"` or `"down_better"`
+- `operationalRisk`/risk indicators are `"down_better"`; others typically `"up_better"`
+- UI displays directionality under each indicator label (e.g., "↑ mejor" or "↓ mejor")
+- Delta coloring respects directionality (green = good for the objective, red = bad)

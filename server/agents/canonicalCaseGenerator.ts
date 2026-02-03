@@ -171,7 +171,7 @@ IMPORTANTE: El focusCue NUNCA implica una respuesta correcta.
       "focusCue": "Considera cómo tus decisiones anteriores afectan esta elección final."
     }
   ],
-  "reflectionPrompt": "Pregunta de reflexión ligera",
+  "reflectionPrompt": "Pregunta de reflexión al final de la simulación (Paso 4, separado de las decisiones)",
   "indicators": [
     { "id": "teamMorale", "label": "Moral del Equipo", "value": 65, "description": "..." },
     { "id": "budgetImpact", "label": "Impacto Presupuestario", "value": 70, "description": "..." },
