@@ -179,77 +179,88 @@ export default function SimulationStart() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-12">
+      <main className="max-w-4xl mx-auto px-6 py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          className="space-y-8"
         >
-          <div className="text-center mb-8">
-            <Badge variant="secondary" className="mb-4">
+          {/* Hero Section */}
+          <div className="text-center pb-6 border-b">
+            <Badge variant="secondary" className="mb-3 bg-primary/10 text-primary border-primary/20">
               {scenario.domain}
             </Badge>
-            <h1 className="text-4xl font-bold mb-4" data-testid="text-scenario-title">
+            <h1 className="text-3xl md:text-4xl font-bold mb-3 text-foreground" data-testid="text-scenario-title">
               {scenario.title}
             </h1>
             {scenario.initialState?.companyName && (
-              <p className="text-lg text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 {scenario.initialState.companyName}
                 {scenario.initialState.industry && ` · ${scenario.initialState.industry}`}
               </p>
             )}
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4 mb-8">
-            <Card className="p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-chart-1/10 text-chart-1 flex items-center justify-center">
-                  <Target className="w-5 h-5" />
+          {/* Role & Tension - Baseline Panels */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="p-6 border-l-4 border-l-chart-1">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-lg bg-chart-1/10 text-chart-1 flex items-center justify-center shrink-0">
+                  <Target className="w-6 h-6" />
                 </div>
-                <h3 className="font-semibold">Tu Responsabilidad</h3>
+                <div className="flex-1">
+                  <h3 className="text-xs uppercase tracking-wide text-chart-1 font-medium mb-1">Tu Rol</h3>
+                  <p className="text-lg font-semibold text-foreground mb-1" data-testid="text-role">
+                    {scenario.initialState?.role || "Líder de Negocios"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Tus decisiones impactan a múltiples partes interesadas
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground" data-testid="text-role">
-                {scenario.initialState?.role || "Líder de Negocios"}
-              </p>
-              <p className="text-xs text-muted-foreground/70 mt-2">
-                Tus decisiones impactan a múltiples partes interesadas
-              </p>
             </Card>
 
-            <Card className="p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-chart-2/10 text-chart-2 flex items-center justify-center">
-                  <Users className="w-5 h-5" />
+            <Card className="p-6 border-l-4 border-l-chart-2">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-lg bg-chart-2/10 text-chart-2 flex items-center justify-center shrink-0">
+                  <Users className="w-6 h-6" />
                 </div>
-                <h3 className="font-semibold">La Tensión</h3>
+                <div className="flex-1">
+                  <h3 className="text-xs uppercase tracking-wide text-chart-2 font-medium mb-1">La Tensión</h3>
+                  <p className="text-base text-foreground leading-relaxed" data-testid="text-objective">
+                    {scenario.initialState?.objective ||
+                      "Navega las tensiones entre diferentes prioridades empresariales."}
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground" data-testid="text-objective">
-                {scenario.initialState?.objective ||
-                  "Navega las tensiones entre diferentes prioridades empresariales."}
-              </p>
             </Card>
           </div>
 
-          <Card className="p-6 mb-8">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <Brain className="w-5 h-5 text-primary" />
-              Contexto del Caso
-            </h3>
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {scenario.initialState?.caseContext || scenario.initialState?.introText || scenario.description}
-              </p>
+          {/* Context Section - Professional Panel */}
+          <Card className="p-6 bg-muted/30">
+            <div className="flex items-center gap-3 mb-4 pb-3 border-b">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Brain className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Contexto del Caso</h3>
+                <p className="text-xs text-muted-foreground">Situación actual que enfrentarás</p>
+              </div>
+            </div>
+            <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
+              {scenario.initialState?.caseContext || scenario.initialState?.introText || scenario.description}
             </div>
 
             {scenario.initialState?.coreChallenge && (
-              <Card className="mt-4 p-4 bg-primary/5 border-primary/20">
+              <div className="mt-5 p-4 rounded-lg bg-primary/5 border border-primary/20">
                 <h4 className="font-medium text-sm text-primary mb-2 flex items-center gap-2">
                   <Target className="w-4 h-4" />
                   Desafío Central
                 </h4>
-                <p className="text-sm">
+                <p className="text-sm text-foreground/90">
                   {scenario.initialState.coreChallenge}
                 </p>
-              </Card>
+              </div>
             )}
           </Card>
 
@@ -310,32 +321,35 @@ export default function SimulationStart() {
             </Card>
           )}
 
-          <Card className="p-6 mb-8 border-dashed">
-            <h3 className="font-semibold mb-3">Estructura de la Simulación</h3>
-            <div className="flex items-center justify-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">1</Badge>
-                <span className="text-muted-foreground">Decisión de Orientación</span>
+          {/* Simulation Structure - Professional Timeline */}
+          <div className="bg-muted/20 rounded-lg p-6">
+            <h3 className="font-semibold text-center mb-5 text-foreground">Tu Recorrido</h3>
+            <div className="flex items-center justify-center gap-2 md:gap-4 flex-wrap">
+              <div className="flex items-center gap-2 bg-background px-4 py-2 rounded-lg border">
+                <div className="w-7 h-7 rounded-full bg-chart-1/20 text-chart-1 flex items-center justify-center text-sm font-semibold">1</div>
+                <span className="text-sm font-medium">Orientación</span>
               </div>
-              <span className="text-muted-foreground">→</span>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">2</Badge>
-                <span className="text-muted-foreground">Análisis</span>
+              <div className="text-muted-foreground hidden md:block">→</div>
+              <div className="flex items-center gap-2 bg-background px-4 py-2 rounded-lg border">
+                <div className="w-7 h-7 rounded-full bg-chart-2/20 text-chart-2 flex items-center justify-center text-sm font-semibold">2</div>
+                <span className="text-sm font-medium">Análisis</span>
               </div>
-              <span className="text-muted-foreground">→</span>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">3</Badge>
-                <span className="text-muted-foreground">Integración</span>
+              <div className="text-muted-foreground hidden md:block">→</div>
+              <div className="flex items-center gap-2 bg-background px-4 py-2 rounded-lg border">
+                <div className="w-7 h-7 rounded-full bg-chart-3/20 text-chart-3 flex items-center justify-center text-sm font-semibold">3</div>
+                <span className="text-sm font-medium">Integración</span>
               </div>
             </div>
-            <p className="text-xs text-center text-muted-foreground mt-3">
+            <p className="text-xs text-center text-muted-foreground mt-4">
               Duración estimada: 20-25 minutos
             </p>
-          </Card>
+          </div>
 
-          <div className="text-center">
+          {/* CTA Section */}
+          <div className="text-center pt-4">
             <Button
               size="lg"
+              className="px-8"
               onClick={() => startMutation.mutate()}
               disabled={startMutation.isPending}
               data-testid="button-start-simulation"
