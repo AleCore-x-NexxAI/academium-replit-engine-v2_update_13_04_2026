@@ -3,13 +3,17 @@ import type { AgentContext, DepthEvaluatorOutput } from "./types";
 import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING } from "./guardrails";
 
 /**
- * POC S4.1: VERY LENIENT depth evaluator
- * Priority: Smooth completion + authentic reasoning > perfect answers
+ * S4.2: Relevance + Structure depth evaluator
+ * NO length-based rejection. Validate by RELEVANCE and STRUCTURE.
  * 
- * ONLY request revision for truly empty/meaningless responses
- * Accept short but relevant responses
+ * ACCEPT if student does AT LEAST ONE of:
+ * 1. States a clear priority
+ * 2. References case element
+ * 3. Mentions trade-off or risk
+ * 
+ * NON-BLOCKING mentor nudges for improvement
  */
-export const DEFAULT_DEPTH_EVALUATOR_PROMPT = `Eres un EVALUADOR MUY PERMISIVO para ScenarioX.
+export const DEFAULT_DEPTH_EVALUATOR_PROMPT = `Eres un EVALUADOR de RELEVANCIA + ESTRUCTURA para ScenarioX.
 
 ${HARD_PROHIBITIONS}
 
@@ -17,44 +21,85 @@ ${MENTOR_TONE}
 
 ${MISUSE_HANDLING}
 
-REGLA PRINCIPAL: ACEPTA la gran mayoría de respuestas. Solo pide revisión en casos extremos.
+=== S4.2 REGLA CRÍTICA: NO RECHAZAR POR LONGITUD ===
 
-ACEPTA INMEDIATAMENTE (isDeepEnough = true):
-- Cualquier respuesta que mencione la decisión tomada
-- Justificaciones breves como "porque es más seguro" o "para proteger al equipo"
-- Respuestas de 1-2 oraciones que muestren engagement
-- Selección de opción + cualquier explicación, por corta que sea
-- "Elijo A porque me parece mejor para el cliente"
-- Respuestas que intenten abordar el caso aunque sean incompletas
+ACEPTA (isDeepEnough = true) si la respuesta cumple AL MENOS UNO:
+1. PRIORIDAD: Indica qué optimiza ("Prioritizo X", "Mi prioridad es", "Lo más importante")
+2. REFERENCIA AL CASO: Menciona algún elemento del escenario (stakeholders, recursos, situación)
+3. TRADE-OFF/RIESGO: Reconoce una desventaja ("aunque", "el riesgo es", "acepto que")
 
-SOLO PIDE REVISIÓN (isDeepEnough = false) SI:
-- La respuesta es literalmente vacía o dice solo "no sé" sin más
-- Es texto completamente sin relación con el caso (ej: "me gusta el helado")
-- El estudiante solo copió la opción sin agregar NADA
+EJEMPLOS QUE DEBEN PASAR (isDeepEnough = true):
+- "Prioritizo X porque Y." ✓
+- "Elijo X para lograr Y, aunque afecte Z." ✓
+- "Mi prioridad es X; el riesgo principal es Y." ✓
+- "La opción A porque protege al equipo." ✓
+- "Elijo B considerando el presupuesto." ✓
 
-PRIORIDAD POC: Fluidez de experiencia > Profundidad perfecta
-La simulación DEBE fluir. No queremos frustrar al estudiante con loops de revisión.
+SOLO PIDE REVISIÓN si la respuesta:
+- Es literalmente vacía
+- No tiene NINGÚN elemento de prioridad, referencia al caso, o trade-off
+- Es texto completamente sin relación con el escenario
 
-SI NECESITAS pedir revisión, sé muy breve y amable:
-"Entiendo tu elección. ¿Podrías agregar brevemente por qué tomaste esta decisión?"
+=== MENTOR NUDGE (NO BLOQUEA, solo sugiere) ===
+Si aceptas pero quieres sugerir mejora, usa strengthsAcknowledged para dar un nudge opcional:
+
+Nudges opcionales (LOCKED):
+- "Tu respuesta es válida. Para hacerla más sólida, añade qué priorizas y por qué."
+- "¿Qué trade-off estás aceptando?"
+- "¿A quién afecta más tu decisión?"
+- "¿Qué riesgo te preocupa más?"
+
+IMPORTANTE: Los nudges NO bloquean. Son sugerencias para el siguiente turno.
 
 FORMATO DE SALIDA (JSON):
 {
   "isDeepEnough": true/false,
   "revisionPrompt": "<solo si isDeepEnough=false, máximo 1 oración>",
   "missingConsiderations": [],
-  "strengthsAcknowledged": "<qué hizo bien>"
+  "strengthsAcknowledged": "<qué hizo bien + nudge opcional si aplica>",
+  "hasPriority": true/false,
+  "hasCaseReference": true/false,
+  "hasTradeoff": true/false
 }`;
 
-// POC S4.1: Only 1 revision max to keep flow smooth
+// S4.2: Only 1 revision max to keep flow smooth
 const MAX_REVISIONS = 1;
+
+// S4.2: Quick regex patterns to detect relevance + structure
+const PRIORITY_PATTERNS = [
+  /\b(priorit|prioriz|lo más importante|mi prioridad|primero|enfoc|optimi)/i,
+  /\b(elijo|escojo|decido|opto por)\b.*\b(porque|para|ya que)/i,
+];
+
+const TRADEOFF_PATTERNS = [
+  /\b(aunque|a pesar|sin embargo|pero|el riesgo|acepto que|sacrific|compromis)/i,
+  /\b(desventaja|inconveniente|problema|costo|pérdida|afect)/i,
+];
+
+const CASE_REFERENCE_PATTERNS = [
+  /\b(equipo|cliente|presupuesto|tiempo|proyecto|empresa|empleado|stakeholder)/i,
+  /\b(lanzamiento|producto|servicio|mercado|competencia|recurso|objetivo)/i,
+];
+
+function hasRelevanceStructure(input: string): { hasPriority: boolean; hasTradeoff: boolean; hasCaseRef: boolean; passes: boolean } {
+  const trimmed = input.trim().toLowerCase();
+  
+  const hasPriority = PRIORITY_PATTERNS.some(p => p.test(trimmed));
+  const hasTradeoff = TRADEOFF_PATTERNS.some(p => p.test(trimmed));
+  const hasCaseRef = CASE_REFERENCE_PATTERNS.some(p => p.test(trimmed));
+  
+  // S4.2: Pass if at least one criterion is met
+  const passes = hasPriority || hasTradeoff || hasCaseRef;
+  
+  return { hasPriority, hasTradeoff, hasCaseRef, passes };
+}
 
 export async function evaluateDepth(
   context: AgentContext,
   revisionAttempts: number = 0,
   options?: { customPrompt?: string; model?: SupportedModel }
 ): Promise<DepthEvaluatorOutput> {
-  // POC: Auto-accept after just 1 revision attempt
+  // Auto-accept after max revisions
   if (revisionAttempts >= MAX_REVISIONS) {
     return {
       isDeepEnough: true,
@@ -62,13 +107,30 @@ export async function evaluateDepth(
     };
   }
   
-  // POC S4.1: Quick accept for any input with minimal content
-  const inputLength = context.studentInput?.trim().length || 0;
-  if (inputLength >= 15) {
-    // Any input 15+ chars that made it past validation is good enough
+  // S4.2: Quick relevance+structure check (no LLM needed for obvious cases)
+  const studentInput = context.studentInput?.trim() || "";
+  const relevance = hasRelevanceStructure(studentInput);
+  
+  if (relevance.passes) {
+    // Build appropriate mentor nudge based on what's missing
+    let nudge = "";
+    if (!relevance.hasPriority && !relevance.hasTradeoff) {
+      nudge = " Para hacerla más sólida, añade qué priorizas y por qué.";
+    } else if (!relevance.hasTradeoff) {
+      nudge = " ¿Qué trade-off estás aceptando?";
+    }
+    
     return {
       isDeepEnough: true,
-      strengthsAcknowledged: "El estudiante ha proporcionado su respuesta",
+      strengthsAcknowledged: `Tu respuesta es válida.${nudge}`,
+    };
+  }
+  
+  // For very short inputs without clear structure, still be lenient
+  if (studentInput.length >= 20) {
+    return {
+      isDeepEnough: true,
+      strengthsAcknowledged: "Tu respuesta es válida. Para hacerla más sólida, añade qué priorizas y por qué.",
     };
   }
 

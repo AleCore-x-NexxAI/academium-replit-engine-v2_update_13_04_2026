@@ -24,7 +24,7 @@ export const VERSION_ROADMAP = {
       "Lightweight Reflection (1 optional prompt)",
       "Multi-agent orchestration (Director, Narrator, Evaluator, DomainExpert, DepthEvaluator)",
       "AI Guardrails (8 HARD_PROHIBITIONS)",
-      "S4.1 Lenient Validation (1 max revision, accept short but relevant)",
+      "S4.1/S4.2 Relevance+Structure Validation (no length quota, 1 max revision)",
       "Faculty Visibility Dashboard (no scores displayed)",
     ],
   },

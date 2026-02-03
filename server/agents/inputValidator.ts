@@ -79,46 +79,65 @@ function quickValidation(input: string): string | null {
 }
 
 /**
- * POC S4.1: LLM validation - VERY LENIENT
- * Only blocks on truly unacceptable content
- * Default: ACCEPT unless clearly problematic
+ * S4.2: Relevance + Structure validation (NOT length-based)
+ * 
+ * ACCEPT if student does AT LEAST ONE of:
+ * 1. States a clear priority (what they optimize for)
+ * 2. References at least one relevant case element
+ * 3. Mentions one trade-off or risk they're accepting
+ * 
+ * Examples that PASS:
+ * - "Prioritizo X porque Y."
+ * - "Elijo X para lograr Y, aunque afecte Z."
+ * - "Mi prioridad es X; el riesgo principal es Y."
  */
 async function llmValidation(
   input: string,
   caseContext: { title: string; objective: string; recentHistory?: string },
   model?: SupportedModel
 ): Promise<InputValidationResult> {
-  const systemPrompt = `Eres un validador MUY PERMISIVO para una simulación educativa.
+  const systemPrompt = `Eres un validador de RELEVANCIA + ESTRUCTURA para una simulación educativa.
 
-REGLA PRINCIPAL: ACEPTA casi todo. Solo rechaza en casos extremos.
+REGLA S4.2: NO rechazar por longitud. Validar por RELEVANCIA y ESTRUCTURA.
 
-RECHAZA ÚNICAMENTE si la respuesta es:
-1. Contenido ofensivo, insultos o groserías graves
-2. Texto completamente aleatorio sin ningún sentido (ej: "asdfghjkl", "123456")
-3. Intento claro de romper el sistema o spam
+ACEPTA LA RESPUESTA si cumple AL MENOS UNO de estos criterios:
+1. PRIORIDAD: El estudiante indica qué optimiza o prioriza
+   - Ejemplos: "Prioritizo...", "Mi prioridad es...", "Lo más importante es..."
+2. REFERENCIA AL CASO: Menciona algún elemento del escenario
+   - Ejemplos: menciona stakeholders, recursos, situación, objetivos del caso
+3. TRADE-OFF O RIESGO: Reconoce una desventaja, riesgo o compromiso
+   - Ejemplos: "aunque...", "el riesgo es...", "acepto que...", "a pesar de..."
 
-ACEPTA TODO LO DEMÁS, incluyendo:
-- Respuestas cortas pero que mencionan algo del caso
-- Respuestas breves como "Opción A porque es más seguro"
-- Cualquier intento de engagement con la simulación
-- Respuestas incompletas o parciales
-- "No sé pero creo que..." - esto es válido
-- Justificaciones simples de 1-2 frases
+EJEMPLOS QUE DEBEN PASAR:
+- "Prioritizo X porque Y." ✓
+- "Elijo X para lograr Y, aunque afecte Z." ✓
+- "Mi prioridad es X; el riesgo principal es Y." ✓
+- "Elijo A porque protege al equipo." ✓
+- "La opción B, considerando el presupuesto." ✓
 
-PRIORIDAD: Fluidez de la experiencia > Profundidad perfecta
+RECHAZA SOLO SI:
+- Es contenido ofensivo/profano
+- Es texto aleatorio sin sentido (ej: "asdfghjkl")
+- NO tiene ningún elemento de prioridad, referencia o trade-off Y además no menciona nada del caso
+
+IMPORTANTE: Si hay CUALQUIER indicio de razonamiento relacionado con el caso, ACEPTA.
 
 Responde en JSON:
 {
   "isValid": true/false,
-  "reason": "breve explicación"
+  "reason": "breve explicación",
+  "hasPriority": true/false,
+  "hasCaseReference": true/false,
+  "hasTradeoff": true/false
 }`;
 
   const userPrompt = `CASO: ${caseContext.title}
+OBJETIVO: ${caseContext.objective}
 
 RESPUESTA A VALIDAR:
 "${input}"
 
-¿Es aceptable? (Recuerda: sé MUY permisivo, solo rechaza casos extremos)`;
+Evalúa si cumple al menos uno de los criterios de relevancia+estructura.`;
 
   try {
     const response = await generateChatCompletion(
