@@ -1,14 +1,21 @@
 /**
  * Input Validation Agent
  * 
- * This agent validates student/user input BEFORE any main simulation processing.
- * It acts as a gatekeeper to ensure:
- * 1. No offensive or inappropriate language
- * 2. Input is related to the simulation context
- * 3. Input is not empty or meaningless
+ * POC S4.1: LENIENT VALIDATION - Only block on truly problematic input
  * 
- * CRITICAL: This validation MUST run before processStudentTurn.
- * If validation fails, the simulation does NOT advance.
+ * This agent validates student/user input BEFORE any main simulation processing.
+ * 
+ * BLOCKING RULES (only these block the student):
+ * 1. Profanity/unsafe content
+ * 2. Empty input
+ * 3. Clear nonsense/spam (random characters, keyboard mashing)
+ * 
+ * ACCEPTANCE RULES:
+ * - Short but relevant responses: ACCEPT
+ * - Brief justifications: ACCEPT
+ * - Any attempt at engagement with the case: ACCEPT
+ * 
+ * POC Priority: Smooth completion + authentic reasoning > quota-writing
  */
 
 import { generateChatCompletion, SupportedModel } from "../openai";
@@ -19,100 +26,99 @@ export interface InputValidationResult {
   userMessage?: string; // Message to show the user if rejected
 }
 
-// List of offensive words/patterns to catch before even calling the LLM
+// List of offensive words/patterns - ONLY block on truly offensive content
 const OFFENSIVE_PATTERNS = [
-  // Spanish insults
-  /\b(idiota|estúpido|estupido|imbécil|imbecil|pendejo|pendeja|mierda|puta|puto|cabrón|cabron|hijo\s*de\s*puta|verga|chingar|pinche|mamón|mamon|culero|güey|guey|joto|marica|maricón|maricon|zorra|cerdo)\b/i,
-  // English insults
-  /\b(idiot|stupid|dumbass|asshole|shit|fuck|fucking|bitch|bastard|dick|cock|pussy|cunt|retard|moron|wtf|stfu|lmao|bruh)\b/i,
+  // Spanish insults (severe only)
+  /\b(mierda|puta|puto|cabrón|cabron|hijo\s*de\s*puta|verga|chingar|pinche|culero|joto|marica|maricón|maricon|zorra)\b/i,
+  // English insults (severe only)
+  /\b(fuck|fucking|bitch|bastard|dick|cock|pussy|cunt|retard)\b/i,
   // General offensive patterns
   /\b(kill\s*(yourself|urself)|kys|die|hate\s*you)\b/i,
 ];
 
-// Patterns that indicate nonsense/gibberish
+// Patterns that indicate clear nonsense/gibberish - only the most obvious
 const NONSENSE_PATTERNS = [
-  /^[a-z]{1,3}$/i, // Very short random letters
-  /^(asdf|qwer|zxcv|hjkl|lol|lmao|xd|jaja|haha|wtf|idk|bruh|bruv|bro|dude|meh|nah|yolo)+$/i,
-  /^[^a-záéíóúñü\s]{5,}$/i, // Long strings with no letters (keyboard mashing)
-  /^(.)\1{4,}$/i, // Same character repeated 5+ times
-  /^[0-9\s\W]+$/i, // Only numbers and symbols
+  /^[a-z]{1,2}$/i, // 1-2 random letters only
+  /^(asdf|qwer|zxcv|hjkl)+$/i, // Pure keyboard mashing
+  /^[^a-záéíóúñü\s]{10,}$/i, // Long strings with no letters at all
+  /^(.)\1{6,}$/i, // Same character repeated 7+ times
+  /^[0-9\s\W]+$/i, // Only numbers and symbols (no letters at all)
 ];
 
-// Minimum meaningful input length (after trimming)
-const MIN_INPUT_LENGTH = 10;
+// POC: Very lenient minimum - just needs SOMETHING
+const MIN_INPUT_LENGTH = 3;
 
 /**
- * Quick client-side style validation (no LLM call)
+ * POC S4.1: Quick validation - LENIENT
+ * Only blocks on: empty, profanity, or clear nonsense
  * Returns null if validation passes, error message if fails
  */
 function quickValidation(input: string): string | null {
   const trimmed = input.trim();
   
-  // Check for empty or too short input
+  // Block 1: Empty input only
   if (trimmed.length < MIN_INPUT_LENGTH) {
-    return "Tu respuesta es demasiado corta. Una respuesta válida debe explicar tu decisión y razonamiento dentro del contexto del caso. Por favor, amplía tu respuesta.";
+    return "Por favor, escribe una respuesta.";
   }
   
-  // Check for offensive patterns
+  // Block 2: Offensive patterns (profanity/unsafe)
   for (const pattern of OFFENSIVE_PATTERNS) {
     if (pattern.test(trimmed)) {
-      return "Tu respuesta contiene lenguaje inapropiado. En esta simulación empresarial, se espera un tono profesional y respetuoso. Por favor, reformula tu respuesta.";
+      return "Tu respuesta contiene lenguaje inapropiado. Por favor, reformula tu respuesta con un tono profesional.";
     }
   }
   
-  // Check for nonsense patterns
+  // Block 3: Clear nonsense/spam only
   for (const pattern of NONSENSE_PATTERNS) {
     if (pattern.test(trimmed)) {
-      return "Tu respuesta no está relacionada con el caso. Una respuesta válida debe proponer una decisión o acción concreta para la situación planteada. Por favor, inténtalo de nuevo.";
+      return "Tu respuesta parece no estar relacionada con el caso. Por favor, inténtalo de nuevo.";
     }
   }
   
-  return null; // Passed quick validation
+  return null; // Passed - accept everything else
 }
 
 /**
- * LLM-based validation for more nuanced checks
- * Checks if the input is relevant to the case context and appropriate
+ * POC S4.1: LLM validation - VERY LENIENT
+ * Only blocks on truly unacceptable content
+ * Default: ACCEPT unless clearly problematic
  */
 async function llmValidation(
   input: string,
   caseContext: { title: string; objective: string; recentHistory?: string },
   model?: SupportedModel
 ): Promise<InputValidationResult> {
-  const systemPrompt = `Eres un validador de entrada para una simulación educativa de negocios.
+  const systemPrompt = `Eres un validador MUY PERMISIVO para una simulación educativa.
 
-Tu ÚNICO trabajo es determinar si la respuesta del usuario es VÁLIDA o INVÁLIDA.
+REGLA PRINCIPAL: ACEPTA casi todo. Solo rechaza en casos extremos.
 
-Una respuesta es INVÁLIDA si:
-1. Contiene insultos, groserías o lenguaje ofensivo (incluso sutiles o disfrazados)
-2. Es completamente irrelevante al contexto del caso de negocios
-3. Es un intento de "romper" el sistema o provocar al asistente
-4. Es texto sin sentido, spam, o repeticiones sin significado
-5. Es una evasión obvia (ej: "no sé", "cualquier cosa", "lo que sea")
-6. Contiene referencias inapropiadas o fuera de contexto
+RECHAZA ÚNICAMENTE si la respuesta es:
+1. Contenido ofensivo, insultos o groserías graves
+2. Texto completamente aleatorio sin ningún sentido (ej: "asdfghjkl", "123456")
+3. Intento claro de romper el sistema o spam
 
-Una respuesta es VÁLIDA si:
-1. Intenta abordar la situación del caso (aunque sea breve)
-2. Propone alguna acción o decisión relacionada con el contexto
-3. Mantiene un tono respetuoso y profesional
+ACEPTA TODO LO DEMÁS, incluyendo:
+- Respuestas cortas pero que mencionan algo del caso
+- Respuestas breves como "Opción A porque es más seguro"
+- Cualquier intento de engagement con la simulación
+- Respuestas incompletas o parciales
+- "No sé pero creo que..." - esto es válido
+- Justificaciones simples de 1-2 frases
 
-IMPORTANTE: Sé ESTRICTO. Si hay CUALQUIER duda sobre si la respuesta es apropiada, márcala como INVÁLIDA.
+PRIORIDAD: Fluidez de la experiencia > Profundidad perfecta
 
-Responde ÚNICAMENTE en este formato JSON:
+Responde en JSON:
 {
   "isValid": true/false,
-  "reason": "breve explicación de por qué es válida o inválida"
+  "reason": "breve explicación"
 }`;
 
-  const userPrompt = `CONTEXTO DEL CASO:
-Título: ${caseContext.title}
-Objetivo: ${caseContext.objective}
-${caseContext.recentHistory ? `Historia reciente: ${caseContext.recentHistory}` : ''}
+  const userPrompt = `CASO: ${caseContext.title}
 
-RESPUESTA DEL USUARIO A VALIDAR:
+RESPUESTA A VALIDAR:
 "${input}"
 
-Determina si esta respuesta es válida o inválida.`;
+¿Es aceptable? (Recuerda: sé MUY permisivo, solo rechaza casos extremos)`;
 
   try {
     const response = await generateChatCompletion(
@@ -122,7 +128,7 @@ Determina si esta respuesta es válida o inválida.`;
       ],
       { 
         responseFormat: "json",
-        model: model || "gpt-4o-mini" // Use cheaper model for validation
+        model: model || "gpt-4o-mini"
       }
     );
 
@@ -132,7 +138,7 @@ Determina si esta respuesta es válida o inválida.`;
       return {
         isValid: false,
         rejectionReason: result.reason,
-        userMessage: "Tu respuesta no está relacionada con el contexto del caso o no cumple con las normas de la simulación. Recuerda que una respuesta válida debe explicar tu decisión dentro del escenario planteado y mantener un tono profesional."
+        userMessage: "Tu respuesta no pudo procesarse. Por favor, inténtalo de nuevo."
       };
     }
     
@@ -140,7 +146,7 @@ Determina si esta respuesta es válida o inválida.`;
     
   } catch (error) {
     console.error("[InputValidator] LLM validation error:", error);
-    // On error, default to accepting (don't block on validation errors)
+    // On error, ALWAYS accept
     return { isValid: true };
   }
 }

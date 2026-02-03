@@ -38,7 +38,7 @@ export function InputConsole({
   pendingRevision = false,
   revisionPrompt,
   revisionAttempts = 0,
-  maxRevisions = 2,
+  maxRevisions = 1, // S4.1: Only 1 revision max
   validationError,
 }: InputConsoleProps) {
   const [input, setInput] = useState("");
@@ -123,21 +123,22 @@ export function InputConsole({
         </motion.div>
       )}
 
+      {/* S4.1 LOCKED: Gentle validation message */}
       {validationError && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-4 bg-destructive/10 border-destructive/30 rounded-lg border"
+          className="mb-4 p-4 bg-primary/5 border-primary/20 rounded-lg border"
           data-testid="validation-error-banner"
         >
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
             <div>
-              <span className="text-xs font-medium text-destructive uppercase tracking-wide block mb-1">
-                Respuesta no válida
+              <span className="text-sm font-medium text-foreground block mb-1">
+                Necesito un poco más de detalle
               </span>
-              <p className="text-sm text-foreground leading-relaxed">
-                {validationError}
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Para simular consecuencias y mostrar el impacto, necesito tu razonamiento. Responde en 3–6 frases.
               </p>
             </div>
           </div>

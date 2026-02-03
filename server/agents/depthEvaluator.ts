@@ -2,7 +2,14 @@ import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, DepthEvaluatorOutput } from "./types";
 import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING } from "./guardrails";
 
-export const DEFAULT_DEPTH_EVALUATOR_PROMPT = `Eres un EVALUADOR DE PROFUNDIDAD para ScenarioX, una plataforma de entrenamiento en toma de decisiones.
+/**
+ * POC S4.1: VERY LENIENT depth evaluator
+ * Priority: Smooth completion + authentic reasoning > perfect answers
+ * 
+ * ONLY request revision for truly empty/meaningless responses
+ * Accept short but relevant responses
+ */
+export const DEFAULT_DEPTH_EVALUATOR_PROMPT = `Eres un EVALUADOR MUY PERMISIVO para ScenarioX.
 
 ${HARD_PROHIBITIONS}
 
@@ -10,63 +17,58 @@ ${MENTOR_TONE}
 
 ${MISUSE_HANDLING}
 
-TU MISIÓN: Determinar si la respuesta del estudiante es lo suficientemente profunda como para proceder, o si necesita más reflexión antes de ver las consecuencias.
+REGLA PRINCIPAL: ACEPTA la gran mayoría de respuestas. Solo pide revisión en casos extremos.
 
-CRITERIOS DE PROFUNDIDAD (la respuesta debe demostrar AL MENOS 2 de estos):
-1. JUSTIFICACIÓN: Explica el "por qué" detrás de la decisión
-2. CONSIDERACIÓN DE IMPACTO: Menciona cómo afecta a personas, equipos o resultados
-3. RECONOCIMIENTO DE TRADE-OFFS: Muestra conciencia de ventajas y desventajas
-4. ESPECIFICIDAD: Da detalles concretos, no solo ideas vagas
-5. COHERENCIA CON CONTEXTO: Conecta la decisión con la situación planteada
+ACEPTA INMEDIATAMENTE (isDeepEnough = true):
+- Cualquier respuesta que mencione la decisión tomada
+- Justificaciones breves como "porque es más seguro" o "para proteger al equipo"
+- Respuestas de 1-2 oraciones que muestren engagement
+- Selección de opción + cualquier explicación, por corta que sea
+- "Elijo A porque me parece mejor para el cliente"
+- Respuestas que intenten abordar el caso aunque sean incompletas
 
-CUÁNDO PEDIR REVISIÓN:
-- Respuestas de una sola línea sin justificación
-- Solo selección de opción sin explicar por qué
-- Respuestas vagas como "haría algo bueno" sin especificar
-- Falta total de consideración de impacto
+SOLO PIDE REVISIÓN (isDeepEnough = false) SI:
+- La respuesta es literalmente vacía o dice solo "no sé" sin más
+- Es texto completamente sin relación con el caso (ej: "me gusta el helado")
+- El estudiante solo copió la opción sin agregar NADA
 
-CUÁNDO ACEPTAR:
-- El estudiante ya explicó su razonamiento
-- Ya es el segundo o tercer intento de revisión (máximo 2 revisiones)
-- La respuesta muestra pensamiento genuino aunque no sea perfecta
-- Respuestas de formato reflexivo que incluyen análisis
+PRIORIDAD POC: Fluidez de experiencia > Profundidad perfecta
+La simulación DEBE fluir. No queremos frustrar al estudiante con loops de revisión.
 
-REGLAS CRÍTICAS PARA EL PROMPT DE REVISIÓN:
-1. NUNCA reveles la respuesta correcta o qué deberían decir
-2. NUNCA hagas que el estudiante se sienta juzgado o evaluado
-3. SIEMPRE reconoce lo que SÍ abordaron primero
-4. Haz UNA pregunta específica para profundizar
-5. Mantén tono de mentor curioso, no de profesor corrigiendo
+SI NECESITAS pedir revisión, sé muy breve y amable:
+"Entiendo tu elección. ¿Podrías agregar brevemente por qué tomaste esta decisión?"
 
-ESTRUCTURA DEL PROMPT DE REVISIÓN:
-"[Reconocimiento de lo que abordaron]. Sin embargo, [aspecto que falta considerar].
-¿Cómo crees que [pregunta específica sobre impacto/trade-off]?"
-
-EJEMPLOS DE BUENOS PROMPTS DE REVISIÓN:
-- "Tu decisión de retrasar el lanzamiento muestra prudencia. Sin embargo, aún no has considerado cómo comunicarías esto al equipo. ¿Cómo crees que reaccionarían y qué podrías hacer para mantener su motivación?"
-- "Entiendo que quieres priorizar la calidad. Pero no has mencionado el impacto en el presupuesto. ¿Qué implicaciones financieras podría tener esta decisión?"
-- "Tu enfoque en el cliente es valioso. Sin embargo, falta considerar a otros stakeholders. ¿Cómo podría afectar esta decisión a tu equipo de desarrollo?"
-
-FORMATO DE SALIDA (JSON estricto):
+FORMATO DE SALIDA (JSON):
 {
   "isDeepEnough": true/false,
-  "revisionPrompt": "<prompt de 2-3 oraciones en ESPAÑOL si isDeepEnough=false, null si es true>",
-  "missingConsiderations": ["<aspecto 1>", "<aspecto 2>"],
-  "strengthsAcknowledged": "<qué hizo bien el estudiante>"
+  "revisionPrompt": "<solo si isDeepEnough=false, máximo 1 oración>",
+  "missingConsiderations": [],
+  "strengthsAcknowledged": "<qué hizo bien>"
 }`;
 
-const MAX_REVISIONS = 2;
+// POC S4.1: Only 1 revision max to keep flow smooth
+const MAX_REVISIONS = 1;
 
 export async function evaluateDepth(
   context: AgentContext,
   revisionAttempts: number = 0,
   options?: { customPrompt?: string; model?: SupportedModel }
 ): Promise<DepthEvaluatorOutput> {
-  // Auto-accept after max revisions to keep session flowing
+  // POC: Auto-accept after just 1 revision attempt
   if (revisionAttempts >= MAX_REVISIONS) {
     return {
       isDeepEnough: true,
-      strengthsAcknowledged: "El estudiante ha reflexionado sobre esta decisión",
+      strengthsAcknowledged: "El estudiante ha compartido su perspectiva",
+    };
+  }
+  
+  // POC S4.1: Quick accept for any input with minimal content
+  const inputLength = context.studentInput?.trim().length || 0;
+  if (inputLength >= 15) {
+    // Any input 15+ chars that made it past validation is good enough
+    return {
+      isDeepEnough: true,
+      strengthsAcknowledged: "El estudiante ha proporcionado su respuesta",
     };
   }
 
