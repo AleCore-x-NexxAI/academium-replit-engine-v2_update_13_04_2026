@@ -1,5 +1,5 @@
 /**
- * ScenarioX Engine Version Constants
+ * Scenario+ Engine Version Constants
  * 
  * VERSIONING NOTE (IMPORTANT):
  * This structure is LOCKED for POC v1.

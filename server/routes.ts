@@ -641,9 +641,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateSimulationSession(sessionId, sessionUpdate);
 
       res.json(result);
-    } catch (error) {
-      console.error("Error processing turn:", error);
-      res.status(500).json({ message: "Failed to process turn" });
+    } catch (error: any) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const isLLMError = errorMsg.toLowerCase().includes("rate limit") ||
+        errorMsg.toLowerCase().includes("timeout") ||
+        errorMsg.toLowerCase().includes("quota") ||
+        errorMsg.toLowerCase().includes("429") ||
+        errorMsg.toLowerCase().includes("500") ||
+        errorMsg.toLowerCase().includes("502") ||
+        errorMsg.toLowerCase().includes("503") ||
+        errorMsg.toLowerCase().includes("504") ||
+        errorMsg.toLowerCase().includes("network") ||
+        errorMsg.toLowerCase().includes("econnrefused") ||
+        errorMsg.toLowerCase().includes("resource exhausted");
+      
+      console.error(`[Turn Error] Session ${req.params.sessionId} | LLM=${isLLMError} | ${errorMsg}`);
+      
+      if (isLLMError) {
+        return res.status(503).json({
+          message: "ai_service_unavailable",
+          retryable: true,
+          userMessage: "El servicio de IA está temporalmente ocupado. Intenta de nuevo en un momento.",
+        });
+      }
+      
+      res.status(500).json({
+        message: "processing_error",
+        retryable: false,
+        userMessage: "Ocurrió un error al procesar tu decisión. Por favor intenta de nuevo.",
+      });
     }
   });
 
@@ -695,9 +721,22 @@ Be constructive and educational, not judgmental.`;
       ], { maxTokens: 256 });
 
       res.json({ hint });
-    } catch (error) {
-      console.error("Error generating hint:", error);
-      res.status(500).json({ message: "Failed to generate hint" });
+    } catch (error: any) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Hint Error] Session ${req.params.sessionId} | ${errorMsg}`);
+      
+      const isLLMError = errorMsg.toLowerCase().includes("rate limit") ||
+        errorMsg.toLowerCase().includes("timeout") ||
+        errorMsg.toLowerCase().includes("503") ||
+        errorMsg.toLowerCase().includes("network");
+      
+      res.status(isLLMError ? 503 : 500).json({
+        message: isLLMError ? "ai_service_unavailable" : "processing_error",
+        retryable: isLLMError,
+        userMessage: isLLMError 
+          ? "El servicio de IA está temporalmente ocupado. Intenta de nuevo."
+          : "No se pudo generar la pista.",
+      });
     }
   });
 

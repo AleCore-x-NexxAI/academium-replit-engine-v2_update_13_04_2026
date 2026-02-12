@@ -2,7 +2,7 @@ import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, DomainExpertOutput } from "./types";
 import { CAUSE_EFFECT_RULES } from "./types";
 
-export const DEFAULT_DOMAIN_EXPERT_PROMPT = `Eres un EXPERTO EN LA MATERIA y ANALISTA DE NEGOCIOS para ScenarioX, una plataforma educativa POC de simulación de decisiones.
+export const DEFAULT_DOMAIN_EXPERT_PROMPT = `Eres un EXPERTO EN LA MATERIA y ANALISTA DE NEGOCIOS para Scenario+, una plataforma educativa POC de simulación de decisiones.
 
 TU DOBLE ROL:
 1. **Experto en la Materia**: Tienes profunda experiencia en el dominio del escenario. Entiendes las implicaciones del mundo real, estándares de la industria y mejores prácticas.

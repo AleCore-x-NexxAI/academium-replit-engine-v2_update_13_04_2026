@@ -170,13 +170,49 @@ export default function Simulation() {
     navigate("/");
   }, [navigate, sessionId]);
 
+  const MAX_AUTO_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 4000, 6000];
+
   const submitMutation = useMutation({
     mutationFn: async (input: string) => {
-      const response = await apiRequest("POST", `/api/simulations/${sessionId}/turn`, {
-        input,
-        revisionAttempts: pendingRevision ? revisionAttempts : 0,
-      });
-      return (await response.json()) as TurnResponse;
+      let lastError: any = null;
+      
+      for (let attempt = 0; attempt < MAX_AUTO_RETRIES + 1; attempt++) {
+        try {
+          const response = await apiRequest("POST", `/api/simulations/${sessionId}/turn`, {
+            input,
+            revisionAttempts: pendingRevision ? revisionAttempts : 0,
+          });
+          return (await response.json()) as TurnResponse;
+        } catch (error: any) {
+          lastError = error;
+          const errorMessage = error?.message || "";
+          
+          let errorData: any = {};
+          try {
+            const jsonMatch = errorMessage.match(/^\d+:\s*(.+)$/);
+            if (jsonMatch && jsonMatch[1]) {
+              errorData = JSON.parse(jsonMatch[1]);
+            }
+          } catch (e) {}
+          
+          const isRetryable = errorData.retryable === true || 
+            errorMessage.includes("503") ||
+            errorMessage.includes("ai_service_unavailable");
+          const isValidation = errorData.validationError || errorData.message === "validation_failed";
+          const isAuthError = errorMessage.includes("401") || errorMessage.includes("403");
+          const isLastAttempt = attempt >= MAX_AUTO_RETRIES;
+          
+          if (!isRetryable || isValidation || isAuthError || isLastAttempt) {
+            throw error;
+          }
+          
+          console.log(`[Retry] Attempt ${attempt + 1}/${MAX_AUTO_RETRIES} after ${RETRY_DELAYS[attempt]}ms...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        }
+      }
+      
+      throw lastError;
     },
     onMutate: () => {
       setPreviousKpis({ ...kpis });
@@ -196,7 +232,6 @@ export default function Simulation() {
       return { interval };
     },
     onSuccess: (response, input) => {
-      // Check if revision is required
       if (response.requiresRevision) {
         handleRevisionRequest(response);
       } else {
@@ -217,7 +252,6 @@ export default function Simulation() {
         return;
       }
       
-      // Try to parse JSON from error message (format: "400: {json}")
       const errorMessage = error?.message || "";
       let errorData: any = {};
       try {
@@ -225,16 +259,12 @@ export default function Simulation() {
         if (jsonMatch && jsonMatch[1]) {
           errorData = JSON.parse(jsonMatch[1]);
         }
-      } catch (e) {
-        // Not JSON, use raw message
-      }
+      } catch (e) {}
       
-      // Handle validation errors - stay on same question, show message
       if (errorData.validationError || errorData.message === "validation_failed") {
         const userMessage = errorData.userMessage || 
           "Tu respuesta no pudo procesarse. Asegúrate de que:\n• La respuesta esté relacionada con el caso\n• Explique tu razonamiento o decisión\n• Mantenga un tono profesional";
         setValidationError(userMessage);
-        // Don't show toast for validation - the inline message is shown instead
         return;
       }
       
@@ -246,9 +276,15 @@ export default function Simulation() {
         return;
       }
       
+      const isAIError = errorData.retryable === true || 
+        errorMessage.includes("503") || 
+        errorMessage.includes("ai_service_unavailable");
+      
       toast({
-        title: "Error",
-        description: "No se pudo procesar tu decisión. Por favor intenta de nuevo.",
+        title: isAIError ? "Servicio Temporalmente Ocupado" : "Error",
+        description: isAIError 
+          ? "El servicio de IA no está disponible en este momento. Por favor espera unos segundos e intenta de nuevo."
+          : "No se pudo procesar tu decisión. Por favor intenta de nuevo.",
         variant: "destructive",
       });
     },
@@ -307,7 +343,7 @@ export default function Simulation() {
           </Button>
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
-            <span className="font-semibold hidden sm:inline">ScenarioX</span>
+            <span className="font-semibold hidden sm:inline">Scenario+</span>
           </div>
         </div>
 

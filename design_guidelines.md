@@ -1,4 +1,4 @@
-# ScenarioX Engine Design Guidelines
+# Scenario+ Engine Design Guidelines
 
 ## Design Approach
 
