@@ -340,7 +340,7 @@ export function InputConsole({
                   : "¿Cuál es tu decisión?"
               }
               disabled={isDisabled}
-              className="min-h-24 max-h-48 resize-none text-base"
+              className="min-h-16 max-h-32 resize-none text-base"
               data-testid="input-decision"
             />
           </div>

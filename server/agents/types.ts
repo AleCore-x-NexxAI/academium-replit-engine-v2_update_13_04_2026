@@ -52,8 +52,8 @@ export interface EvaluatorOutput {
 }
 
 // POC Tier classification for metric changes
-export type MetricTier = 0 | 1 | 2 | 3;
-// Tier 0: no change, Tier 1: ±1-3, Tier 2: ±4-7, Tier 3: ±8-12 (rare, event-level)
+export type MetricTier = 1 | 2 | 3;
+// Tier 1: ±1-3, Tier 2: ±4-7, Tier 3: ±8-12 (rare, event-level)
 
 export interface MetricExplanation {
   shortReason: string; // One-line visible explanation

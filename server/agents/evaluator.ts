@@ -91,39 +91,49 @@ export async function evaluateDecision(context: AgentContext): Promise<Evaluator
     ? `CONSTRAINTS: ${context.scenario.keyConstraints.join("; ")}`
     : "";
 
+  const previousDecisions = context.history
+    .filter((h: any) => h.role === "user")
+    .map((h: any, i: number) => `  Decisión ${i + 1}: "${h.content}"`)
+    .join("\n");
+
+  const decisionNumber = context.turnCount + 1;
+  const totalDecisions = context.totalDecisions || 3;
+
   const userPrompt = `
-SIMULATION CONTEXT:
-Scenario: "${context.scenario.title}"
-Domain: ${context.scenario.domain}
-${context.scenario.companyName ? `Company: ${context.scenario.companyName}` : ""}
-${context.scenario.industry ? `Industry: ${context.scenario.industry}` : ""}
-Student Role: ${context.scenario.role}
-Objective: ${context.scenario.objective}
-Difficulty: ${context.scenario.difficultyLevel || "intermediate"}
-Turn: ${context.turnCount + 1}
+CONTEXTO DE LA SIMULACIÓN:
+Escenario: "${context.scenario.title}"
+Dominio: ${context.scenario.domain}
+${context.scenario.companyName ? `Empresa: ${context.scenario.companyName}` : ""}
+${context.scenario.industry ? `Industria: ${context.scenario.industry}` : ""}
+Rol del estudiante: ${context.scenario.role}
+Objetivo: ${context.scenario.objective}
+Dificultad: ${context.scenario.difficultyLevel || "intermedio"}
+Decisión: ${decisionNumber} de ${totalDecisions}
 
 ${learningGoals}
 ${ethicsContext}
 ${stakeholderContext}
 ${constraintsContext}
-${context.scenario.situationBackground ? `SITUATION: ${context.scenario.situationBackground}` : ""}
+${context.scenario.situationBackground ? `SITUACIÓN: ${context.scenario.situationBackground}` : ""}
 
-STUDENT'S DECISION: "${context.studentInput}"
+${previousDecisions ? `DECISIONES ANTERIORES:\n${previousDecisions}\n` : ""}
 
-CONVERSATION CONTEXT:
+DECISIÓN ACTUAL DEL ESTUDIANTE: "${context.studentInput}"
+
+CONTEXTO DE CONVERSACIÓN:
 ${recentHistory}
 
-EVALUATION TASK:
-Assess this decision across all four competencies. Remember:
-- Evaluate against the specific LEARNING OBJECTIVES if provided
-- Consider the ETHICAL DIMENSIONS relevant to this scenario
-- Note how well the student considered KEY STAKEHOLDERS
-- Account for CONSTRAINTS the student had to work within
-- Be specific about what the student did well
-- Frame growth areas constructively
-- Match evaluation rigor to the DIFFICULTY level
+TAREA DE EVALUACIÓN:
+Evalúa esta decisión (#${decisionNumber} de ${totalDecisions}) en las cuatro competencias.
+IMPORTANTE - Tu mensaje de retroalimentación DEBE:
+- Ser ESPECÍFICO a ESTA decisión concreta (decisión #${decisionNumber}), no genérico
+- Mencionar elementos concretos de lo que el estudiante decidió
+- Si hay decisiones anteriores, notar la evolución o consistencia del enfoque
+- Adaptar el tono según la etapa: ${decisionNumber === 1 ? "primera decisión - observar el enfoque inicial" : decisionNumber === totalDecisions ? "última decisión - observar la madurez del razonamiento" : "decisión intermedia - observar cómo se construye sobre las anteriores"}
+- Ser una observación NEUTRAL, no evaluativa
+- Estar en ESPAÑOL de Latinoamérica
 
-Provide your comprehensive evaluation.`;
+Devuelve tu evaluación completa en JSON.`;
 
   // Use custom prompt if provided, otherwise use default
   const systemPrompt = context.agentPrompts?.evaluator || DEFAULT_EVALUATOR_PROMPT;

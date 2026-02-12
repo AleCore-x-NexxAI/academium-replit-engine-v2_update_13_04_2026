@@ -118,3 +118,12 @@ All simulation views display exactly 5 standard business indicators with consist
 - **Non-retryable errors** (validation, auth, session inactive) are NOT retried
 - **Friendly Messages**: Students see "El servicio de IA está temporalmente ocupado" instead of raw errors
 - **Branding**: All UI references use "Scenario+" (not ScenarioX); lowercase `scenariox` in emails/keys preserved
+
+### Dynamic Indicator Engine (February 2026)
+- **Domain Expert Rewrite** (`server/agents/domainExpert.ts`): Prompt builds dynamically from actual scenario indicators instead of hardcoded 4 POC indicators
+- **Broken Mapping Removed**: Previously, 4 hardcoded indicators (teamMorale, budgetImpact, operationalRisk, strategicFlexibility) were mapped to 5 standard indicators, causing `strategicFlexibility` to map to BOTH `reputation` AND `trust` (identical deltas). Now the LLM outputs deltas directly for the actual indicator IDs.
+- **Context-Sensitive Impacts**: Previous decisions are passed to the domain expert so different decisions produce genuinely different impacts
+- **Validation**: `indicatorDeltas` and `metricExplanations` are filtered to only valid indicator IDs from the scenario
+- **Evaluator Decision-Specific Feedback**: Evaluator now receives decision number, total decisions, previous decisions, and stage-specific tone instructions so mentor notes are unique per decision
+- **Results Page "Why" Explanations**: `SessionResults.tsx` aggregates `metricExplanations` from all turns per indicator; indicator cards are expandable to show causal chain explanations
+- **Direction-Aware Delta Coloring**: Results page respects indicator directionality (`up_better` vs `down_better`) for green/red coloring

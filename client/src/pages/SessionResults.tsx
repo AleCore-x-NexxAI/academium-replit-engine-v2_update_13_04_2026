@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain,
   ArrowLeft,
@@ -21,6 +21,8 @@ import {
   Sparkles,
   Trophy,
   Compass,
+  ChevronDown,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,7 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import type { SimulationSession, Scenario, Turn, Indicator } from "@shared/schema";
+import type { SimulationSession, Scenario, Turn, Indicator, MetricExplanation } from "@shared/schema";
 
 const KPI_ICONS: Record<string, React.ElementType> = {
   revenue: DollarSign,
@@ -94,6 +96,129 @@ const INDICATOR_ICON_COLORS: Record<string, string> = {
   operationalRisk: "text-orange-600 dark:text-orange-400",
   strategicFlexibility: "text-cyan-600 dark:text-cyan-400",
 };
+
+interface IndicatorCardProps {
+  item: { key: string; label: string; initial: number; final: number; delta: number; Icon: React.ElementType };
+  index: number;
+  useIndicators: boolean;
+  explanations?: Array<{ turnNumber: number; shortReason: string; causalChain: string[] }>;
+  direction?: string;
+}
+
+function IndicatorResultCard({ item, index, useIndicators, explanations, direction }: IndicatorCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const { key, label, initial, final: finalVal, delta, Icon } = item;
+  const hasExplanations = explanations && explanations.length > 0;
+
+  const isPositive = direction === "down_better" ? delta <= 0 : delta >= 0;
+
+  return (
+    <motion.div
+      key={key}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.35 + index * 0.05 }}
+    >
+      <Card
+        className={`p-4 border-2 bg-gradient-to-br ${INDICATOR_COLORS[key] || 'from-primary/20 to-primary/5 border-primary/40'} rounded-xl transition-all ${hasExplanations ? 'cursor-pointer' : ''}`}
+        data-testid={`indicator-${key}`}
+        onClick={() => hasExplanations && setExpanded(!expanded)}
+      >
+        <div className="flex items-start justify-between mb-3">
+          <div className={`w-10 h-10 rounded-lg bg-background/80 flex items-center justify-center ${INDICATOR_ICON_COLORS[key] || 'text-primary'}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${
+                isPositive
+                  ? "bg-chart-2/20 text-chart-2" 
+                  : "bg-chart-4/20 text-chart-4"
+              }`}
+            >
+              {delta >= 0 ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
+              )}
+              {delta >= 0 ? "+" : ""}
+              {useIndicators
+                ? delta
+                : key === "revenue"
+                ? `$${Math.abs(delta).toLocaleString()}`
+                : `${delta}%`}
+            </div>
+            {hasExplanations && (
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            )}
+          </div>
+        </div>
+        
+        <h3 className="font-semibold text-sm mb-1">{label}</h3>
+        {direction && (
+          <p className="text-xs text-muted-foreground mb-2">
+            {direction === "down_better" ? "↓ mejor" : "↑ mejor"}
+          </p>
+        )}
+        
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold">
+            {useIndicators ? finalVal : formatKpiValue(key, finalVal)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            desde {useIndicators ? initial : formatKpiValue(key, initial)}
+          </span>
+        </div>
+
+        <div className="mt-3 h-1.5 bg-background/50 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ 
+              width: `${Math.min(100, useIndicators ? finalVal : (key === "revenue" ? (finalVal / (initial || 100000)) * 50 : finalVal))}%` 
+            }}
+            transition={{ delay: 0.5 + index * 0.05, duration: 0.8 }}
+            className="h-full bg-foreground/30 rounded-full"
+          />
+        </div>
+
+        <AnimatePresence>
+          {expanded && hasExplanations && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-4 pt-3 border-t border-foreground/10 space-y-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Por qué cambió</span>
+                </div>
+                {explanations!.map((exp, i) => (
+                  <div key={i} className="text-xs space-y-1">
+                    <p className="font-medium text-foreground/80">
+                      Decisión {exp.turnNumber}: {exp.shortReason}
+                    </p>
+                    {exp.causalChain.length > 0 && (
+                      <ul className="pl-3 space-y-0.5">
+                        {exp.causalChain.map((chain, ci) => (
+                          <li key={ci} className="text-muted-foreground text-xs leading-relaxed">
+                            {chain}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Card>
+    </motion.div>
+  );
+}
 
 function formatKpiValue(key: string, value: number): string {
   if (key === "revenue") {
@@ -198,8 +323,28 @@ export default function SessionResults() {
       final: indicator.value,
       delta,
       Icon: INDICATOR_ICONS[indicator.id] || Gauge,
+      direction: indicator.direction || "up_better",
     };
   }) || [];
+
+  const indicatorExplanations: Record<string, Array<{ turnNumber: number; shortReason: string; causalChain: string[] }>> = {};
+  if (turns) {
+    for (const turn of turns) {
+      const explanations = turn.agentResponse?.metricExplanations;
+      if (explanations) {
+        for (const [indicatorId, explanation] of Object.entries(explanations)) {
+          if (!indicatorExplanations[indicatorId]) {
+            indicatorExplanations[indicatorId] = [];
+          }
+          indicatorExplanations[indicatorId].push({
+            turnNumber: turn.turnNumber,
+            shortReason: (explanation as MetricExplanation).shortReason || "",
+            causalChain: (explanation as MetricExplanation).causalChain || [],
+          });
+        }
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5">
@@ -348,66 +493,15 @@ export default function SessionResults() {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {(useIndicators ? indicatorComparison : kpiComparison).map(
-              ({ key, label, initial, final, delta, Icon }, index) => (
-                <motion.div
-                  key={key}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.35 + index * 0.05 }}
-                >
-                  <Card
-                    className={`p-4 border-2 bg-gradient-to-br ${INDICATOR_COLORS[key] || 'from-primary/20 to-primary/5 border-primary/40'} rounded-xl hover-elevate transition-all`}
-                    data-testid={`indicator-${key}`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className={`w-10 h-10 rounded-lg bg-background/80 flex items-center justify-center ${INDICATOR_ICON_COLORS[key] || 'text-primary'}`}>
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${
-                          delta >= 0 
-                            ? "bg-chart-2/20 text-chart-2" 
-                            : "bg-chart-4/20 text-chart-4"
-                        }`}
-                      >
-                        {delta >= 0 ? (
-                          <TrendingUp className="w-3 h-3" />
-                        ) : (
-                          <TrendingDown className="w-3 h-3" />
-                        )}
-                        {delta >= 0 ? "+" : ""}
-                        {useIndicators
-                          ? delta
-                          : key === "revenue"
-                          ? `$${Math.abs(delta).toLocaleString()}`
-                          : `${delta}%`}
-                      </div>
-                    </div>
-                    
-                    <h3 className="font-semibold text-sm mb-2">{label}</h3>
-                    
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold">
-                        {useIndicators ? final : formatKpiValue(key, final)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        desde {useIndicators ? initial : formatKpiValue(key, initial)}
-                      </span>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="mt-3 h-1.5 bg-background/50 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ 
-                          width: `${Math.min(100, useIndicators ? final : (key === "revenue" ? (final / (initial || 100000)) * 50 : final))}%` 
-                        }}
-                        transition={{ delay: 0.5 + index * 0.05, duration: 0.8 }}
-                        className="h-full bg-foreground/30 rounded-full"
-                      />
-                    </div>
-                  </Card>
-                </motion.div>
+              (item, index) => (
+                <IndicatorResultCard
+                  key={item.key}
+                  item={item}
+                  index={index}
+                  useIndicators={!!useIndicators}
+                  explanations={indicatorExplanations[item.key]}
+                  direction={(item as any).direction}
+                />
               )
             )}
           </div>
