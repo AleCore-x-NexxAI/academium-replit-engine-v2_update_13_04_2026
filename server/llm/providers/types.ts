@@ -4,6 +4,7 @@ export interface ProviderAdapter {
   readonly name: string;
   readonly type: ProviderType;
   readonly maxConcurrent: number;
+  readonly costTier: number;
 
   activeRequests: number;
   totalRequests: number;

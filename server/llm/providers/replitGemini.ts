@@ -11,7 +11,7 @@ export class ReplitGeminiProvider extends BaseProvider {
       apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
       baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
     };
-    super("Replit Gemini", "replit-gemini", [key], 10);
+    super("Replit Gemini", "replit-gemini", [key], 10, 1);
 
     this.client = new GoogleGenAI({
       apiKey: key.apiKey,

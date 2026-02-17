@@ -7,7 +7,7 @@ export class GeminiDirectProvider extends BaseProvider {
   private clients: GoogleGenAI[];
 
   constructor(keys: ProviderKeyConfig[], maxConcurrentPerKey = 25) {
-    super("Gemini Direct", "gemini-direct", keys, maxConcurrentPerKey);
+    super("Gemini Direct", "gemini-direct", keys, maxConcurrentPerKey, 2);
     this.clients = keys.map(
       (k) =>
         new GoogleGenAI({

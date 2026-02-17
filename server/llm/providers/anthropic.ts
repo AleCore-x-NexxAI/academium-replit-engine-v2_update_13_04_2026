@@ -6,7 +6,7 @@ export class AnthropicProvider extends BaseProvider {
   private anthropicKeys: ProviderKeyConfig[];
 
   constructor(keys: ProviderKeyConfig[], maxConcurrentPerKey = 20) {
-    super("Anthropic Direct", "anthropic", keys, maxConcurrentPerKey);
+    super("Anthropic Direct", "anthropic", keys, maxConcurrentPerKey, 4);
     this.anthropicKeys = keys;
   }
 

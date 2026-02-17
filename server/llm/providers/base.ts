@@ -21,6 +21,7 @@ export abstract class BaseProvider implements ProviderAdapter {
   readonly name: string;
   readonly type: ProviderType;
   readonly maxConcurrent: number;
+  readonly costTier: number;
 
   activeRequests = 0;
   totalRequests = 0;
@@ -39,12 +40,14 @@ export abstract class BaseProvider implements ProviderAdapter {
     type: ProviderType,
     keys: ProviderKeyConfig[],
     maxConcurrentPerKey: number,
+    costTier: number,
     timeoutMs = 90000
   ) {
     this.name = name;
     this.type = type;
     this.keys = keys;
     this.maxConcurrent = maxConcurrentPerKey * keys.length;
+    this.costTier = costTier;
     this.limiter = pLimit(this.maxConcurrent);
     this.timeoutMs = timeoutMs;
   }

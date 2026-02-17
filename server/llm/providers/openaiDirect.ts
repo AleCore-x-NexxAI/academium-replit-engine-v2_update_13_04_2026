@@ -7,7 +7,7 @@ export class OpenAIDirectProvider extends BaseProvider {
   private clients: OpenAI[];
 
   constructor(keys: ProviderKeyConfig[], maxConcurrentPerKey = 15) {
-    super("OpenAI Direct", "openai-direct", keys, maxConcurrentPerKey);
+    super("OpenAI Direct", "openai-direct", keys, maxConcurrentPerKey, 4);
     this.clients = keys.map(
       (k) =>
         new OpenAI({

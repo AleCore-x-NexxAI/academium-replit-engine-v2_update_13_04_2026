@@ -11,7 +11,7 @@ export class ReplitOpenAIProvider extends BaseProvider {
       apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "",
       baseUrl: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
     };
-    super("Replit OpenAI", "replit-openai", [key], 10);
+    super("Replit OpenAI", "replit-openai", [key], 10, 1);
 
     this.client = new OpenAI({
       baseURL: key.baseUrl,

@@ -8,7 +8,7 @@ export class OpenRouterProvider extends BaseProvider {
   private clients: OpenAI[];
 
   constructor(keys: ProviderKeyConfig[], maxConcurrentPerKey = 30) {
-    super("OpenRouter", "openrouter", keys, maxConcurrentPerKey);
+    super("OpenRouter", "openrouter", keys, maxConcurrentPerKey, 3);
     this.clients = keys.map(
       (k) =>
         new OpenAI({

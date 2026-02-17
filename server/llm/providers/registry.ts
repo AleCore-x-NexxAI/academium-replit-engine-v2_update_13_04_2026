@@ -42,8 +42,10 @@ class ProviderRegistry {
     }
 
     const openRouterKeys = parseKeys(process.env.OPENROUTER_API_KEYS);
-    if (process.env.OPENROUTER2_API_KEY) {
-      openRouterKeys.push({ apiKey: process.env.OPENROUTER2_API_KEY.trim() });
+    for (const envKey of ["OPENROUTER2_API_KEY", "OPENROUTER3_API_KEY", "OPENROUTER4_API_KEY"]) {
+      if (process.env[envKey]) {
+        openRouterKeys.push({ apiKey: process.env[envKey]!.trim() });
+      }
     }
     if (openRouterKeys.length > 0) {
       try {

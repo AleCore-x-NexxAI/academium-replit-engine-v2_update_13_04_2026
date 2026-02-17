@@ -27,8 +27,10 @@ function selectBestProvider(providers: ProviderAdapter[]): ProviderAdapter | nul
   }
 
   available.sort((a, b) => {
-    const aSlots = a.maxConcurrent - a.activeRequests;
-    const bSlots = b.maxConcurrent - b.activeRequests;
+    if (a.costTier !== b.costTier) {
+      return a.costTier - b.costTier;
+    }
+
     const aUtilization = a.activeRequests / a.maxConcurrent;
     const bUtilization = b.activeRequests / b.maxConcurrent;
 
@@ -36,13 +38,8 @@ function selectBestProvider(providers: ProviderAdapter[]): ProviderAdapter | nul
       return aUtilization - bUtilization;
     }
 
-    if (a.avgLatencyMs > 0 && b.avgLatencyMs > 0) {
-      const latencyDiff = a.avgLatencyMs - b.avgLatencyMs;
-      if (Math.abs(latencyDiff) > 2000) {
-        return latencyDiff;
-      }
-    }
-
+    const bSlots = b.maxConcurrent - b.activeRequests;
+    const aSlots = a.maxConcurrent - a.activeRequests;
     return bSlots - aSlots;
   });
 
