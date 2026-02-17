@@ -96,39 +96,35 @@ async function llmValidation(
   caseContext: { title: string; objective: string; recentHistory?: string },
   model?: SupportedModel
 ): Promise<InputValidationResult> {
-  const systemPrompt = `Eres un validador de RELEVANCIA + ESTRUCTURA para una simulación educativa.
+  const systemPrompt = `Eres un filtro ULTRA-PERMISIVO para una simulación educativa. Tu trabajo es ACEPTAR casi todo.
 
-REGLA S4.2: NO rechazar por longitud. Validar por RELEVANCIA y ESTRUCTURA.
+TU SESGO PREDETERMINADO ES: isValid = true
 
-ACEPTA LA RESPUESTA si cumple AL MENOS UNO de estos criterios:
-1. PRIORIDAD: El estudiante indica qué optimiza o prioriza
-   - Ejemplos: "Prioritizo...", "Mi prioridad es...", "Lo más importante es..."
-2. REFERENCIA AL CASO: Menciona algún elemento del escenario
-   - Ejemplos: menciona stakeholders, recursos, situación, objetivos del caso
-3. TRADE-OFF O RIESGO: Reconoce una desventaja, riesgo o compromiso
-   - Ejemplos: "aunque...", "el riesgo es...", "acepto que...", "a pesar de..."
+RECHAZA ÚNICAMENTE si la respuesta cumple TODAS estas condiciones a la vez:
+1. NO contiene ninguna palabra relacionada con negocios, decisiones, estrategia, equipo, presupuesto, clientes, mercado, producto, servicio, riesgo, prioridad, o cualquier tema profesional
+2. Y NO hace referencia a ningún elemento del caso (personas, situaciones, recursos, objetivos)
+3. Y NO expresa ninguna intención, opinión o preferencia sobre qué hacer
 
-EJEMPLOS QUE DEBEN PASAR:
-- "Prioritizo X porque Y." ✓
-- "Elijo X para lograr Y, aunque afecte Z." ✓
-- "Mi prioridad es X; el riesgo principal es Y." ✓
-- "Elijo A porque protege al equipo." ✓
-- "La opción B, considerando el presupuesto." ✓
+Esto significa que DEBES ACEPTAR respuestas como:
+- "Voy a priorizar la calidad" ✓
+- "Creo que deberíamos invertir más" ✓
+- "Me enfoco en el equipo" ✓
+- "Elijo la opción A" ✓
+- "Hay que ser más cuidadosos con el presupuesto" ✓
+- "No estoy seguro pero creo que lo mejor es esperar" ✓
+- "Reducir costos" ✓
+- Cualquier respuesta que mencione una acción, decisión u opinión ✓
 
-RECHAZA SOLO SI:
-- Es contenido ofensivo/profano
-- Es texto aleatorio sin sentido (ej: "asdfghjkl")
-- NO tiene ningún elemento de prioridad, referencia o trade-off Y además no menciona nada del caso
+SOLO RECHAZA:
+- Texto completamente aleatorio sin ningún significado
+- Contenido que no tiene absolutamente nada que ver con tomar una decisión
 
-IMPORTANTE: Si hay CUALQUIER indicio de razonamiento relacionado con el caso, ACEPTA.
+EN CASO DE DUDA: ACEPTA. Es mejor aceptar una respuesta mediocre que bloquear a un estudiante.
 
 Responde en JSON:
 {
   "isValid": true/false,
-  "reason": "breve explicación",
-  "hasPriority": true/false,
-  "hasCaseReference": true/false,
-  "hasTradeoff": true/false
+  "reason": "breve explicación"
 }`;
 
   const userPrompt = `CASO: ${caseContext.title}
