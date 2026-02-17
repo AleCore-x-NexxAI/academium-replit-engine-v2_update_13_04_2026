@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-02-17T15:30:45.772Z",
+  "config": {
+    "base_url": "https://simu-learn-engine--avalancheai.replit.app",
+    "students": 20,
+    "duration": "3m"
+  },
+  "overview": {
+    "total_requests": 1414,
+    "http_fail_rate": "37.3%",
+    "agent_error_rate": "75.9%",
+    "rate_limits": 1,
+    "server_errors": 0,
+    "agent_timeouts": 0
+  },
+  "pages": {
+    "avg": "0.21s",
+    "med": "0.20s",
+    "p95": "0.23s",
+    "max": "2.68s",
+    "count": 0
+  },
+  "api": {
+    "avg": "0.51s",
+    "med": "0.43s",
+    "p95": "0.94s",
+    "max": "2.80s",
+    "count": 0
+  },
+  "agent_decisions": {
+    "avg": "8.11s",
+    "med": "2.73s",
+    "p95": "26.05s",
+    "max": "37.57s",
+    "count": 0
+  },
+  "agent_reflection": {
+    "avg": "4.58s",
+    "med": "2.42s",
+    "p95": "19.52s",
+    "max": "30.35s",
+    "count": 0
+  },
+  "agent_all": {
+    "avg": "5.86s",
+    "med": "2.26s",
+    "p95": "24.05s",
+    "max": "37.57s",
+    "count": 0
+  },
+  "sim_start": {
+    "avg": "0.48s",
+    "med": "0.45s",
+    "p95": "0.67s",
+    "max": "0.95s",
+    "count": 0
+  },
+  "verdict": "🔴 STILL BROKEN — Agent concurrency still a bottleneck. Review provider setup."
+}

@@ -1,0 +1,74 @@
+Let me take a look at the HTML reports too for any additional detail.Good — I have everything I need. Here's a full breakdown:
+
+---
+
+## Overall Verdict
+
+Both runs came back **🔴 STILL BROKEN**, and that's accurate. The system has a clear split personality: the infrastructure is healthy, but the AI agent layer is falling apart under concurrency. Let me break it down.
+
+---
+
+## What Worked: Infrastructure Is Solid
+
+This is actually good news. In both runs, every single infrastructure check passed at **100%**:
+
+- Homepage, `/explore`, `/simulation/start/test` — all returned 200s every time
+- Auth, scenarios list, sessions list — all perfect
+
+Page load times are also fine. At 20 VUs the median was 0.20s; at 50 VUs it barely budged to 0.27s. The server itself is not the problem. It's scaling correctly, it's not crashing, and it's responding to web requests without issue.
+
+Sim start is also rock solid — median ~0.42–0.45s in both runs, very consistent.
+
+---
+
+## What Didn't Work: The Agent Layer
+
+This is where everything breaks, and it gets *worse* as you scale.
+
+**Error rates are catastrophically high and climbing:**
+
+| Metric | 20 VUs (3m) | 50 VUs (5m) |
+|---|---|---|
+| HTTP fail rate | 37.3% | 52.5% |
+| Agent error rate | 75.9% | 83.1% |
+| Rate limits hit | 1 | 6 |
+| Server errors (5xx) | 0 | 48 |
+
+The jump from 1 rate limit to 6, and from 0 server errors to 48, when going from 20 to 50 VUs is a strong signal. Something upstream — almost certainly the LLM API provider — is getting overwhelmed.
+
+**Agent response times are slow and extremely inconsistent:**
+
+| Metric | 20 VUs | 50 VUs |
+|---|---|---|
+| Agent median | 2.26s | 2.04s |
+| Agent p95 | 24.05s | 26.68s |
+| Agent max | 37.57s | 50.87s |
+| Decision p95 | 26.05s | 29.38s |
+
+The median looks deceptively okay, but the gap between median and p95 is enormous — roughly a 10–12x spread. That tells you requests are falling into two buckets: ones that get through quickly, and ones that are queuing or retrying and taking 20–50 seconds. This is classic behavior when you're hitting a rate-limited or concurrency-throttled API.
+
+**Decision latency SLOs are failing and worsening:**
+
+The checks for "Decision under 30s" tell the story clearly:
+
+| Decision | 20 VUs pass rate | 50 VUs pass rate |
+|---|---|---|
+| Decision 1 | 87.5% | 79.2% |
+| Decision 2 | 96.2% | 76.9% |
+| Decision 3 | 85.7% | 76.5% |
+
+All three degraded significantly when going from 20 to 50 VUs. Even the 45-second threshold, which is quite lenient, started failing at 50 VUs (Decision 1: 97.9% → Decision 3: 93.8%).
+
+---
+
+## Why: The Root Cause
+
+The evidence points to one primary bottleneck: **your LLM provider can't handle this level of concurrent agent calls.** The symptoms are all consistent with this — rate limit hits, 5xx server errors, massive p95/max latency spikes, and error rates that scale up with VU count. The infrastructure layer is fine; the requests die once they reach the AI decision and reflection endpoints.
+
+The secondary issue is that your agent error rate (83%) is far higher than your HTTP fail rate (52.5%), meaning many calls are technically completing but returning usable-but-bad responses — empty content, malformed JSON, or errors wrapped in 200s.
+
+**Where to look next:**
+- Check your LLM provider's rate limits and concurrency caps — you're likely hitting them hard at 50 concurrent students
+- Consider adding a request queue or concurrency limiter on the agent side so you control the burst rather than the provider rejecting it
+- Look into whether you're on a tier that supports higher TPM/RPM, or whether you need to add retry logic with backoff
+- The 48 server errors at 50 VUs also suggests your own backend may be crashing or timing out when the agent responses are slow — worth checking your backend logs for that window
