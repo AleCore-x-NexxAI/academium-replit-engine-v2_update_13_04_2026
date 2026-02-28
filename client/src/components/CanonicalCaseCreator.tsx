@@ -160,6 +160,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
       return response.json() as Promise<GenerateResponse>;
     },
     onSuccess: (data) => {
+      setIsEditing(false);
       setDraftId(data.draft.id);
       setCanonicalCase(data.canonicalCase);
       setScenarioData(data.scenarioData);
@@ -516,6 +517,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
               setScenarioObjective("");
               setTradeoffFocus([]);
               setCustomTradeoff("");
+              setIsEditing(false);
             }}
             data-testid="button-regenerate"
           >
@@ -526,10 +528,10 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
             variant="ghost" 
             size="icon" 
             onClick={() => {
-              // Go back to AI input form (preserve state)
               setCanonicalCase(null);
               setScenarioData(null);
               setDraftId(null);
+              setIsEditing(false);
             }} 
             data-testid="button-back-to-input"
           >
@@ -540,6 +542,13 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
+          {!isEditing && (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted/50 text-sm text-muted-foreground">
+              <Edit2 className="w-4 h-4 shrink-0" />
+              <span>Modo vista. Haz clic en "Modo Edición" para modificar.</span>
+            </div>
+          )}
+
           <EditableSection title="Información General" icon={BookOpen}>
             <div className="space-y-4">
               <div>
@@ -548,7 +557,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   id="edit-title"
                   value={canonicalCase.title}
                   onChange={(e) => updateField("title", e.target.value)}
-                  className="mt-1"
+                  readOnly={!isEditing}
+                  className={`mt-1 ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                   data-testid="input-edit-title"
                 />
               </div>
@@ -558,7 +568,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   id="edit-description"
                   value={canonicalCase.description}
                   onChange={(e) => updateField("description", e.target.value)}
-                  className="mt-1"
+                  readOnly={!isEditing}
+                  className={`mt-1 ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                   data-testid="input-edit-description"
                 />
               </div>
@@ -569,7 +580,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                     id="edit-role"
                     value={canonicalCase.role}
                     onChange={(e) => updateField("role", e.target.value)}
-                    className="mt-1"
+                    readOnly={!isEditing}
+                    className={`mt-1 ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                     data-testid="input-edit-role"
                   />
                 </div>
@@ -579,7 +591,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                     id="edit-company"
                     value={canonicalCase.companyName}
                     onChange={(e) => updateField("companyName", e.target.value)}
-                    className="mt-1"
+                    readOnly={!isEditing}
+                    className={`mt-1 ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                     data-testid="input-edit-company"
                   />
                 </div>
@@ -600,7 +613,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   id="edit-context"
                   value={canonicalCase.caseContext}
                   onChange={(e) => updateField("caseContext", e.target.value)}
-                  className="mt-1 min-h-[150px]"
+                  readOnly={!isEditing}
+                  className={`mt-1 min-h-[150px] ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                   data-testid="input-edit-context"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -613,7 +627,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   id="edit-challenge"
                   value={canonicalCase.coreChallenge}
                   onChange={(e) => updateField("coreChallenge", e.target.value)}
-                  className="mt-1 min-h-[80px]"
+                  readOnly={!isEditing}
+                  className={`mt-1 min-h-[80px] ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                   data-testid="input-edit-challenge"
                 />
               </div>
@@ -633,7 +648,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   <Textarea
                     value={dp.prompt}
                     onChange={(e) => updateDecisionPoint(dpIndex, "prompt", e.target.value)}
-                    className="mt-1 min-h-[80px]"
+                    readOnly={!isEditing}
+                    className={`mt-1 min-h-[80px] ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                     data-testid={`input-decision-${dp.number}-prompt`}
                   />
                 </div>
@@ -649,6 +665,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                         <Input
                           value={option}
                           onChange={(e) => updateOption(dpIndex, optIndex, e.target.value)}
+                          readOnly={!isEditing}
+                          className={!isEditing ? "opacity-70 cursor-default" : ""}
                           data-testid={`input-decision-${dp.number}-option-${optIndex}`}
                         />
                       </div>
@@ -675,7 +693,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                 id="edit-reflection"
                 value={canonicalCase.reflectionPrompt}
                 onChange={(e) => updateField("reflectionPrompt", e.target.value)}
-                className="mt-1"
+                readOnly={!isEditing}
+                className={`mt-1 ${!isEditing ? "opacity-70 cursor-default" : ""}`}
                 data-testid="input-edit-reflection"
               />
               <p className="text-xs text-muted-foreground mt-1">
