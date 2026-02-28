@@ -138,3 +138,7 @@ All simulation views display exactly 5 standard business indicators with consist
 - **Evaluator Decision-Specific Feedback**: Evaluator now receives decision number, total decisions, previous decisions, and stage-specific tone instructions so mentor notes are unique per decision
 - **Results Page "Why" Explanations**: `SessionResults.tsx` aggregates `metricExplanations` from all turns per indicator; indicator cards are expandable to show causal chain explanations
 - **Direction-Aware Delta Coloring**: Results page respects indicator directionality (`up_better` vs `down_better`) for green/red coloring
+
+### Indicator Delta Fixes (February 2026)
+- **Backend Delta Persistence** (`server/agents/director.ts`): Director now applies `indicatorDeltas` to `context.indicators` before saving to `updatedState`. Previously, `updatedState.indicators` was set to the unchanged input indicators, so the database always stored the original values — making Start→End show identical numbers on the results page.
+- **Increased Delta Ranges** (`server/agents/domainExpert.ts`): Tier ranges widened so decisions produce visible impact: Tier 1 ±3-6 (was ±1-3), Tier 2 ±7-12 (was ±4-7), Tier 3 ±13-20 (was ±8-12). Tier 2 is now the standard range. Delta clamp raised to ±20 (was ±12). Up to 4 indicators can change per turn (was 2-3).

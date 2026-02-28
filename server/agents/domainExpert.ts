@@ -12,7 +12,7 @@ function buildDomainExpertPrompt(indicators: Indicator[]): string {
   }).join("\n");
 
   const indicatorJsonFields = indicators.map(ind => 
-    `    "${ind.id}": <número -12 a +12, o 0 si no cambia>`
+    `    "${ind.id}": <número -20 a +20, o 0 si no cambia>`
   ).join(",\n");
 
   return `Eres un EXPERTO EN LA MATERIA y ANALISTA DE NEGOCIOS para Scenario+, una plataforma educativa de simulación de decisiones.
@@ -23,18 +23,18 @@ TU DOBLE ROL:
 
 ## REGLAS CRÍTICAS (NO NEGOCIABLES)
 
-### REGLA 1: MÁXIMO 2-3 INDICADORES POR TURNO
-- Una decisión puede cambiar MÁXIMO 2-3 indicadores por turno
-- Si más indicadores cambiarían lógicamente, prioriza los 2-3 más directos
-- Los demás quedan en 0 para este turno
+### REGLA 1: 3-4 INDICADORES POR TURNO
+- Una decisión debe cambiar 3-4 indicadores por turno
+- Solo deja un indicador en 0 si genuinamente NO tiene relación con la decisión
+- Queremos que el estudiante VEA el impacto de sus decisiones en los resultados finales
 
 ### REGLA 2: SISTEMA DE NIVELES (TIERS) OBLIGATORIO
 Clasifica CADA cambio de indicador en un nivel:
-- **Tier 1**: ±1 a ±3 (cambio menor, impacto leve)
-- **Tier 2**: ±4 a ±7 (cambio moderado, impacto significativo)
-- **Tier 3**: ±8 a ±12 (cambio mayor, RARO - solo en eventos extremos)
+- **Tier 1**: ±3 a ±6 (cambio menor, impacto leve)
+- **Tier 2**: ±7 a ±12 (cambio moderado, impacto significativo — RANGO ESTÁNDAR)
+- **Tier 3**: ±13 a ±20 (cambio mayor, para decisiones arriesgadas o pivotales)
 
-⚠️ Las decisiones deben vivir mayormente en Tier 1-2. Tier 3 es RARO y debe justificarse con un evento mayor.
+⚠️ La MAYORÍA de los cambios deben estar en Tier 2 (±7 a ±12). Tier 1 es para efectos secundarios menores. Tier 3 para decisiones audaces con grandes consecuencias.
 
 ### REGLA 3: SENSIBILIDAD AL CONTEXTO (OBLIGATORIA)
 Los cambios en indicadores DEBEN ser ESPECÍFICOS a la decisión real del estudiante:
@@ -182,17 +182,17 @@ Devuelve SOLO JSON válido en el formato especificado.`;
     );
     
     const nonZeroEntries = Object.entries(indicatorDeltas).filter(([_, v]) => v !== 0);
-    if (nonZeroEntries.length > 3) {
+    if (nonZeroEntries.length > 4) {
       const sorted = nonZeroEntries.sort((a, b) => Math.abs(b[1] as number) - Math.abs(a[1] as number));
-      const top3Keys = sorted.slice(0, 3).map(([k]) => k);
+      const top4Keys = sorted.slice(0, 4).map(([k]) => k);
       indicatorDeltas = Object.fromEntries(
-        Object.entries(indicatorDeltas).map(([k, v]) => [k, top3Keys.includes(k) ? v : 0])
+        Object.entries(indicatorDeltas).map(([k, v]) => [k, top4Keys.includes(k) ? v : 0])
       );
     }
     
     for (const key of Object.keys(indicatorDeltas)) {
       const val = indicatorDeltas[key] as number;
-      indicatorDeltas[key] = Math.max(-12, Math.min(12, val));
+      indicatorDeltas[key] = Math.max(-20, Math.min(20, val));
     }
     
     const KNOWN_KPI_KEYS = ["revenue", "morale", "reputation", "efficiency", "trust"];

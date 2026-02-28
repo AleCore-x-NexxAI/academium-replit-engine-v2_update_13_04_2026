@@ -455,12 +455,18 @@ export async function processStudentTurn(
   const totalDecisions = context.totalDecisions || 0;
   const decisionsComplete = totalDecisions > 0 && nextDecision > totalDecisions;
   
-  // S9.1: After all decisions, move to reflection step instead of completing
-  // Only mark isComplete if there's a game over from KPIs
+  const updatedIndicators = (context.indicators || []).map((indicator: any) => {
+    const delta = kpiImpact.indicatorDeltas?.[indicator.id] || 0;
+    return {
+      ...indicator,
+      value: Math.max(0, Math.min(100, indicator.value + delta)),
+    };
+  });
+
   const updatedState: SimulationState = {
     turnCount: context.turnCount + 1,
     kpis: newKpis,
-    indicators: context.indicators,
+    indicators: updatedIndicators,
     history: newHistory,
     flags: [...(context.history as any).flags || [], ...evaluation.flags],
     rubricScores: evaluation.competencyScores,
