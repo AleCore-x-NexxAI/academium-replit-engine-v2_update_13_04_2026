@@ -203,8 +203,8 @@ export function InputConsole({
           animate={{ opacity: 1, y: 0 }}
           className="mb-4"
         >
-          <Card className="p-5 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/30 border-l-4 border-l-primary">
-            <div className="flex items-center justify-between mb-3">
+          <Card className="p-3 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/30 border-l-4 border-l-primary">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
                   <Send className="w-4 h-4 text-primary" />
@@ -219,13 +219,13 @@ export function InputConsole({
                   : "Activa"}
               </Badge>
             </div>
-            <p className="text-base font-medium text-foreground leading-relaxed" data-testid="text-decision-prompt">
+            <p className="text-sm font-medium text-foreground leading-relaxed" data-testid="text-decision-prompt">
               {currentDecisionPoint.prompt}
             </p>
             
             {/* S7.1: Focus Cue - mentorship-style guidance */}
             {currentDecisionPoint.focusCue && (
-              <div className="mt-3 pt-3 border-t border-primary/10">
+              <div className="mt-2 pt-2 border-t border-primary/10">
                 <p className="text-sm text-muted-foreground italic" data-testid="text-focus-cue">
                   {currentDecisionPoint.focusCue}
                 </p>
@@ -234,11 +234,11 @@ export function InputConsole({
             
             {/* S5.1: Thinking Scaffold - guide reasoning without giving answers */}
             {currentDecisionPoint.thinkingScaffold && currentDecisionPoint.thinkingScaffold.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-primary/10">
-                <p className="text-sm font-medium text-muted-foreground mb-2" data-testid="text-thinking-scaffold-label">
+              <div className="mt-2 pt-2 border-t border-primary/10">
+                <p className="text-sm font-medium text-muted-foreground mb-1" data-testid="text-thinking-scaffold-label">
                   Piensa en:
                 </p>
-                <ul className="space-y-1" data-testid="list-thinking-scaffold">
+                <ul className="space-y-0.5" data-testid="list-thinking-scaffold">
                   {currentDecisionPoint.thinkingScaffold.map((item, index) => (
                     <li key={index} className="flex items-center gap-2 text-sm text-muted-foreground">
                       <span className="w-1.5 h-1.5 rounded-full bg-primary/50 flex-shrink-0" />
