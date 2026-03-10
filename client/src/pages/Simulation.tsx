@@ -357,10 +357,9 @@ export default function Simulation() {
     },
   });
 
-  const handleSubmit = (input: string) => {
-    // Clear any previous validation error when submitting new input
+  const handleSubmit = async (input: string) => {
     setValidationError(null);
-    submitMutation.mutate(input);
+    return submitMutation.mutateAsync(input);
   };
 
   if (authLoading || sessionLoading) {

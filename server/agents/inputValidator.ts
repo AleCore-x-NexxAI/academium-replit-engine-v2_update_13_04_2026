@@ -1,7 +1,7 @@
 /**
  * Input Validation Agent
  * 
- * POC S4.1: LENIENT VALIDATION - Only block on truly problematic input
+ * VERY LENIENT VALIDATION - Only block on truly problematic input
  * 
  * This agent validates student/user input BEFORE any main simulation processing.
  * 
@@ -9,13 +9,15 @@
  * 1. Profanity/unsafe content
  * 2. Empty input
  * 3. Clear nonsense/spam (random characters, keyboard mashing)
+ * 4. Completely off-topic responses with zero case connection
  * 
  * ACCEPTANCE RULES:
+ * - Any response with ANY connection to the case: ACCEPT
  * - Short but relevant responses: ACCEPT
  * - Brief justifications: ACCEPT
- * - Any attempt at engagement with the case: ACCEPT
+ * - When in doubt: ALWAYS ACCEPT
  * 
- * POC Priority: Smooth completion + authentic reasoning > quota-writing
+ * No "needsElaboration" category — either accept or reject, nothing in between.
  */
 
 import { generateChatCompletion, SupportedModel } from "../openai";
@@ -96,46 +98,29 @@ async function llmValidation(
   caseContext: { title: string; objective: string; recentHistory?: string },
   model?: SupportedModel
 ): Promise<InputValidationResult> {
-  const systemPrompt = `Eres un validador EQUILIBRADO para una simulación educativa de negocios.
+  const systemPrompt = `Eres un validador MUY PERMISIVO para una simulación educativa de negocios.
 
-Tu objetivo: verificar que el estudiante está PENSANDO sobre el caso — no solo escribiendo algo para pasar.
+Tu objetivo: verificar que el estudiante está respondiendo sobre el caso — NO juzgas calidad, profundidad ni estructura.
 
-ACEPTA si la respuesta muestra razonamiento conectado al caso:
-- Menciona una acción concreta que tomaría ("Voy a reasignar recursos a marketing")
-- Explica un por qué conectado al contexto ("porque el equipo está desmotivado")
-- Reconoce un trade-off o consecuencia ("esto puede afectar el presupuesto")
-- Hace referencia a elementos del caso (stakeholders, situación, recursos, objetivos)
-- Expresa una posición con justificación ("Priorizo al equipo porque necesitamos cohesión")
+ACEPTA si la respuesta tiene CUALQUIER conexión con el caso:
+- Menciona algo relacionado con el tema, la empresa, los personajes o la situación del caso
+- Propone alguna acción, decisión o dirección (aunque sea breve)
+- Expresa una opinión o postura sobre el problema
+- Respuestas cortas pero relevantes: "Priorizo la calidad", "Reducir costos", "Me enfoco en el equipo" → ACEPTA
+- Respuestas largas que tocan el tema aunque divaguen → ACEPTA
 
-RECHAZA si la respuesta cae en alguna de estas categorías:
+RECHAZA SOLO si la respuesta NO tiene NINGUNA relación con el caso:
 - Texto sin sentido, caracteres aleatorios o spam
 - Contenido ofensivo o inapropiado
-- Respuestas vagas SIN conexión al caso: "sí", "no sé", "la mejor opción", "porque sí", "elijo esa"
-- Respuestas genéricas que aplican a cualquier caso sin demostrar que leyeron este: "Hay que tomar buenas decisiones" o "Es importante analizar bien"
-- Respuestas que solo repiten la pregunta sin añadir razonamiento propio
+- Respuestas vacías o de 1-2 palabras genéricas: "sí", "no", "ok", "no sé"
+- Respuestas completamente fuera de tema que hablan de algo totalmente diferente al caso (ej: si el caso es sobre marketing y el estudiante habla de lanzar cohetes al espacio)
+- Respuestas genéricas que NO mencionan nada del caso: "Hay que tomar buenas decisiones", "Es importante analizar"
 
-PIDE ELABORAR (needsElaboration) si la respuesta tiene la idea correcta pero es demasiado breve (menos de ~15 palabras) y le falta explicar el por qué o las consecuencias:
-- "Priorizo la calidad" → PIDE ELABORAR (buena dirección, pero falta el por qué o qué sacrifica)
-- "Reducir costos" → PIDE ELABORAR (acción clara, pero no explica cómo o por qué)
-- "Elijo la opción A" → PIDE ELABORAR (decisión sin razonamiento)
-- "Me enfoco en el equipo" → PIDE ELABORAR (intención correcta, falta justificación)
-
-EJEMPLOS COMPLETOS:
-- "Voy a priorizar la calidad del producto sobre la velocidad de lanzamiento" → ACEPTA
-- "Creo que deberíamos invertir en capacitación del equipo para mejorar la eficiencia" → ACEPTA
-- "Me enfoco en reducir costos operativos aunque sacrifique algo de innovación" → ACEPTA
-- "Sí, eso" → RECHAZA
-- "Porque es lo mejor" → RECHAZA
-- "Priorizo la calidad" → PIDE ELABORAR
-- "Reducir costos" → PIDE ELABORAR
-
-EN CASO DE DUDA entre RECHAZAR y PEDIR ELABORAR: pide elaborar.
-EN CASO DE DUDA entre ACEPTAR y PEDIR ELABORAR: acepta.
+EN CASO DE DUDA: SIEMPRE ACEPTA. Prefiere aceptar 10 respuestas mediocres antes que rechazar 1 respuesta válida.
 
 Responde en JSON:
 {
   "isValid": true/false,
-  "needsElaboration": true/false,
   "reason": "breve explicación"
 }`;
 
@@ -162,14 +147,6 @@ RESPUESTA DEL ESTUDIANTE:
     );
 
     const result = JSON.parse(response);
-    
-    if (result.needsElaboration && !result.isValid) {
-      return {
-        isValid: false,
-        rejectionReason: result.reason,
-        userMessage: "Vas por buen camino. Elabora un poco más tu respuesta — explica el por qué de tu decisión o qué consecuencias anticipas."
-      };
-    }
     
     if (!result.isValid) {
       return {

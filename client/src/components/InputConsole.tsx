@@ -11,7 +11,7 @@ import type { DecisionPoint } from "@shared/schema";
 
 // POC: Simplified props - rubric and hints removed per POC spec
 interface InputConsoleProps {
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string) => Promise<any>;
   mode: "guided" | "assessment";
   isProcessing: boolean;
   isGameOver: boolean;
@@ -87,6 +87,7 @@ export function InputConsole({
       setInput("");
       setSelectedOption("");
       setJustification("");
+    } catch {
     } finally {
       setIsSubmitting(false);
     }
