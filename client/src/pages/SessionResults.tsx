@@ -24,6 +24,10 @@ import {
   ChevronDown,
   Lightbulb,
   ArrowRight,
+  ShieldCheck,
+  ShieldAlert,
+  Shield,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -470,6 +474,157 @@ export default function SessionResults() {
             </div>
           </Card>
         </motion.div>
+
+        {/* Overall Status Summary */}
+        {(() => {
+          const items = useIndicators ? indicatorComparison : kpiComparison;
+          if (items.length === 0) return null;
+
+          const improved: typeof items = [];
+          const declined: typeof items = [];
+          const neutral: typeof items = [];
+          let anyCritical = false;
+
+          for (const item of items) {
+            const dir = (item as any).direction || "up_better";
+            const isGood = dir === "down_better" ? item.delta < 0 : item.delta > 0;
+            const isBad = dir === "down_better" ? item.delta > 0 : item.delta < 0;
+            const finalVal = item.final;
+            const isCriticalValue = dir === "down_better" ? finalVal >= 80 : finalVal <= 20;
+            if (isCriticalValue) anyCritical = true;
+            if (Math.abs(item.delta) < 2) neutral.push(item);
+            else if (isGood) improved.push(item);
+            else if (isBad) declined.push(item);
+            else neutral.push(item);
+          }
+
+          improved.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+          declined.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+          let status: "estable" | "en_riesgo" | "critico";
+          let StatusIcon: React.ElementType;
+          let statusColor: string;
+          let statusBg: string;
+
+          if (anyCritical || (declined.length > improved.length && declined.length >= 3)) {
+            status = "critico";
+            StatusIcon = ShieldAlert;
+            statusColor = "text-red-600 dark:text-red-400";
+            statusBg = "from-red-500/10 to-red-500/5 border-red-500/30";
+          } else if (declined.length > 0 && declined.length >= improved.length || declined.some(d => Math.abs(d.delta) >= 15)) {
+            status = "en_riesgo";
+            StatusIcon = Shield;
+            statusColor = "text-amber-600 dark:text-amber-400";
+            statusBg = "from-amber-500/10 to-amber-500/5 border-amber-500/30";
+          } else {
+            status = "estable";
+            StatusIcon = ShieldCheck;
+            statusColor = "text-emerald-600 dark:text-emerald-400";
+            statusBg = "from-emerald-500/10 to-emerald-500/5 border-emerald-500/30";
+          }
+
+          const statusLabels = {
+            estable: "Estable",
+            en_riesgo: "En Riesgo",
+            critico: "Situación Crítica",
+          };
+
+          const topStrengths = improved.slice(0, 3);
+          const topConcerns = declined.slice(0, 3);
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
+              <Card className={`p-6 border-2 bg-gradient-to-br ${statusBg} rounded-xl`} data-testid="card-overall-status">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-10 h-10 rounded-xl bg-background/80 flex items-center justify-center ${statusColor}`}>
+                    <StatusIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">Resumen General</h2>
+                    <Badge variant="outline" className={`text-xs font-semibold ${statusColor}`} data-testid="badge-overall-status">
+                      Estado general: {statusLabels[status]}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-sm text-foreground/80 leading-relaxed" data-testid="text-overall-summary">
+                    {status === "estable" && (
+                      <>
+                        Tus decisiones lograron un balance positivo en la mayoría de los indicadores.
+                        {topStrengths.length > 0 && (
+                          <> Tu mayor fortaleza fue en <strong>{topStrengths.map(s => s.label).join(", ")}</strong>, donde las mejoras reflejan un enfoque efectivo.</>
+                        )}
+                        {topConcerns.length > 0 && (
+                          <> Como en toda decisión real, hubo áreas que se vieron afectadas: <strong>{topConcerns.map(c => c.label).join(", ")}</strong> — un recordatorio de que cada elección tiene consecuencias.</>
+                        )}
+                      </>
+                    )}
+                    {status === "en_riesgo" && (
+                      <>
+                        Tus decisiones generaron resultados mixtos — algunos indicadores mejoraron mientras otros se vieron afectados significativamente.
+                        {topStrengths.length > 0 && (
+                          <> Destacaste en <strong>{topStrengths.map(s => s.label).join(", ")}</strong>.</>
+                        )}
+                        {topConcerns.length > 0 && (
+                          <> Sin embargo, <strong>{topConcerns.map(c => c.label).join(", ")}</strong> requieren atención — las decisiones tomadas tuvieron un costo notable en estas áreas.</>
+                        )}
+                      </>
+                    )}
+                    {status === "critico" && (
+                      <>
+                        Las decisiones tomadas llevaron a una situación desafiante para la organización.
+                        {topConcerns.length > 0 && (
+                          <> Los indicadores más afectados fueron <strong>{topConcerns.map(c => c.label).join(", ")}</strong>.</>
+                        )}
+                        {topStrengths.length > 0 && (
+                          <> Aun así, lograste avances en <strong>{topStrengths.map(s => s.label).join(", ")}</strong> — lo que muestra que identificaste prioridades importantes.</>
+                        )}
+                        {" "}Este tipo de escenario es una oportunidad valiosa para reflexionar sobre cómo equilibrar múltiples objetivos.
+                      </>
+                    )}
+                  </p>
+
+                  {topStrengths.length > 0 && (
+                    <div className="pt-2">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Tus fortalezas</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {topStrengths.map(s => (
+                          <Badge key={s.key} variant="outline" className="text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" data-testid={`badge-strength-${s.key}`}>
+                            {s.label} (mejoró {Math.abs(Math.round(s.delta))} pts)
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {topConcerns.length > 0 && (
+                    <div className="pt-1">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Áreas de aprendizaje</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {topConcerns.map(c => (
+                          <Badge key={c.key} variant="outline" className="text-xs bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300" data-testid={`badge-concern-${c.key}`}>
+                            {c.label} (empeoró {Math.abs(Math.round(c.delta))} pts)
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          );
+        })()}
 
         {/* S10.1: Indicator Evolution - Colorful Cards Grid */}
         <motion.div
