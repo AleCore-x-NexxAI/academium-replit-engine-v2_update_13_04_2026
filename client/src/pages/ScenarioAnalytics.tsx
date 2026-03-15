@@ -870,10 +870,16 @@ function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
                           }}
                         />
                         <RechartsTooltip
-                          formatter={(value: number, _: string, props: any) => [
-                            `${value}% (${props.payload.count} estudiantes)`,
-                            props.payload.option,
-                          ]}
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null;
+                            const item = payload[0].payload;
+                            return (
+                              <div className="bg-popover border rounded-lg p-3 shadow-md max-w-xs">
+                                <p className="text-xs text-muted-foreground mb-1 break-words">{item.option}</p>
+                                <p className="text-sm font-medium">{item.percentage}% ({item.count} estudiante{item.count !== 1 ? "s" : ""})</p>
+                              </div>
+                            );
+                          }}
                         />
                         <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
                           {dd.choices.map((_, idx) => (
