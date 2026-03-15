@@ -764,7 +764,7 @@ function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
             </div>
             <div>
               <p className="text-2xl font-bold" data-testid="text-cohort-total">{data.totalStudents}</p>
-              <p className="text-sm text-muted-foreground">Estudiantes con actividad</p>
+              <p className="text-sm text-muted-foreground">Total de sesiones</p>
             </div>
           </div>
         </Card>
