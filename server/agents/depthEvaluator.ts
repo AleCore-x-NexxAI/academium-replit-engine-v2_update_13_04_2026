@@ -170,16 +170,9 @@ export async function evaluateDepth(
   // S4.2: Quick relevance+structure check (no LLM needed for obvious cases)
   const relevance = hasRelevanceStructure(studentInput);
   
-  // S5/S6.2: STRICT mode — require 2 of 3 dimensions via regex, fall through to LLM if borderline
+  // S5/S6.2: STRICT mode — always evaluate via LLM with stricter prompt
   if (strictness === "strict") {
-    const dimensionCount = [relevance.hasPriority, relevance.hasTradeoff, relevance.hasCaseRef].filter(Boolean).length;
-    if (dimensionCount >= 2) {
-      return {
-        isDeepEnough: true,
-        strengthsAcknowledged: "Tu respuesta demuestra profundidad analítica.",
-      };
-    }
-    // Fall through to LLM with strict prompt for borderline cases
+    // Fall through to LLM evaluation with STRICT_DEPTH_EVALUATOR_PROMPT
   } else {
     // STANDARD mode: existing behavior
     if (relevance.passes) {
