@@ -86,10 +86,13 @@ export function InputConsole({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(submissionText);
-      setInput("");
-      setSelectedOption("");
-      setJustification("");
+      const response = await onSubmit(submissionText);
+      if (response?.requiresRevision || response?.turnStatus === "nudge") {
+      } else {
+        setInput("");
+        setSelectedOption("");
+        setJustification("");
+      }
     } catch {
     } finally {
       setIsSubmitting(false);

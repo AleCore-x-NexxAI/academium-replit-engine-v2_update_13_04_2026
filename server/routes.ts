@@ -573,6 +573,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return res.status(400).json({
             message: "validation_failed",
             validationError: true,
+            turnStatus: "block",
+            requiresRevision: false,
             userMessage: validationResult.userMessage || "Tu respuesta no cumple con las normas de la simulación. Por favor, proporciona una respuesta apropiada y relacionada con el caso.",
           });
         }
