@@ -711,85 +711,199 @@ export default function SessionResults() {
           </motion.div>
         )}
 
-        {/* S10.1: Decision Timeline - Enhanced Visual */}
-        {turns && turns.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-chart-1/20 to-chart-1/10 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-chart-1" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">Tu Recorrido</h2>
-                <p className="text-sm text-muted-foreground">
-                  Las decisiones que tomaste durante la experiencia
-                </p>
-              </div>
-            </div>
+        {/* S11: Decision Timeline — "Línea de Decisiones" */}
+        {turns && turns.length > 0 && (() => {
+          const totalDecisions = session.scenario?.initialState?.totalDecisions || 3;
+          const isReflectionTurn = (turn: Turn) => {
+            const state = turn.agentResponse?.updatedState;
+            if (state?.reflectionCompleted) return true;
+            if (state?.isReflectionStep && turn.turnNumber > totalDecisions) return true;
+            return turn.turnNumber > totalDecisions;
+          };
 
-            <Card className="p-6 border-2 border-muted rounded-xl">
-              <ScrollArea className="h-96">
-                <div className="space-y-6 pr-4">
-                  {turns.map((turn, index) => (
-                    <motion.div 
-                      key={turn.id} 
-                      className="relative pl-8"
+          const decisionTurns = turns.filter(t => !isReflectionTurn(t));
+          const reflectionTurns = turns.filter(t => isReflectionTurn(t));
+
+          const getIndicatorDirection = (indicatorId: string): string => {
+            const ind = finalIndicators?.find(i => i.id === indicatorId);
+            if (ind?.direction) return ind.direction;
+            const initial = initialIndicators?.find(i => i.id === indicatorId);
+            if (initial?.direction) return initial.direction;
+            if (indicatorId === "operationalRisk") return "down_better";
+            return "up_better";
+          };
+
+          const getIndicatorLabel = (indicatorId: string): string => {
+            return INDICATOR_LABELS[indicatorId] ||
+              finalIndicators?.find(i => i.id === indicatorId)?.label ||
+              initialIndicators?.find(i => i.id === indicatorId)?.label ||
+              indicatorId;
+          };
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-chart-1/20 to-chart-1/10 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-chart-1" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold" data-testid="heading-decision-timeline">Línea de Decisiones</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Qué decidiste, qué pasó y cómo se movieron los indicadores
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {decisionTurns.map((turn, index) => {
+                  const deltas = turn.agentResponse?.indicatorDeltas || {};
+                  const deltaEntries = Object.entries(deltas).filter(([, v]) => v !== 0);
+
+                  return (
+                    <motion.div
+                      key={turn.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.6 + index * 0.1 }}
+                      transition={{ delay: 0.6 + index * 0.08 }}
+                      data-testid={`card-decision-${turn.turnNumber}`}
                     >
-                      {/* Timeline connector */}
-                      <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-primary via-chart-2 to-chart-3" />
-                      
-                      {/* Decision number bubble */}
-                      <div className="absolute left-0 top-0 -translate-x-1/2 w-6 h-6 rounded-full bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center text-xs font-bold text-primary-foreground shadow-lg">
-                        {turn.turnNumber}
-                      </div>
+                      <Card className="relative overflow-hidden border-2 border-muted rounded-xl">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary to-chart-2" />
+                        <div className="p-5 pl-6 space-y-4">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center text-sm font-bold text-primary-foreground shadow-sm">
+                              {turn.turnNumber}
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="bg-primary/5 border-primary/30 text-primary font-semibold"
+                            >
+                              Decisión {turn.turnNumber}
+                            </Badge>
+                          </div>
 
-                      <div className="space-y-3 pb-2">
-                        <Badge 
-                          variant="outline" 
-                          className="bg-primary/5 border-primary/30 text-primary font-semibold"
-                        >
-                          Decisión {turn.turnNumber}
-                        </Badge>
-                        
-                        {/* Student decision */}
-                        <div className="p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border border-muted">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                              <Users className="w-3 h-3 text-primary" />
+                          <div className="p-4 bg-gradient-to-r from-muted/80 to-muted/40 rounded-xl border border-muted">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                                <Users className="w-3 h-3 text-primary" />
+                              </div>
+                              <p className="text-sm font-semibold text-primary">Tu Decisión</p>
                             </div>
-                            <p className="text-sm font-semibold text-primary">Tu Decisión</p>
+                            <p className="text-sm text-foreground leading-relaxed italic" data-testid={`text-decision-input-${turn.turnNumber}`}>
+                              "{turn.studentInput}"
+                            </p>
                           </div>
-                          <p className="text-sm text-foreground leading-relaxed">
-                            {turn.studentInput}
-                          </p>
-                        </div>
-                        
-                        {/* Consequence */}
-                        <div className="p-4 bg-card border-2 border-chart-2/20 rounded-xl">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-5 h-5 rounded-full bg-chart-2/20 flex items-center justify-center">
-                              <Sparkles className="w-3 h-3 text-chart-2" />
+
+                          <div className="p-4 bg-card border-2 border-chart-2/20 rounded-xl">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-5 h-5 rounded-full bg-chart-2/20 flex items-center justify-center">
+                                <Sparkles className="w-3 h-3 text-chart-2" />
+                              </div>
+                              <p className="text-sm font-semibold text-chart-2">Lo que pasó</p>
                             </div>
-                            <p className="text-sm font-semibold text-chart-2">Consecuencia</p>
+                            <p className="text-sm text-muted-foreground leading-relaxed" data-testid={`text-decision-narrative-${turn.turnNumber}`}>
+                              {turn.agentResponse.narrative?.text || turn.agentResponse.feedback?.message}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            {turn.agentResponse.narrative?.text || turn.agentResponse.feedback?.message}
-                          </p>
+
+                          {deltaEntries.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Impacto en indicadores</p>
+                              <div className="flex flex-wrap gap-2" data-testid={`chips-deltas-${turn.turnNumber}`}>
+                                {deltaEntries.map(([indicatorId, delta]) => {
+                                  const direction = getIndicatorDirection(indicatorId);
+                                  const isPositive = direction === "down_better" ? delta < 0 : delta > 0;
+                                  const chipColor = isPositive
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                    : "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300";
+                                  const DeltaIcon = delta > 0 ? TrendingUp : TrendingDown;
+
+                                  return (
+                                    <Badge
+                                      key={indicatorId}
+                                      variant="outline"
+                                      className={`text-xs gap-1 ${chipColor}`}
+                                      data-testid={`chip-delta-${indicatorId}-${turn.turnNumber}`}
+                                    >
+                                      <DeltaIcon className="w-3 h-3" />
+                                      {getIndicatorLabel(indicatorId)}
+                                      <span className="font-bold">
+                                        {delta > 0 ? "+" : ""}{Math.round(delta)}
+                                      </span>
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      </Card>
                     </motion.div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </Card>
-          </motion.div>
-        )}
+                  );
+                })}
+
+                {reflectionTurns.length > 0 && (() => {
+                  const lastReflection = reflectionTurns[reflectionTurns.length - 1];
+                  return (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.6 + decisionTurns.length * 0.08 }}
+                      data-testid="card-reflection"
+                    >
+                      <Card className="relative overflow-hidden border-2 border-chart-3/30 bg-gradient-to-r from-chart-3/5 via-card to-chart-3/5 rounded-xl">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-chart-3 to-chart-2" />
+                        <div className="p-5 pl-6 space-y-4">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-chart-3 to-chart-2 flex items-center justify-center shadow-sm">
+                              <Brain className="w-4 h-4 text-primary-foreground" />
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="bg-chart-3/10 border-chart-3/30 text-chart-3 font-semibold"
+                            >
+                              Tu Reflexión Final
+                            </Badge>
+                          </div>
+
+                          <div className="p-4 bg-gradient-to-r from-chart-3/10 to-chart-3/5 rounded-xl border border-chart-3/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-5 h-5 rounded-full bg-chart-3/20 flex items-center justify-center">
+                                <Lightbulb className="w-3 h-3 text-chart-3" />
+                              </div>
+                              <p className="text-sm font-semibold text-chart-3">Tu Reflexión</p>
+                            </div>
+                            <p className="text-sm text-foreground leading-relaxed italic" data-testid="text-reflection-input">
+                              "{lastReflection.studentInput}"
+                            </p>
+                          </div>
+
+                          {lastReflection.agentResponse?.narrative?.text && (
+                            <div className="p-4 bg-card border-2 border-chart-3/20 rounded-xl">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-5 h-5 rounded-full bg-chart-3/20 flex items-center justify-center">
+                                  <MessageSquare className="w-3 h-3 text-chart-3" />
+                                </div>
+                                <p className="text-sm font-semibold text-chart-3">Cierre del Mentor</p>
+                              </div>
+                              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-reflection-narrative">
+                                {lastReflection.agentResponse.narrative.text}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    </motion.div>
+                  );
+                })()}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* S10.1: Action Buttons - More Prominent */}
         <motion.div
