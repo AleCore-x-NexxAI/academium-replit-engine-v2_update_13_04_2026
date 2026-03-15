@@ -14,6 +14,7 @@ import { turnQueue, type TurnJob } from "./llm/turnQueue";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import type { AgentContext } from "./agents/types";
+import { DEFAULT_DECISIONS } from "./agents/constants";
 import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage, GeneratedScenarioData, AgentPrompts } from "@shared/schema";
 import { llmUsageLogs } from "@shared/schema";
 import { db } from "./db";
@@ -613,7 +614,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rubric: session.scenario?.rubric || undefined,
         // POC: Decision tracking
         indicators: session.currentState.indicators || initialState?.indicators,
-        totalDecisions: initialState?.totalDecisions || initialState?.decisionPoints?.length || 3,
+        totalDecisions: initialState?.totalDecisions || initialState?.decisionPoints?.length || DEFAULT_DECISIONS,
         currentDecision: session.currentState.currentDecision || 1,
         decisionPoints: initialState?.decisionPoints,
         // Per-scenario LLM configuration

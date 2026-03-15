@@ -127,7 +127,7 @@ export default function Simulation() {
         session.currentState.history,
         "guided",
         initialState?.indicators || [],
-        initialState?.totalDecisions || initialState?.decisionPoints?.length || 3,
+        initialState?.totalDecisions || initialState?.decisionPoints?.length || 0,
         initialState?.decisionPoints || []
       );
     }

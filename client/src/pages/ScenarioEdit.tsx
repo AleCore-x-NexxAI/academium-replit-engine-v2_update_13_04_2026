@@ -250,7 +250,7 @@ export default function ScenarioEdit() {
           keyConstraints: data.keyConstraintsText?.split("\n").filter(Boolean) || [],
           learningObjectives: data.learningObjectivesText?.split("\n").filter(Boolean) || [],
           decisionPoints: decisionPoints.length > 0 ? decisionPoints : currentState.decisionPoints,
-          totalDecisions: decisionPoints.length > 0 ? decisionPoints.length : (currentState.totalDecisions || currentState.decisionPoints?.length || 3),
+          totalDecisions: decisionPoints.length > 0 ? decisionPoints.length : (currentState.totalDecisions || currentState.decisionPoints?.length),
         },
       };
       const response = await apiRequest("PUT", `/api/scenarios/${scenarioId}`, updatedScenario);
