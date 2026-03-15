@@ -31,7 +31,20 @@ import {
   AlertTriangle,
   Lightbulb,
   Gauge,
+  GraduationCap,
+  Sparkles,
+  Flame,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -655,6 +668,300 @@ function ResultsViewer({ sessionId }: { sessionId: string }) {
   );
 }
 
+interface CohortAnalyticsData {
+  totalStudents: number;
+  completedStudents: number;
+  decisionDistribution: Array<{
+    decisionNumber: number;
+    prompt: string;
+    format: string;
+    choices: Array<{ option: string; count: number; percentage: number }>;
+    totalResponses: number;
+  }>;
+  stuckNodes: Array<{
+    decisionNumber: number;
+    nudgeCount: number;
+    totalAttempts: number;
+    nudgeRate: number;
+  }>;
+  styleProfiles: Array<{ key: string; label: string; count: number }>;
+  classStrengths: Array<{ name: string; averageScore: number; sampleSize: number }>;
+}
+
+const CHART_COLORS = [
+  "hsl(var(--primary))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+];
+
+const NUDGE_HEAT_COLORS = [
+  { threshold: 0, bg: "bg-emerald-100 dark:bg-emerald-950/40", text: "text-emerald-700 dark:text-emerald-300" },
+  { threshold: 20, bg: "bg-yellow-100 dark:bg-yellow-950/40", text: "text-yellow-700 dark:text-yellow-300" },
+  { threshold: 40, bg: "bg-orange-100 dark:bg-orange-950/40", text: "text-orange-700 dark:text-orange-300" },
+  { threshold: 60, bg: "bg-red-100 dark:bg-red-950/40", text: "text-red-700 dark:text-red-300" },
+];
+
+function getNudgeHeatColor(rate: number) {
+  for (let i = NUDGE_HEAT_COLORS.length - 1; i >= 0; i--) {
+    if (rate >= NUDGE_HEAT_COLORS[i].threshold) return NUDGE_HEAT_COLORS[i];
+  }
+  return NUDGE_HEAT_COLORS[0];
+}
+
+const PROFILE_ICONS: Record<string, React.ElementType> = {
+  financial: DollarSign,
+  people: Heart,
+  risk: AlertTriangle,
+  balanced: Target,
+};
+
+const PROFILE_COLORS: Record<string, string> = {
+  financial: "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  people: "bg-pink-500/10 text-pink-700 dark:text-pink-300",
+  risk: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  balanced: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+};
+
+function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
+  const { data, isLoading } = useQuery<CohortAnalyticsData>({
+    queryKey: ["/api/professor/scenarios", scenarioId, "cohort-analytics"],
+    enabled: !!scenarioId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32" />
+        <Skeleton className="h-64" />
+        <Skeleton className="h-48" />
+      </div>
+    );
+  }
+
+  if (!data || data.totalStudents === 0) {
+    return (
+      <div className="text-center py-12">
+        <GraduationCap className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+        <h3 className="text-lg font-medium mb-2">Sin Datos de Clase</h3>
+        <p className="text-sm text-muted-foreground">
+          Los patrones de clase aparecerán cuando los estudiantes completen decisiones.
+        </p>
+      </div>
+    );
+  }
+
+  const maxNudgeRate = Math.max(...data.stuckNodes.map(n => n.nudgeRate), 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Users className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold" data-testid="text-cohort-total">{data.totalStudents}</p>
+              <p className="text-sm text-muted-foreground">Estudiantes con actividad</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold" data-testid="text-cohort-completed">{data.completedStudents}</p>
+              <p className="text-sm text-muted-foreground">Completaron la simulación</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {data.decisionDistribution.length > 0 && (
+        <Card className="p-6" data-testid="card-decision-distribution">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold">Distribución de Decisiones</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Cómo se distribuyeron las respuestas en cada punto de decisión.
+          </p>
+          <div className="space-y-6">
+            {data.decisionDistribution.map((dd) => (
+              <div key={dd.decisionNumber} className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="font-mono text-xs">
+                    Decisión {dd.decisionNumber}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground truncate flex-1">{dd.prompt}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{dd.totalResponses} respuestas</span>
+                </div>
+
+                {dd.format === "multiple_choice" && dd.choices.length > 0 ? (
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dd.choices} layout="vertical" margin={{ left: 10, right: 30 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                        <YAxis
+                          type="category"
+                          dataKey="option"
+                          width={150}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <RechartsTooltip
+                          formatter={(value: number, _: string, props: any) => [
+                            `${value}% (${props.payload.count} estudiantes)`,
+                            "Porcentaje",
+                          ]}
+                        />
+                        <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
+                          {dd.choices.map((_, idx) => (
+                            <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-sm text-muted-foreground">
+                      Respuesta abierta — {dd.totalResponses} estudiantes respondieron en esta decisión.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {data.stuckNodes.length > 0 && (
+        <Card className="p-6" data-testid="card-stuck-nodes">
+          <div className="flex items-center gap-2 mb-4">
+            <Flame className="w-5 h-5 text-orange-500" />
+            <h3 className="font-semibold">Nodos Problemáticos</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Puntos de decisión donde los estudiantes necesitaron más orientación (recibieron NUDGE).
+          </p>
+          <div className="space-y-2">
+            {data.stuckNodes.map((node) => {
+              const heat = getNudgeHeatColor(node.nudgeRate);
+              const isMax = node.nudgeRate === maxNudgeRate && maxNudgeRate > 0;
+              return (
+                <div
+                  key={node.decisionNumber}
+                  className={`flex items-center gap-3 p-3 rounded-lg ${heat.bg}`}
+                  data-testid={`stuck-node-${node.decisionNumber}`}
+                >
+                  <Badge variant="outline" className="font-mono text-xs shrink-0">
+                    Decisión {node.decisionNumber}
+                  </Badge>
+                  <div className="flex-1">
+                    <div className="w-full bg-background/50 rounded-full h-2.5">
+                      <div
+                        className={`h-2.5 rounded-full transition-all ${
+                          node.nudgeRate >= 60 ? "bg-red-500" :
+                          node.nudgeRate >= 40 ? "bg-orange-500" :
+                          node.nudgeRate >= 20 ? "bg-yellow-500" : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${Math.min(node.nudgeRate, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className={`text-sm font-medium ${heat.text} shrink-0`}>
+                    {node.nudgeRate}%
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    ({node.nudgeCount} de {node.totalAttempts})
+                  </span>
+                  {isMax && (
+                    <Badge variant="destructive" className="text-xs shrink-0">
+                      Mayor fricción
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {data.styleProfiles.length > 0 && (
+        <Card className="p-6" data-testid="card-style-profiles">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-violet-500" />
+            <h3 className="font-semibold">Perfiles de Razonamiento</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Tendencias observadas en los estilos de toma de decisiones de la clase.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {data.styleProfiles.map((profile) => {
+              const IconComp = PROFILE_ICONS[profile.key] || Target;
+              const colorClass = PROFILE_COLORS[profile.key] || "bg-muted text-foreground";
+              return (
+                <div
+                  key={profile.key}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-lg ${colorClass}`}
+                  data-testid={`profile-${profile.key}`}
+                >
+                  <IconComp className="w-5 h-5" />
+                  <div>
+                    <p className="font-medium text-sm">{profile.label}</p>
+                    <p className="text-xs opacity-80">{profile.count} estudiante{profile.count !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {data.classStrengths.length > 0 && (
+        <Card className="p-6" data-testid="card-class-strengths">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-5 h-5 text-emerald-500" />
+            <h3 className="font-semibold">Fortalezas de la Clase</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Competencias más fuertes observadas en las respuestas del grupo.
+          </p>
+          <div className="space-y-2">
+            {data.classStrengths.map((strength) => {
+              const pct = (strength.averageScore / 5) * 100;
+              return (
+                <div key={strength.name} className="flex items-center gap-3" data-testid={`strength-${strength.name}`}>
+                  <span className="text-sm w-48 truncate capitalize">{strength.name}</span>
+                  <div className="flex-1">
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="font-mono text-xs shrink-0">
+                    {strength.averageScore}/5
+                  </Badge>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    (n={strength.sampleSize})
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function SessionDetailDialog({ session }: { session: SessionWithUserInfo }) {
   return (
     <Dialog>
@@ -815,6 +1122,23 @@ export default function ScenarioAnalytics() {
           <StatCard label="Completadas" value={completedSessions.length} icon={CheckCircle} color="bg-green-500" />
         </div>
 
+        <Tabs defaultValue="students">
+          <TabsList>
+            <TabsTrigger value="students" data-testid="tab-students">
+              <Users className="w-4 h-4 mr-1.5" />
+              Estudiantes
+            </TabsTrigger>
+            <TabsTrigger value="cohort" data-testid="tab-cohort">
+              <GraduationCap className="w-4 h-4 mr-1.5" />
+              Vista de Clase
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="cohort" className="mt-4">
+            {scenarioId && <CohortAnalyticsView scenarioId={scenarioId} />}
+          </TabsContent>
+
+          <TabsContent value="students" className="mt-4">
 
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">Estudiantes Participantes</h2>
@@ -925,6 +1249,9 @@ export default function ScenarioAnalytics() {
             </div>
           )}
         </Card>
+
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

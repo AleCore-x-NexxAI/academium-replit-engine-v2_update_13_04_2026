@@ -1718,6 +1718,278 @@ Be constructive and educational, not judgmental.`;
     }
   });
 
+  // Cohort analytics: aggregated class-level data for a scenario
+  app.get("/api/professor/scenarios/:scenarioId/cohort-analytics", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { scenarioId } = req.params;
+
+      const scenario = await storage.getScenario(scenarioId);
+      if (!scenario) {
+        return res.status(404).json({ message: "Scenario not found" });
+      }
+      if (scenario.authorId !== userId && req.dbUser.role !== "admin" && !req.dbUser.isSuperAdmin) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const sessions = await storage.getSessionsByScenario(scenarioId);
+      const activeSessions = sessions.filter(s => s.status === "completed" || s.status === "active");
+
+      if (activeSessions.length === 0) {
+        return res.json({
+          totalStudents: 0,
+          decisionDistribution: [],
+          stuckNodes: [],
+          styleProfiles: [],
+          classStrengths: [],
+        });
+      }
+
+      const decisionPoints: Array<{
+        number: number;
+        prompt: string;
+        format: string;
+        options?: string[];
+      }> = (scenario.initialState as any)?.decisionPoints || [];
+
+      const allTurns: Array<{ turnNumber: number; studentInput: string; agentResponse: any; sessionId: string }> = [];
+      const allEvents: Array<{ turnNumber: number | null; eventType: string; eventData: any; sessionId: string }> = [];
+
+      for (const session of activeSessions) {
+        const sessionTurns = await storage.getTurnsBySession(session.id);
+        for (const t of sessionTurns) {
+          allTurns.push({
+            turnNumber: t.turnNumber,
+            studentInput: t.studentInput,
+            agentResponse: t.agentResponse as any,
+            sessionId: session.id,
+          });
+        }
+        const sessionEvents = await storage.getTurnEvents(session.id);
+        for (const e of sessionEvents) {
+          allEvents.push({
+            turnNumber: e.turnNumber,
+            eventType: e.eventType,
+            eventData: e.eventData as any,
+            sessionId: session.id,
+          });
+        }
+      }
+
+      // 1. Decision Distribution (MCQ choices per step)
+      const decisionDistribution: Array<{
+        decisionNumber: number;
+        prompt: string;
+        format: string;
+        choices: Array<{ option: string; count: number; percentage: number }>;
+        totalResponses: number;
+      }> = [];
+
+      const maxTurn = allTurns.reduce((max, t) => Math.max(max, t.turnNumber), 0);
+      for (let dn = 1; dn <= maxTurn; dn++) {
+        const dp = decisionPoints.find(d => d.number === dn);
+        const turnsAtStep = allTurns.filter(t => t.turnNumber === dn);
+        const totalResponses = turnsAtStep.length;
+
+        if (dp && dp.format === "multiple_choice" && dp.options && dp.options.length > 0) {
+          const choiceCounts: Record<string, number> = {};
+          for (const opt of dp.options) choiceCounts[opt] = 0;
+          for (const t of turnsAtStep) {
+            const input = t.studentInput.trim();
+            const matchedOpt = dp.options.find(opt =>
+              input.toLowerCase().startsWith(opt.toLowerCase().substring(0, 10)) ||
+              input.toLowerCase().includes(opt.toLowerCase())
+            );
+            if (matchedOpt) {
+              choiceCounts[matchedOpt] = (choiceCounts[matchedOpt] || 0) + 1;
+            } else {
+              choiceCounts[input] = (choiceCounts[input] || 0) + 1;
+            }
+          }
+          decisionDistribution.push({
+            decisionNumber: dn,
+            prompt: dp.prompt || `Decisión ${dn}`,
+            format: "multiple_choice",
+            choices: Object.entries(choiceCounts)
+              .filter(([_, c]) => c > 0)
+              .map(([option, count]) => ({
+                option,
+                count,
+                percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
+              }))
+              .sort((a, b) => b.count - a.count),
+            totalResponses,
+          });
+        } else {
+          decisionDistribution.push({
+            decisionNumber: dn,
+            prompt: dp?.prompt || `Decisión ${dn}`,
+            format: dp?.format || "written",
+            choices: [],
+            totalResponses,
+          });
+        }
+      }
+
+      // 2. Stuck Nodes (NUDGE counts per decision point)
+      const stuckNodes: Array<{
+        decisionNumber: number;
+        nudgeCount: number;
+        totalAttempts: number;
+        nudgeRate: number;
+      }> = [];
+
+      for (let dn = 1; dn <= maxTurn; dn++) {
+        const rejectedAtStep = allEvents.filter(
+          e => e.turnNumber === dn && e.eventType === "input_rejected"
+        );
+        const nudgesFromTurns = allTurns.filter(
+          t => t.turnNumber === dn && (
+            t.agentResponse?.turnStatus === "nudge" ||
+            t.agentResponse?.requiresRevision === true
+          )
+        );
+        const nudgeCount = rejectedAtStep.length + nudgesFromTurns.length;
+        const totalAttempts = allTurns.filter(t => t.turnNumber === dn).length;
+
+        stuckNodes.push({
+          decisionNumber: dn,
+          nudgeCount,
+          totalAttempts,
+          nudgeRate: totalAttempts > 0 ? Math.round((nudgeCount / totalAttempts) * 100) : 0,
+        });
+      }
+
+      // 3. Reasoning Style Profiles (rule-based from competencyScores)
+      const studentProfiles: Record<string, Record<string, number[]>> = {};
+      for (const t of allTurns) {
+        const scores = t.agentResponse?.competencyScores;
+        if (scores && typeof scores === "object") {
+          if (!studentProfiles[t.sessionId]) studentProfiles[t.sessionId] = {};
+          for (const [comp, val] of Object.entries(scores)) {
+            if (typeof val === "number") {
+              if (!studentProfiles[t.sessionId][comp]) studentProfiles[t.sessionId][comp] = [];
+              studentProfiles[t.sessionId][comp].push(val);
+            }
+          }
+        }
+      }
+
+      const STYLE_RULES: Array<{
+        label: string;
+        labelEs: string;
+        test: (avgs: Record<string, number>) => boolean;
+      }> = [
+        {
+          label: "financial",
+          labelEs: "Perfil Financiero",
+          test: (avgs) => {
+            const fin = Math.max(
+              avgs["financial analysis"] || 0,
+              avgs["financial_analysis"] || 0,
+              avgs["financialAnalysis"] || 0,
+              avgs["análisis financiero"] || 0
+            );
+            return fin >= 3.5;
+          },
+        },
+        {
+          label: "people",
+          labelEs: "Perfil Humano",
+          test: (avgs) => {
+            const people = Math.max(
+              avgs["stakeholder awareness"] || 0,
+              avgs["stakeholder_awareness"] || 0,
+              avgs["stakeholderAwareness"] || 0,
+              avgs["comunicación"] || 0,
+              avgs["team management"] || 0,
+              avgs["liderazgo"] || 0
+            );
+            return people >= 3.5;
+          },
+        },
+        {
+          label: "risk",
+          labelEs: "Perfil de Riesgo",
+          test: (avgs) => {
+            const risk = Math.max(
+              avgs["risk assessment"] || 0,
+              avgs["risk_assessment"] || 0,
+              avgs["riskAssessment"] || 0,
+              avgs["gestión de riesgos"] || 0
+            );
+            return risk >= 3.5;
+          },
+        },
+      ];
+
+      const profileCounts: Record<string, { count: number; label: string }> = {};
+      for (const rule of STYLE_RULES) {
+        profileCounts[rule.label] = { count: 0, label: rule.labelEs };
+      }
+      profileCounts["balanced"] = { count: 0, label: "Perfil Equilibrado" };
+
+      for (const [_, compScores] of Object.entries(studentProfiles)) {
+        const avgs: Record<string, number> = {};
+        for (const [comp, vals] of Object.entries(compScores)) {
+          avgs[comp.toLowerCase()] = vals.reduce((s, v) => s + v, 0) / vals.length;
+        }
+        let matched = false;
+        for (const rule of STYLE_RULES) {
+          if (rule.test(avgs)) {
+            profileCounts[rule.label].count++;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          profileCounts["balanced"].count++;
+        }
+      }
+
+      const styleProfiles = Object.entries(profileCounts)
+        .filter(([_, v]) => v.count > 0)
+        .map(([key, v]) => ({ key, label: v.label, count: v.count }))
+        .sort((a, b) => b.count - a.count);
+
+      // 4. Class Strengths (most common high-scoring competencies)
+      const compTotals: Record<string, { sum: number; count: number }> = {};
+      for (const t of allTurns) {
+        const scores = t.agentResponse?.competencyScores;
+        if (scores && typeof scores === "object") {
+          for (const [comp, val] of Object.entries(scores)) {
+            if (typeof val === "number") {
+              if (!compTotals[comp]) compTotals[comp] = { sum: 0, count: 0 };
+              compTotals[comp].sum += val;
+              compTotals[comp].count++;
+            }
+          }
+        }
+      }
+
+      const classStrengths = Object.entries(compTotals)
+        .map(([name, { sum, count }]) => ({
+          name,
+          averageScore: Math.round((sum / count) * 10) / 10,
+          sampleSize: count,
+        }))
+        .sort((a, b) => b.averageScore - a.averageScore)
+        .slice(0, 8);
+
+      res.json({
+        totalStudents: activeSessions.length,
+        completedStudents: activeSessions.filter(s => s.status === "completed").length,
+        decisionDistribution,
+        stuckNodes,
+        styleProfiles,
+        classStrengths,
+      });
+    } catch (error) {
+      console.error("Error fetching cohort analytics:", error);
+      res.status(500).json({ message: "Failed to fetch cohort analytics" });
+    }
+  });
+
   // Get aggregated themes from student responses for a scenario
   app.get("/api/professor/scenarios/:scenarioId/themes", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
     try {
