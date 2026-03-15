@@ -1719,7 +1719,7 @@ Be constructive and educational, not judgmental.`;
   });
 
   // Cohort analytics: aggregated class-level data for a scenario
-  app.get("/api/professor/scenarios/:scenarioId/cohort-analytics", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
+  app.get("/api/scenarios/:scenarioId/cohort-analytics", isAuthenticated, isProfessorOrAdmin, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { scenarioId } = req.params;
@@ -1878,78 +1878,57 @@ Be constructive and educational, not judgmental.`;
         }
       }
 
-      const STYLE_RULES: Array<{
-        label: string;
-        labelEs: string;
-        test: (avgs: Record<string, number>) => boolean;
-      }> = [
-        {
-          label: "financial",
-          labelEs: "Perfil Financiero",
-          test: (avgs) => {
-            const fin = Math.max(
-              avgs["financial analysis"] || 0,
-              avgs["financial_analysis"] || 0,
-              avgs["financialAnalysis"] || 0,
-              avgs["análisis financiero"] || 0
-            );
-            return fin >= 3.5;
-          },
-        },
-        {
-          label: "people",
-          labelEs: "Perfil Humano",
-          test: (avgs) => {
-            const people = Math.max(
-              avgs["stakeholder awareness"] || 0,
-              avgs["stakeholder_awareness"] || 0,
-              avgs["stakeholderAwareness"] || 0,
-              avgs["comunicación"] || 0,
-              avgs["team management"] || 0,
-              avgs["liderazgo"] || 0
-            );
-            return people >= 3.5;
-          },
-        },
-        {
-          label: "risk",
-          labelEs: "Perfil de Riesgo",
-          test: (avgs) => {
-            const risk = Math.max(
-              avgs["risk assessment"] || 0,
-              avgs["risk_assessment"] || 0,
-              avgs["riskAssessment"] || 0,
-              avgs["gestión de riesgos"] || 0
-            );
-            return risk >= 3.5;
-          },
-        },
-      ];
+      const COMPETENCY_BUCKETS: Record<string, { profile: string; labelEs: string }> = {
+        "financial analysis": { profile: "financial", labelEs: "Perfil Financiero" },
+        "financial_analysis": { profile: "financial", labelEs: "Perfil Financiero" },
+        "financialanalysis": { profile: "financial", labelEs: "Perfil Financiero" },
+        "análisis financiero": { profile: "financial", labelEs: "Perfil Financiero" },
+        "cost analysis": { profile: "financial", labelEs: "Perfil Financiero" },
+        "budget management": { profile: "financial", labelEs: "Perfil Financiero" },
+        "stakeholder awareness": { profile: "people", labelEs: "Perfil Humano" },
+        "stakeholder_awareness": { profile: "people", labelEs: "Perfil Humano" },
+        "stakeholderawareness": { profile: "people", labelEs: "Perfil Humano" },
+        "comunicación": { profile: "people", labelEs: "Perfil Humano" },
+        "team management": { profile: "people", labelEs: "Perfil Humano" },
+        "liderazgo": { profile: "people", labelEs: "Perfil Humano" },
+        "leadership": { profile: "people", labelEs: "Perfil Humano" },
+        "communication": { profile: "people", labelEs: "Perfil Humano" },
+        "risk assessment": { profile: "risk", labelEs: "Perfil de Riesgo" },
+        "risk_assessment": { profile: "risk", labelEs: "Perfil de Riesgo" },
+        "riskassessment": { profile: "risk", labelEs: "Perfil de Riesgo" },
+        "gestión de riesgos": { profile: "risk", labelEs: "Perfil de Riesgo" },
+        "risk management": { profile: "risk", labelEs: "Perfil de Riesgo" },
+      };
 
-      const profileData: Record<string, { count: number; label: string; sessionIds: string[] }> = {};
-      for (const rule of STYLE_RULES) {
-        profileData[rule.label] = { count: 0, label: rule.labelEs, sessionIds: [] };
-      }
-      profileData["balanced"] = { count: 0, label: "Perfil Equilibrado", sessionIds: [] };
+      const profileData: Record<string, { count: number; label: string; sessionIds: string[] }> = {
+        financial: { count: 0, label: "Perfil Financiero", sessionIds: [] },
+        people: { count: 0, label: "Perfil Humano", sessionIds: [] },
+        risk: { count: 0, label: "Perfil de Riesgo", sessionIds: [] },
+        balanced: { count: 0, label: "Perfil Equilibrado", sessionIds: [] },
+      };
 
       for (const [sessionId, compScores] of Object.entries(studentProfiles)) {
         const avgs: Record<string, number> = {};
         for (const [comp, vals] of Object.entries(compScores)) {
           avgs[comp.toLowerCase()] = vals.reduce((s, v) => s + v, 0) / vals.length;
         }
-        let matched = false;
-        for (const rule of STYLE_RULES) {
-          if (rule.test(avgs)) {
-            profileData[rule.label].count++;
-            profileData[rule.label].sessionIds.push(sessionId);
-            matched = true;
-            break;
+
+        let topProfile = "balanced";
+        let topScore = -1;
+        for (const [compKey, avg] of Object.entries(avgs)) {
+          const bucket = COMPETENCY_BUCKETS[compKey];
+          if (bucket && avg > topScore) {
+            topScore = avg;
+            topProfile = bucket.profile;
           }
         }
-        if (!matched) {
-          profileData["balanced"].count++;
-          profileData["balanced"].sessionIds.push(sessionId);
+
+        if (topScore < 2.5) {
+          topProfile = "balanced";
         }
+
+        profileData[topProfile].count++;
+        profileData[topProfile].sessionIds.push(sessionId);
       }
 
       const extractPhrases = (sessionIds: string[], maxPhrases: number = 3): string[] => {

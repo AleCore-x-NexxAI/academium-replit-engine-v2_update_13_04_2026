@@ -726,7 +726,7 @@ const PROFILE_COLORS: Record<string, string> = {
 
 function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
   const { data, isLoading } = useQuery<CohortAnalyticsData>({
-    queryKey: ["/api/professor/scenarios", scenarioId, "cohort-analytics"],
+    queryKey: ["/api/scenarios", scenarioId, "cohort-analytics"],
     enabled: !!scenarioId,
   });
 
