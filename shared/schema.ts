@@ -379,7 +379,9 @@ export interface TurnResponse {
   options?: string[];
   isGameOver: boolean;
   competencyScores?: Record<string, number>;
-  // Weak answer handling
+  // S14/S6: Explicit turn status
+  turnStatus?: "pass" | "nudge" | "block";
+  // Weak answer handling (kept for backward compat)
   requiresRevision?: boolean;
   revisionPrompt?: string;
   revisionAttempt?: number;

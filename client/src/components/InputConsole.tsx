@@ -24,6 +24,8 @@ interface InputConsoleProps {
   revisionAttempts?: number;
   maxRevisions?: number;
   validationError?: string | null;
+  // S14/S6: Explicit turn status
+  turnStatus?: "pass" | "nudge" | "block" | null;
   // S9.1: Reflection as separate Step 4
   isReflectionStep?: boolean;
   reflectionPrompt?: string;
@@ -43,6 +45,7 @@ export function InputConsole({
   revisionAttempts = 0,
   maxRevisions = 1, // S4.1: Only 1 revision max
   validationError,
+  turnStatus,
   // S9.1: Reflection as separate Step 4
   isReflectionStep = false,
   reflectionPrompt,
@@ -113,13 +116,16 @@ export function InputConsole({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-4 bg-primary/5 border-primary/20 rounded-lg border"
+          className="mb-4 p-4 bg-amber-500/5 border-amber-500/20 rounded-lg border"
           data-testid="revision-prompt-banner"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-primary uppercase tracking-wide">
-              El mentor te invita a profundizar
-            </span>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-300 uppercase tracking-wide">
+                {turnStatus === "nudge" ? "Buen inicio — profundiza un poco más" : "El mentor te invita a profundizar"}
+              </span>
+            </div>
             <Badge variant="outline" className="text-xs">
               Revisión {revisionAttempts} de {maxRevisions}
             </Badge>
@@ -130,23 +136,28 @@ export function InputConsole({
         </motion.div>
       )}
 
-      {/* S6.B LOCKED: Rejection message with structure hint */}
       {validationError && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-4 bg-primary/5 border-primary/20 rounded-lg border"
+          className={`mb-4 p-4 rounded-lg border ${
+            turnStatus === "block"
+              ? "bg-muted/50 border-muted-foreground/20"
+              : "bg-primary/5 border-primary/20"
+          }`}
           data-testid="validation-error-banner"
         >
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${
+              turnStatus === "block" ? "text-muted-foreground" : "text-primary"
+            }`} />
             <div className="space-y-2">
-              {/* 1. Reason (1 sentence) */}
               <p className="text-sm font-medium text-foreground">
-                Para continuar, necesito que conectes tu respuesta con el caso y expliques tu prioridad.
+                {turnStatus === "block"
+                  ? "Tu respuesta no pudo procesarse. Intenta reformularla."
+                  : "Para continuar, necesito que conectes tu respuesta con el caso y expliques tu prioridad."}
               </p>
               
-              {/* 2. How to fix (bullets) */}
               <div className="text-sm text-muted-foreground">
                 <span className="font-medium">Sugerencia rápida:</span>
                 <ul className="list-disc list-inside mt-1 space-y-0.5">
@@ -155,7 +166,6 @@ export function InputConsole({
                 </ul>
               </div>
               
-              {/* 3. Structure hint (template) */}
               <p className="text-sm text-muted-foreground italic bg-background/50 px-2 py-1.5 rounded border border-border/50">
                 Estructura útil: "Prioritizo ____ porque ____. Esto implica ____."
               </p>

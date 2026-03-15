@@ -720,6 +720,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rawStudentInput: input,
         eventData: {
           durationMs: Date.now() - turnStartTime,
+          turnStatus: result.turnStatus || "pass",
           isGameOver: result.isGameOver,
           isReflection: isReflectionStep,
           requiresRevision: result.requiresRevision || false,

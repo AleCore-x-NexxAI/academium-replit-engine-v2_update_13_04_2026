@@ -204,7 +204,6 @@ export async function processReflection(
   const validation = validateReflection(context.studentInput);
   
   if (!validation.isValid) {
-    // Reflection failed basic validation - ask again without harsh messaging
     const updatedHistory: HistoryEntry[] = [
       ...context.history as HistoryEntry[],
       {
@@ -230,6 +229,7 @@ export async function processReflection(
         message: "",
       },
       isGameOver: false,
+      turnStatus: "block",
       updatedState: {
         turnCount: context.turnCount,
         kpis: context.currentKpis,
@@ -282,6 +282,7 @@ Tu perspectiva es valiosa para el proceso de aprendizaje.`;
       message: "Reflexión completada",
     },
     isGameOver: true, // Simulation is now truly complete
+    turnStatus: "pass",
     updatedState: {
       turnCount: context.turnCount + 1,
       kpis: context.currentKpis,
@@ -353,6 +354,7 @@ export async function processStudentTurn(
         message: "¡Cuéntame qué quieres hacer y lo haré realidad en la simulación!",
       },
       isGameOver: false,
+      turnStatus: "block",
       updatedState: {
         turnCount: context.turnCount,
         kpis: context.currentKpis,
@@ -418,6 +420,7 @@ export async function processStudentTurn(
         message: depthResult.strengthsAcknowledged || "",
       },
       isGameOver: false,
+      turnStatus: "nudge",
       requiresRevision: true,
       revisionPrompt: depthResult.revisionPrompt,
       revisionAttempt: revisionAttempts + 1,
@@ -565,6 +568,7 @@ export async function processStudentTurn(
     feedback: evaluation.feedback,
     options: narrative.suggestedOptions,
     isGameOver,
+    turnStatus: "pass",
     competencyScores: evaluation.competencyScores,
     requiresRevision: false,
     // POC "Why?" Explainability

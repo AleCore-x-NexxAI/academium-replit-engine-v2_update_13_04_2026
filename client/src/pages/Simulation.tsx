@@ -44,6 +44,7 @@ export default function Simulation() {
   const [showMobileCasePanel, setShowMobileCasePanel] = useState(false);
   const [isBriefingCollapsed, setIsBriefingCollapsed] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [lastTurnStatus, setLastTurnStatus] = useState<"pass" | "nudge" | "block" | null>(null);
 
   const {
     history,
@@ -291,6 +292,7 @@ export default function Simulation() {
       return { interval };
     },
     onSuccess: (response, input) => {
+      setLastTurnStatus(response.turnStatus || null);
       if (response.requiresRevision) {
         handleRevisionRequest(response);
       } else {
@@ -324,6 +326,7 @@ export default function Simulation() {
         const userMessage = errorData.userMessage || 
           "Tu respuesta no pudo procesarse. Asegúrate de que:\n• La respuesta esté relacionada con el caso\n• Explique tu razonamiento o decisión\n• Mantenga un tono profesional";
         setValidationError(userMessage);
+        setLastTurnStatus("block");
         return;
       }
       
@@ -359,6 +362,7 @@ export default function Simulation() {
 
   const handleSubmit = async (input: string) => {
     setValidationError(null);
+    setLastTurnStatus(null);
     return submitMutation.mutateAsync(input);
   };
 
@@ -524,7 +528,7 @@ export default function Simulation() {
             revisionAttempts={revisionAttempts}
             maxRevisions={maxRevisions}
             validationError={validationError}
-            // S9.1: Reflection as separate Step 4
+            turnStatus={lastTurnStatus}
             isReflectionStep={isReflectionStep}
             reflectionPrompt={session.scenario?.initialState?.reflectionPrompt}
           />
