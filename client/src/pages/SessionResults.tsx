@@ -432,7 +432,7 @@ export default function SessionResults() {
                     <Compass className="w-5 h-5 text-primary" />
                   </div>
                   <div className="text-left">
-                    <p className="text-2xl font-bold text-primary">{turns?.length || 0}</p>
+                    <p className="text-2xl font-bold text-primary">{Math.min(turns?.length || 0, session.scenario?.initialState?.totalDecisions || 3)}</p>
                     <p className="text-xs text-muted-foreground">Decisiones</p>
                   </div>
                 </motion.div>
