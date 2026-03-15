@@ -538,73 +538,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const currentDP = decisionPoints?.[currentDecisionNum - 1];
       const isMcqNoJustification = currentDP?.format === "multiple_choice" && !currentDP?.requiresJustification;
 
-      // CRITICAL: Validate input BEFORE any main processing
-      // Skip validation for MCQ decisions where the professor set requiresJustification=false
-      // (the student only needs to pick an option, no reasoning required)
-      if (!isMcqNoJustification) {
-        const recentHistory = (session.currentState.history as HistoryEntry[])
-          .slice(-4)
-          .map(h => `${h.role}: ${h.content}`)
-          .join("\n");
-        
-        const validationResult = await validateSimulationInput(
-          input,
-          {
-            title: session.scenario?.title || "Business Simulation",
-            objective: initialState?.objective || "Navigate the challenge",
-            recentHistory,
-          },
-          { model: "gpt-4o-mini" }
-        );
-        
-        if (!validationResult.isValid) {
-          console.log(`[Turn] Input validation failed for session ${sessionId}: ${validationResult.rejectionReason}`);
-          storage.createTurnEvent({
-            sessionId,
-            userId,
-            eventType: "input_rejected",
-            turnNumber: currentDecisionNum,
-            rawStudentInput: input,
-            eventData: {
-              reason: validationResult.rejectionReason,
-              userMessage: validationResult.userMessage,
-              decisionPointNumber: currentDecisionNum,
-            },
-          }).catch(err => console.error("[TurnEvent] Failed to log input_rejected:", err));
-          return res.status(400).json({
-            message: "validation_failed",
-            validationError: true,
-            turnStatus: "block",
-            requiresRevision: false,
-            userMessage: validationResult.userMessage || "Tu respuesta no cumple con las normas de la simulación. Por favor, proporciona una respuesta apropiada y relacionada con el caso.",
-          });
-        }
-
-        storage.createTurnEvent({
-          sessionId,
-          userId,
-          eventType: "input_accepted",
-          turnNumber: currentDecisionNum,
-          rawStudentInput: input,
-          eventData: {
-            decisionPointNumber: currentDecisionNum,
-            validatedBy: "llm",
-          },
-        }).catch(err => console.error("[TurnEvent] Failed to log input_accepted:", err));
-      } else {
-        storage.createTurnEvent({
-          sessionId,
-          userId,
-          eventType: "input_accepted",
-          turnNumber: currentDecisionNum,
-          rawStudentInput: input,
-          eventData: {
-            decisionPointNumber: currentDecisionNum,
-            validatedBy: "mcq_bypass",
-          },
-        }).catch(err => console.error("[TurnEvent] Failed to log mcq input_accepted:", err));
-      }
-      
       const context: AgentContext = {
         sessionId,
         turnCount: session.currentState.turnCount,
@@ -699,8 +632,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return turnResult;
       };
 
+      // Run input validation in parallel with turn processing for latency reduction
+      // Validation uses gpt-4o-mini and is fast; if it fails we discard the processing result
+      const validationPromise = (async () => {
+        if (isMcqNoJustification) {
+          storage.createTurnEvent({
+            sessionId,
+            userId,
+            eventType: "input_accepted",
+            turnNumber: currentDecisionNum,
+            rawStudentInput: input,
+            eventData: {
+              decisionPointNumber: currentDecisionNum,
+              validatedBy: "mcq_bypass",
+            },
+          }).catch(err => console.error("[TurnEvent] Failed to log mcq input_accepted:", err));
+          return { isValid: true } as { isValid: boolean; rejectionReason?: string; userMessage?: string };
+        }
+        const recentHistory = (session.currentState.history as HistoryEntry[])
+          .slice(-4)
+          .map(h => `${h.role}: ${h.content}`)
+          .join("\n");
+        const result = await validateSimulationInput(
+          input,
+          {
+            title: session.scenario?.title || "Business Simulation",
+            objective: initialState?.objective || "Navigate the challenge",
+            recentHistory,
+          },
+          { model: "gpt-4o-mini" }
+        );
+        if (result.isValid) {
+          storage.createTurnEvent({
+            sessionId,
+            userId,
+            eventType: "input_accepted",
+            turnNumber: currentDecisionNum,
+            rawStudentInput: input,
+            eventData: {
+              decisionPointNumber: currentDecisionNum,
+              validatedBy: "llm",
+            },
+          }).catch(err => console.error("[TurnEvent] Failed to log input_accepted:", err));
+        }
+        return result;
+      })();
+
       // Check if AI providers are saturated — if so, queue the turn
       if (turnQueue.shouldQueue()) {
+        const validationResult = await validationPromise;
+        if (!validationResult.isValid) {
+          console.log(`[Turn] Input validation failed for session ${sessionId}: ${validationResult.rejectionReason}`);
+          storage.createTurnEvent({
+            sessionId,
+            userId,
+            eventType: "input_rejected",
+            turnNumber: currentDecisionNum,
+            rawStudentInput: input,
+            eventData: {
+              reason: validationResult.rejectionReason,
+              userMessage: validationResult.userMessage,
+              decisionPointNumber: currentDecisionNum,
+            },
+          }).catch(err => console.error("[TurnEvent] Failed to log input_rejected:", err));
+          return res.status(400).json({
+            message: "validation_failed",
+            validationError: true,
+            turnStatus: "block",
+            requiresRevision: false,
+            userMessage: validationResult.userMessage || "Tu respuesta no cumple con las normas de la simulación. Por favor, proporciona una respuesta apropiada y relacionada con el caso.",
+          });
+        }
         const job = turnQueue.enqueue(sessionId, processTurnAndSave);
         return res.status(202).json({
           queued: true,
@@ -711,9 +713,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      // Providers have capacity — process synchronously
+      // Phase 1: Run validation and LLM processing in parallel (no DB side effects)
+      // Start turn LLM processing alongside validation for latency reduction
       const turnStartTime = Date.now();
-      const result = await processTurnAndSave();
+      const turnProcessingPromise = (async () => {
+        if (isReflectionStep) {
+          return processReflection(context);
+        }
+        return processStudentTurn(context, revisionAttempts);
+      })();
+
+      // Await validation first — short-circuit if invalid (don't wait for turn LLM)
+      const validationResult = await validationPromise;
+      if (!validationResult.isValid) {
+        console.log(`[Turn] Input validation failed for session ${sessionId}: ${validationResult.rejectionReason}`);
+        turnProcessingPromise.catch(() => {});
+        storage.createTurnEvent({
+          sessionId,
+          userId,
+          eventType: "input_rejected",
+          turnNumber: currentDecisionNum,
+          rawStudentInput: input,
+          eventData: {
+            reason: validationResult.rejectionReason,
+            userMessage: validationResult.userMessage,
+            decisionPointNumber: currentDecisionNum,
+          },
+        }).catch(err => console.error("[TurnEvent] Failed to log input_rejected:", err));
+        return res.status(400).json({
+          message: "validation_failed",
+          validationError: true,
+          turnStatus: "block",
+          requiresRevision: false,
+          userMessage: validationResult.userMessage || "Tu respuesta no cumple con las normas de la simulación. Por favor, proporciona una respuesta apropiada y relacionada con el caso.",
+        });
+      }
+
+      // Validation passed — await turn processing result
+      const turnResult = await turnProcessingPromise;
+
+      // Phase 2: Commit to DB only after validation passes
+      if (turnResult.requiresRevision) {
+        await storage.updateSimulationSession(sessionId, {
+          currentState: turnResult.updatedState,
+        });
+      } else {
+        await storage.createTurn({
+          sessionId,
+          turnNumber: session.currentState.turnCount + 1,
+          studentInput: input,
+          agentResponse: turnResult,
+        });
+
+        let sessionUpdate: any = {
+          currentState: turnResult.updatedState,
+          status: turnResult.isGameOver ? "completed" : "active",
+        };
+
+        if (turnResult.isGameOver) {
+          const competencies = turnResult.competencyScores || {
+            strategicThinking: 3,
+            ethicalReasoning: 3,
+            decisionDecisiveness: 3,
+            stakeholderEmpathy: 3,
+          };
+          const competencyValues = Object.values(competencies) as number[];
+          const avgCompetency = competencyValues.reduce((a, b) => a + b, 0) / competencyValues.length;
+          const overallScore = Math.round((avgCompetency / 5) * 100);
+
+          sessionUpdate.scoreSummary = {
+            finalKpis: turnResult.updatedState.kpis,
+            competencies,
+            overallScore,
+            feedback: turnResult.feedback.message,
+          };
+        }
+
+        await storage.updateSimulationSession(sessionId, sessionUpdate);
+      }
+
+      const result = turnResult;
       
       storage.createTurnEvent({
         sessionId,
@@ -779,6 +858,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         retryable: false,
         userMessage: "Ocurrió un error al procesar tu decisión. Por favor intenta de nuevo.",
       });
+    }
+  });
+
+  app.post("/api/simulations/:sessionId/explain", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+      const { metricId } = req.body;
+
+      if (!metricId || typeof metricId !== "string") {
+        return res.status(400).json({ message: "metricId is required" });
+      }
+
+      const session = await storage.getSimulationSessionWithScenario(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const initialState = session.scenario?.initialState;
+      const indicators = session.currentState.indicators || initialState?.indicators || [];
+      const indicator = indicators.find((i: any) => i.id === metricId);
+      if (!indicator) {
+        return res.status(404).json({ message: "Indicator not found" });
+      }
+
+      const recentHistory = (session.currentState.history as HistoryEntry[])
+        .slice(-6)
+        .map(h => `${h.role}: ${h.content}`)
+        .join("\n");
+
+      const { generateChatCompletion } = await import("./openai");
+
+      const prompt = `Eres un experto en análisis de negocios para una simulación educativa.
+
+ESCENARIO: "${session.scenario?.title || "Simulación"}"
+DOMINIO: ${session.scenario?.domain || "General"}
+${initialState?.companyName ? `EMPRESA: ${initialState.companyName}` : ""}
+${initialState?.industry ? `INDUSTRIA: ${initialState.industry}` : ""}
+
+INDICADOR: ${indicator.label} (${indicator.id})
+VALOR ACTUAL: ${indicator.value}
+
+HISTORIAL RECIENTE:
+${recentHistory}
+
+Genera una explicación detallada de por qué este indicador cambió en el último turno.
+Responde SOLO en JSON con este formato:
+{
+  "causalChain": [
+    "<bullet 1: qué decisión tomó el estudiante>",
+    "<bullet 2: qué mecanismo activó>",
+    "<bullet 3: por qué el indicador se movió en esa dirección>",
+    "<bullet 4: por qué la magnitud fue la que fue>"
+  ]
+}
+
+IMPORTANTE: Todo en ESPAÑOL de Latinoamérica. Sé específico al escenario, no genérico.`;
+
+      const response = await generateChatCompletion(
+        [
+          { role: "system", content: "Eres un analista experto que explica cambios en indicadores de simulaciones de negocios. Responde solo JSON válido." },
+          { role: "user", content: prompt },
+        ],
+        { responseFormat: "json", maxTokens: 512, model: "gpt-4o-mini", agentName: "explainer", sessionId: parseInt(sessionId) || undefined }
+      );
+
+      const parsed = JSON.parse(response);
+      res.json({
+        metricId,
+        causalChain: parsed.causalChain || [],
+      });
+    } catch (error: any) {
+      console.error("[Explain] Error generating explanation:", error);
+      res.status(500).json({ message: "Error generating explanation" });
     }
   });
 

@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, TrendingDown, DollarSign, Users, Star, Gauge, Shield, Activity, Clock, Target, AlertTriangle, HelpCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Users, Star, Gauge, Shield, Activity, Clock, Target, AlertTriangle, HelpCircle, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { apiRequest } from "@/lib/queryClient";
 import type { KPIs, Indicator, MetricExplanation } from "@shared/schema";
 
 interface KPIDashboardProps {
@@ -19,8 +20,8 @@ interface KPIDashboardProps {
   objective?: string;
   currentDecision?: number;
   totalDecisions?: number;
-  // POC "Why?" Explainability
   metricExplanations?: Record<string, MetricExplanation>;
+  sessionId?: string;
 }
 
 interface IndicatorInfo {
@@ -86,10 +87,18 @@ interface IndicatorCardProps {
   explanation?: MetricExplanation;
   direction?: "up_better" | "down_better";
   indicatorDescription?: string;
+  sessionId?: string;
 }
 
-function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction, indicatorDescription }: IndicatorCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction, indicatorDescription, sessionId }: IndicatorCardProps) {
+  const [causalChain, setCausalChain] = useState<string[] | null>(explanation?.causalChain || null);
+  const [isLoadingChain, setIsLoadingChain] = useState(false);
+
+  useEffect(() => {
+    setCausalChain(explanation?.causalChain || null);
+    setIsLoadingChain(false);
+  }, [indicatorId, explanation?.shortReason, value]);
+
   const delta = previousValue !== undefined ? value - previousValue : 0;
   
   // S8.1: Determine if the change is "good" or "bad" based on directionality
@@ -198,45 +207,54 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
         />
       </div>
 
-      {/* POC "Why?" Explainability - expandable explanation */}
       {hasExplanation && (
         <div className="mt-3 pt-2 border-t border-border/50">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-            data-testid={`button-why-${indicatorId}`}
-          >
-            <span className="font-medium">¿Por qué?</span>
-            {isExpanded ? (
-              <ChevronUp className="w-3 h-3 ml-auto" />
-            ) : (
-              <ChevronDown className="w-3 h-3 ml-auto" />
-            )}
-          </button>
-          <AnimatePresence>
-            {isExpanded && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="pt-2 space-y-2">
-                  <p className="text-xs text-foreground/90">{explanation.shortReason}</p>
-                  {explanation.causalChain && explanation.causalChain.length > 0 && (
-                    <ul className="text-xs text-muted-foreground space-y-1 ml-2">
-                      {explanation.causalChain.map((step, idx) => (
-                        <li key={idx} className="flex items-start gap-1.5">
-                          <span className="text-primary/70 mt-0.5">•</span>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <p className="text-xs text-foreground/90 mb-1">{explanation.shortReason}</p>
+          {causalChain && causalChain.length > 0 ? (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              className="overflow-hidden"
+            >
+              <ul className="text-xs text-muted-foreground space-y-1 ml-2 pt-1" data-testid={`causal-chain-${indicatorId}`}>
+                {causalChain.map((step, idx) => (
+                  <li key={idx} className="flex items-start gap-1.5">
+                    <span className="text-primary/70 mt-0.5">&bull;</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          ) : sessionId ? (
+            <button
+              onClick={async () => {
+                setIsLoadingChain(true);
+                try {
+                  const response = await apiRequest("POST", `/api/simulations/${sessionId}/explain`, { metricId: indicatorId });
+                  const data = await response.json();
+                  if (data.causalChain && data.causalChain.length > 0) {
+                    setCausalChain(data.causalChain);
+                  }
+                } catch (err) {
+                  console.error("Failed to load explanation:", err);
+                } finally {
+                  setIsLoadingChain(false);
+                }
+              }}
+              disabled={isLoadingChain}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid={`button-why-${indicatorId}`}
+            >
+              {isLoadingChain ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Cargando...</span>
+                </>
+              ) : (
+                <span className="font-medium">¿Por qué?</span>
+              )}
+            </button>
+          ) : null}
         </div>
       )}
     </Card>
@@ -349,6 +367,7 @@ export function KPIDashboard({
   currentDecision,
   totalDecisions,
   metricExplanations,
+  sessionId,
 }: KPIDashboardProps) {
   const kpiConfig = [
     {
@@ -478,6 +497,7 @@ export function KPIDashboard({
                   explanation={metricExplanations?.[indicator.id]}
                   direction={indicator.direction}
                   indicatorDescription={indicator.description}
+                  sessionId={sessionId}
                 />
               );
             })

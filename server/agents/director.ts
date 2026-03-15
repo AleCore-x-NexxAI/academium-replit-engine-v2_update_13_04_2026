@@ -85,7 +85,7 @@ STUDENT'S LATEST INPUT: "${input}"
 
 Interpret this input as a simulation action. Find the business decision in their words.` },
       ],
-      { responseFormat: "json", maxTokens: 256, model: options?.model, agentName: "director", sessionId: options?.sessionId ? parseInt(options.sessionId) : undefined }
+      { responseFormat: "json", maxTokens: 256, model: "gpt-4o-mini", agentName: "director", sessionId: options?.sessionId ? parseInt(options.sessionId) : undefined }
     );
     
     const parsed = JSON.parse(response);

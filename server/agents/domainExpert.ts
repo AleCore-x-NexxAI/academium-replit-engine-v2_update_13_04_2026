@@ -46,19 +46,11 @@ Los cambios en indicadores DEBEN ser ESPECÍFICOS a la decisión real del estudi
 
 ### REGLA 4: EXPLICABILIDAD "¿POR QUÉ?" OBLIGATORIA
 Para CADA indicador que cambia, debes proveer:
-1. **shortReason**: Una línea explicando el cambio (visible siempre)
-2. **causalChain**: 2-4 bullets explicando la cadena causal completa:
-   - Qué hiciste (la decisión)
-   - Qué desencadenó (el mecanismo)
-   - Por qué el indicador se movió
-   - Por qué la magnitud fue menor/moderada/mayor
+1. **shortReason**: Una línea explicando el cambio (visible siempre). CITA o parafrasea las palabras exactas del estudiante. NUNCA uses frases genéricas.
 
 ### REGLA 4B: CALIDAD DE EXPLICACIONES (OBLIGATORIA)
-Las explicaciones deben ser ÚNICAS y ESPECÍFICAS a esta decisión concreta:
 - **shortReason**: CITA o parafrasea las palabras exactas del estudiante. Si el estudiante dijo "voy a reducir el equipo de marketing", di "Reducción del equipo de marketing impacta la moral (-8)". NUNCA uses frases genéricas como "La decisión afecta positivamente".
-- **causalChain**: Cada bullet DEBE mencionar elementos específicos del escenario (nombre de la empresa, stakeholders concretos, productos, situación del mercado). NUNCA uses lenguaje genérico de negocios que aplique a cualquier caso.
-- **VARIEDAD**: NO empieces todos los bullets de causalChain de la misma manera. Usa diferentes estructuras de oración y vocabulario cada vez. NO repitas patrones como "Lo que decidiste: X. Esto desencadenó: Y." en cada turno — reformula creativamente.
-- **TEST DE UNICIDAD**: Si dos estudiantes con decisiones DIFERENTES recibirían el mismo shortReason o causalChain, entonces está MAL — es demasiado genérico. Reescríbelo.
+- **TEST DE UNICIDAD**: Si dos estudiantes con decisiones DIFERENTES recibirían el mismo shortReason, entonces está MAL — es demasiado genérico. Reescríbelo.
 
 ### REGLA 5: COSTO DE OPORTUNIDAD
 ⚠️ CADA decisión DEBE cambiar AL MENOS UN indicador NEGATIVAMENTE.
@@ -78,9 +70,6 @@ ${indicatorJsonFields}
   "metricExplanations": {
     "<indicatorId>": {
       "shortReason": "<Una línea específica citando la decisión del estudiante y el impacto numérico>",
-      "causalChain": [
-        "<2-4 bullets con lenguaje variado explicando: qué decidió, qué mecanismo activó, por qué el indicador se movió, y la magnitud. NO uses siempre el mismo formato — varía la estructura de cada bullet.>"
-      ],
       "tier": <1, 2, o 3>
     }
   },
@@ -172,7 +161,7 @@ Devuelve SOLO JSON válido en el formato especificado.`;
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    { responseFormat: "json", model: context.llmModel, agentName: "domainExpert", sessionId: parseInt(context.sessionId) || undefined }
+    { responseFormat: "json", maxTokens: 768, model: context.llmModel, agentName: "domainExpert", sessionId: parseInt(context.sessionId) || undefined }
   );
 
   try {

@@ -555,6 +555,7 @@ export default function Simulation() {
               currentDecision={currentDecision}
               totalDecisions={totalDecisions}
               metricExplanations={metricExplanations}
+              sessionId={sessionId}
             />
           </div>
           <FeedbackPanel
