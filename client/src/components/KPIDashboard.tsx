@@ -103,12 +103,12 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
   const tooltipDescription = info?.description || indicatorDescription || label;
   const tooltipUpMeaning = info?.upMeaning
     || (effectiveDirection === "up_better"
-      ? "Un valor mayor indica una situación favorable."
-      : "Un valor mayor indica una situación desfavorable.");
+      ? "↑ indica mejora en este indicador."
+      : "↑ indica deterioro en este indicador.");
   const tooltipDownMeaning = info?.downMeaning
     || (effectiveDirection === "down_better"
-      ? "Un valor menor indica una situación favorable."
-      : "Un valor menor indica una situación desfavorable.");
+      ? "↓ indica mejora en este indicador."
+      : "↓ indica deterioro en este indicador.");
 
   return (
     <Card

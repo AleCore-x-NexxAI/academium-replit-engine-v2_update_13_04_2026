@@ -238,7 +238,7 @@ export interface DecisionPoint {
   thinkingScaffold?: string[]; // e.g., ["Impacto en el equipo", "Riesgo vs velocidad", "Consecuencias a corto vs largo plazo"]
 }
 
-// POC Indicator - simpler than full KPI
+// POC Indicator - Constitution Section 9: each indicator has name, definition, directionality, and tooltip
 export interface Indicator {
   id: string;
   label: string;
