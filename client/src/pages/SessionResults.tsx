@@ -56,6 +56,7 @@ const KPI_LABELS: Record<string, string> = {
 
 const INDICATOR_ICONS: Record<string, React.ElementType> = {
   teamMorale: Users,
+  budgetHealth: DollarSign,
   budgetImpact: DollarSign,
   operationalRisk: AlertTriangle,
   strategicFlexibility: Target,
@@ -68,6 +69,7 @@ const INDICATOR_ICONS: Record<string, React.ElementType> = {
 
 const INDICATOR_LABELS: Record<string, string> = {
   teamMorale: "Moral del Equipo",
+  budgetHealth: "Salud Presupuestaria",
   budgetImpact: "Impacto Presupuestario",
   operationalRisk: "Riesgo Operacional",
   strategicFlexibility: "Flexibilidad Estratégica",
@@ -85,6 +87,7 @@ const INDICATOR_COLORS: Record<string, string> = {
   efficiency: "from-blue-500/20 to-blue-500/5 border-blue-500/40",
   trust: "from-violet-500/20 to-violet-500/5 border-violet-500/40",
   teamMorale: "from-rose-500/20 to-rose-500/5 border-rose-500/40",
+  budgetHealth: "from-emerald-500/20 to-emerald-500/5 border-emerald-500/40",
   budgetImpact: "from-emerald-500/20 to-emerald-500/5 border-emerald-500/40",
   operationalRisk: "from-orange-500/20 to-orange-500/5 border-orange-500/40",
   strategicFlexibility: "from-cyan-500/20 to-cyan-500/5 border-cyan-500/40",
@@ -97,6 +100,7 @@ const INDICATOR_ICON_COLORS: Record<string, string> = {
   efficiency: "text-blue-600 dark:text-blue-400",
   trust: "text-violet-600 dark:text-violet-400",
   teamMorale: "text-rose-600 dark:text-rose-400",
+  budgetHealth: "text-emerald-600 dark:text-emerald-400",
   budgetImpact: "text-emerald-600 dark:text-emerald-400",
   operationalRisk: "text-orange-600 dark:text-orange-400",
   strategicFlexibility: "text-cyan-600 dark:text-cyan-400",

@@ -20,10 +20,10 @@ const POC_SCENARIO = {
       trust: 80,
     },
     indicators: [
-      { id: "teamMorale", label: "Moral del Equipo", value: 70, description: "Nivel de motivación y compromiso del equipo" },
-      { id: "budgetImpact", label: "Impacto Presupuestario", value: 50, description: "Estado del presupuesto disponible" },
-      { id: "operationalRisk", label: "Riesgo Operacional", value: 50, description: "Nivel de riesgo en operaciones" },
-      { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica" },
+      { id: "teamMorale", label: "Moral del Equipo", value: 70, description: "Nivel de motivación y compromiso del equipo", direction: "up_better" },
+      { id: "budgetHealth", label: "Salud Presupuestaria", value: 50, description: "Salud financiera y disponibilidad de recursos del presupuesto", direction: "up_better" },
+      { id: "operationalRisk", label: "Riesgo Operacional", value: 50, description: "Nivel de riesgo en operaciones", direction: "down_better" },
+      { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica", direction: "up_better" },
     ],
     totalDecisions: 3,
     decisionPoints: [

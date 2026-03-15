@@ -451,13 +451,13 @@ function EventLogViewer({ sessionId }: { sessionId: string }) {
 }
 
 const RESULT_INDICATOR_ICONS: Record<string, React.ElementType> = {
-  teamMorale: Users, budgetImpact: DollarSign, operationalRisk: AlertTriangle,
+  teamMorale: Users, budgetHealth: DollarSign, budgetImpact: DollarSign, operationalRisk: AlertTriangle,
   strategicFlexibility: Target, revenue: DollarSign, morale: Heart,
   reputation: Star, efficiency: TrendingUp, trust: Users,
 };
 
 const RESULT_INDICATOR_LABELS: Record<string, string> = {
-  teamMorale: "Moral del Equipo", budgetImpact: "Impacto Presupuestario",
+  teamMorale: "Moral del Equipo", budgetHealth: "Salud Presupuestaria", budgetImpact: "Impacto Presupuestario",
   operationalRisk: "Riesgo Operacional", strategicFlexibility: "Flexibilidad Estratégica",
   revenue: "Ingresos", morale: "Moral del Equipo", reputation: "Reputación de Marca",
   efficiency: "Eficiencia Operacional", trust: "Confianza de Stakeholders",

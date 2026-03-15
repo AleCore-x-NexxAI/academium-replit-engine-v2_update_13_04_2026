@@ -20,7 +20,7 @@ export const VERSION_ROADMAP = {
     features: [
       "Canonical Case Structure (120-180 word context)",
       "3 Decision Points (multiple choice → analytical → integrative)",
-      "4 POC Indicators (teamMorale, budgetImpact, operationalRisk, strategicFlexibility)",
+      "4 POC Indicators (teamMorale, budgetHealth, operationalRisk, strategicFlexibility)",
       "Lightweight Reflection (1 optional prompt)",
       "Multi-agent orchestration (Director, Narrator, Evaluator, DomainExpert, DepthEvaluator)",
       "AI Guardrails (8 HARD_PROHIBITIONS)",

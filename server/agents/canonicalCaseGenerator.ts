@@ -107,7 +107,7 @@ SECCIÓN 6 - REFLEXIÓN (Ligera):
 === INDICADORES DEL SISTEMA (4 INDICADORES POC) ===
 Los indicadores deben reflejar:
 1. Moral del equipo (teamMorale) - Estado emocional y compromiso del equipo
-2. Impacto presupuestario (budgetImpact) - Salud financiera y disponibilidad de recursos
+2. Salud presupuestaria (budgetHealth) - Salud financiera y disponibilidad de recursos
 3. Riesgo operacional (operationalRisk) - Nivel de incertidumbre/peligro operativo
 4. Flexibilidad estratégica (strategicFlexibility) - Capacidad de adaptación y opciones estratégicas
 
@@ -191,7 +191,7 @@ IMPORTANTE: El thinkingScaffold NUNCA contiene verbos imperativos ni sugerencias
   "reflectionPrompt": "Pregunta de reflexión al final de la simulación (Paso 4, separado de las decisiones)",
   "indicators": [
     { "id": "teamMorale", "label": "Moral del Equipo", "value": 65, "description": "..." },
-    { "id": "budgetImpact", "label": "Impacto Presupuestario", "value": 70, "description": "..." },
+    { "id": "budgetHealth", "label": "Salud Presupuestaria", "value": 70, "description": "..." },
     { "id": "operationalRisk", "label": "Riesgo Operacional", "value": 50, "description": "..." },
     { "id": "strategicFlexibility", "label": "Flexibilidad Estratégica", "value": 60, "description": "..." }
   ],
@@ -260,7 +260,7 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
   // S8.1: Default indicators with directionality
   const defaultIndicators: Indicator[] = [
     { id: "teamMorale", label: "Moral del Equipo", value: 65, description: "Nivel de motivación y compromiso del equipo", direction: "up_better" },
-    { id: "budgetImpact", label: "Impacto Presupuestario", value: 70, description: "Estado del presupuesto disponible", direction: "up_better" },
+    { id: "budgetHealth", label: "Salud Presupuestaria", value: 70, description: "Salud financiera y disponibilidad de recursos del presupuesto", direction: "up_better" },
     { id: "operationalRisk", label: "Riesgo Operacional", value: 50, description: "Nivel de riesgo en operaciones", direction: "down_better" },
     { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica", direction: "up_better" },
   ];
@@ -299,6 +299,7 @@ Recuerda: 3 puntos de decisión exactamente, sin respuestas correctas, tono de m
   const directionDefaults: Record<string, "up_better" | "down_better"> = {
     teamMorale: "up_better",
     morale: "up_better",
+    budgetHealth: "up_better",
     budgetImpact: "up_better",
     revenue: "up_better",
     operationalRisk: "down_better",

@@ -629,7 +629,7 @@ The POC (v1.0) structure is explicitly locked:
 POC v1.0 — LOCKED
 ├── Canonical Case Structure (120-180 word context)
 ├── 3 Decision Points
-├── 4 POC Indicators (teamMorale, budgetImpact, operationalRisk, strategicFlexibility)
+├── 4 POC Indicators (teamMorale, budgetHealth, operationalRisk, strategicFlexibility)
 ├── 1 Reflection Prompt
 ├── Multi-agent orchestration (Director, Narrator, Evaluator, DomainExpert, DepthEvaluator)
 ├── 8 Hard Prohibitions (guardrails)

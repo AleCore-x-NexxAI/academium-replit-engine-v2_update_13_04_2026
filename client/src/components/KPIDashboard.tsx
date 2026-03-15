@@ -55,6 +55,11 @@ const indicatorExplanations: Record<string, IndicatorInfo> = {
     upMeaning: "Los stakeholders confían más en las decisiones y dirección de la organización.",
     downMeaning: "La confianza de los stakeholders ha disminuido debido a las decisiones tomadas.",
   },
+  budgetHealth: {
+    description: "Refleja la salud financiera y disponibilidad de recursos del presupuesto operativo.",
+    upMeaning: "El presupuesto está sano con recursos disponibles para operar e invertir.",
+    downMeaning: "El presupuesto está bajo presión con recursos limitados.",
+  },
 };
 
 // S8.1: Default directionality for known indicators
@@ -65,7 +70,8 @@ const indicatorDirectionality: Record<string, "up_better" | "down_better"> = {
   efficiency: "up_better",
   trust: "up_better",
   teamMorale: "up_better",
-  budgetImpact: "up_better", // Higher budget availability is better
+  budgetHealth: "up_better",
+  budgetImpact: "up_better",
   operationalRisk: "down_better", // Lower risk is better
   strategicFlexibility: "up_better",
 };
@@ -77,13 +83,12 @@ interface IndicatorCardProps {
   previousValue?: number;
   icon: React.ReactNode;
   color: string;
-  // POC "Why?" Explainability
   explanation?: MetricExplanation;
-  // S8.1: Directionality
   direction?: "up_better" | "down_better";
+  indicatorDescription?: string;
 }
 
-function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction }: IndicatorCardProps) {
+function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction, indicatorDescription }: IndicatorCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const delta = previousValue !== undefined ? value - previousValue : 0;
   
@@ -94,6 +99,16 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
   
   const info = indicatorExplanations[indicatorId];
   const hasExplanation = explanation && delta !== 0;
+
+  const tooltipDescription = info?.description || indicatorDescription || label;
+  const tooltipUpMeaning = info?.upMeaning
+    || (effectiveDirection === "up_better"
+      ? "Un valor mayor indica una situación favorable."
+      : "Un valor mayor indica una situación desfavorable.");
+  const tooltipDownMeaning = info?.downMeaning
+    || (effectiveDirection === "down_better"
+      ? "Un valor menor indica una situación favorable."
+      : "Un valor menor indica una situación desfavorable.");
 
   return (
     <Card
@@ -109,30 +124,28 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
               <span className="text-sm font-semibold text-foreground">
                 {label}
               </span>
-              {info && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
-                      <HelpCircle className="w-3.5 h-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-xs p-3">
-                    <div className="space-y-2 text-xs">
-                      <p className="font-medium">{info.description}</p>
-                      <div className="pt-1 border-t border-border/50">
-                        <p className="text-chart-2 flex items-center gap-1">
-                          <TrendingUp className="w-3 h-3" />
-                          <span>{info.upMeaning}</span>
-                        </p>
-                        <p className="text-chart-4 flex items-center gap-1 mt-1">
-                          <TrendingDown className="w-3 h-3" />
-                          <span>{info.downMeaning}</span>
-                        </p>
-                      </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="text-muted-foreground/60 hover:text-muted-foreground transition-colors" data-testid={`tooltip-trigger-${indicatorId}`}>
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs p-3">
+                  <div className="space-y-2 text-xs">
+                    <p className="font-medium">{tooltipDescription}</p>
+                    <div className="pt-1 border-t border-border/50">
+                      <p className="text-chart-2 flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" />
+                        <span>{tooltipUpMeaning}</span>
+                      </p>
+                      <p className="text-chart-4 flex items-center gap-1 mt-1">
+                        <TrendingDown className="w-3 h-3" />
+                        <span>{tooltipDownMeaning}</span>
+                      </p>
                     </div>
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             </div>
             {/* S8.1: Directionality cue */}
             <span className="text-xs text-muted-foreground" data-testid={`direction-${indicatorId}`}>
@@ -311,6 +324,7 @@ function KPICard({ label, value, previousValue, icon, format, color }: KPICardPr
 
 const indicatorIcons: Record<string, React.ReactNode> = {
   teamMorale: <Users className="w-4 h-4" />,
+  budgetHealth: <DollarSign className="w-4 h-4" />,
   budgetImpact: <DollarSign className="w-4 h-4" />,
   operationalRisk: <AlertTriangle className="w-4 h-4" />,
   strategicFlexibility: <Target className="w-4 h-4" />,
@@ -318,6 +332,7 @@ const indicatorIcons: Record<string, React.ReactNode> = {
 
 const indicatorColors: Record<string, string> = {
   teamMorale: "bg-chart-2/10 text-chart-2",
+  budgetHealth: "bg-chart-1/10 text-chart-1",
   budgetImpact: "bg-chart-1/10 text-chart-1",
   operationalRisk: "bg-chart-5/10 text-chart-5",
   strategicFlexibility: "bg-chart-3/10 text-chart-3",
@@ -462,6 +477,7 @@ export function KPIDashboard({
                   color={indicatorColors[indicator.id] || "bg-muted text-muted-foreground"}
                   explanation={metricExplanations?.[indicator.id]}
                   direction={indicator.direction}
+                  indicatorDescription={indicator.description}
                 />
               );
             })
