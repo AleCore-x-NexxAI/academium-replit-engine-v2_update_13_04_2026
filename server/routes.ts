@@ -1788,23 +1788,25 @@ Be constructive and educational, not judgmental.`;
       for (let dn = 1; dn <= maxTurn; dn++) {
         const dp = decisionPoints.find(d => d.number === dn);
         const turnsAtStep = allTurns.filter(t => t.turnNumber === dn);
-        const totalResponses = turnsAtStep.length;
+        const uniqueStudents = new Set(turnsAtStep.map(t => t.sessionId)).size;
 
         if (dp && dp.format === "multiple_choice" && dp.options && dp.options.length > 0) {
-          const choiceCounts: Record<string, number> = {};
-          for (const opt of dp.options) choiceCounts[opt] = 0;
+          const sessionChoice: Record<string, string> = {};
           for (const t of turnsAtStep) {
+            if (sessionChoice[t.sessionId]) continue;
             const input = t.studentInput.trim();
             const matchedOpt = dp.options.find(opt =>
               input.toLowerCase().startsWith(opt.toLowerCase().substring(0, 10)) ||
               input.toLowerCase().includes(opt.toLowerCase())
             );
-            if (matchedOpt) {
-              choiceCounts[matchedOpt] = (choiceCounts[matchedOpt] || 0) + 1;
-            } else {
-              choiceCounts[input] = (choiceCounts[input] || 0) + 1;
-            }
+            sessionChoice[t.sessionId] = matchedOpt || input;
           }
+          const choiceCounts: Record<string, number> = {};
+          for (const opt of dp.options) choiceCounts[opt] = 0;
+          for (const choice of Object.values(sessionChoice)) {
+            choiceCounts[choice] = (choiceCounts[choice] || 0) + 1;
+          }
+          const uniqueRespondents = Object.keys(sessionChoice).length;
           decisionDistribution.push({
             decisionNumber: dn,
             prompt: dp.prompt || `Decisión ${dn}`,
@@ -1814,10 +1816,10 @@ Be constructive and educational, not judgmental.`;
               .map(([option, count]) => ({
                 option,
                 count,
-                percentage: totalResponses > 0 ? Math.round((count / totalResponses) * 100) : 0,
+                percentage: uniqueRespondents > 0 ? Math.round((count / uniqueRespondents) * 100) : 0,
               }))
               .sort((a, b) => b.count - a.count),
-            totalResponses,
+            totalResponses: uniqueRespondents,
           });
         } else {
           decisionDistribution.push({
@@ -1825,7 +1827,7 @@ Be constructive and educational, not judgmental.`;
             prompt: dp?.prompt || `Decisión ${dn}`,
             format: dp?.format || "written",
             choices: [],
-            totalResponses,
+            totalResponses: uniqueStudents,
           });
         }
       }
@@ -1931,7 +1933,9 @@ Be constructive and educational, not judgmental.`;
         profileData[topProfile].sessionIds.push(sessionId);
       }
 
+      const isSmallCohort = allSessions.length < 5;
       const extractPhrases = (sessionIds: string[], maxPhrases: number = 3): string[] => {
+        if (isSmallCohort) return [];
         const phrases: string[] = [];
         for (const sid of sessionIds) {
           if (phrases.length >= maxPhrases) break;
