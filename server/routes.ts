@@ -2158,10 +2158,25 @@ Be constructive and educational, not judgmental.`;
         concept: string;
         validationFriction: number;
         timeFriction: number;
+        evidenceUse: number;
         combinedFriction: number;
         hardestStep: number | null;
         topExamples: string[];
       }> = [];
+
+      const scenarioFacts: string[] = [];
+      if (initialState?.companyName && initialState.companyName.length > 2) scenarioFacts.push(initialState.companyName.toLowerCase());
+      if (initialState?.stakeholders) {
+        for (const s of initialState.stakeholders) {
+          if (s.name && s.name.length > 2) scenarioFacts.push(s.name.toLowerCase());
+        }
+      }
+      if (initialState?.keyConstraints) {
+        for (const c of initialState.keyConstraints) {
+          const words = c.split(/\s+/).filter((w: string) => w.length > 4);
+          scenarioFacts.push(...words.slice(0, 2).map((w: string) => w.toLowerCase()));
+        }
+      }
 
       if (courseConcepts.length > 0 && decisionPoints.length > 0) {
         const conceptsPerStep: Record<number, string[]> = {};
@@ -2242,6 +2257,17 @@ Be constructive and educational, not judgmental.`;
             }
           }
 
+          const conceptSteps = Object.keys(conceptsPerStep)
+            .filter(s => conceptsPerStep[parseInt(s)]?.includes(concept))
+            .map(s => parseInt(s));
+          const conceptTurns = allTurns.filter(t => conceptSteps.includes(t.turnNumber));
+          const evidenceCount = scenarioFacts.length > 0
+            ? conceptTurns.filter(t => scenarioFacts.some(f => t.studentInput.toLowerCase().includes(f))).length
+            : 0;
+          const evidenceUse = conceptTurns.length > 0
+            ? Math.round((evidenceCount / conceptTurns.length) * 100)
+            : 0;
+
           const topExamples: string[] = [];
           if (!isSmallCohort && hardestStep != null) {
             const turnsAtStep = allTurns.filter(t => t.turnNumber === hardestStep);
@@ -2261,6 +2287,7 @@ Be constructive and educational, not judgmental.`;
             concept,
             validationFriction: cf.valFriction,
             timeFriction: Math.round(cf.timeFriction * 10) / 10,
+            evidenceUse,
             combinedFriction: combined,
             hardestStep,
             topExamples,
@@ -2375,6 +2402,11 @@ Be constructive and educational, not judgmental.`;
         teachingRecommendations.push("El grupo muestra un buen balance en los patrones de razonamiento observados.");
       }
 
+      const SIGNAL_CAP = 7;
+      const cappedConceptGaps = conceptGaps.slice(0, Math.min(4, conceptGaps.length));
+      const remainingSlots = Math.max(SIGNAL_CAP - cappedConceptGaps.length, 2);
+      const cappedReasoningPatterns = reasoningPatterns.slice(0, remainingSlots);
+
       res.json({
         totalStudents: allSessions.length,
         completedStudents: allSessions.filter(s => s.status === "completed").length,
@@ -2382,8 +2414,8 @@ Be constructive and educational, not judgmental.`;
         stuckNodes,
         styleProfiles,
         classStrengths,
-        conceptGaps,
-        reasoningPatterns,
+        conceptGaps: cappedConceptGaps,
+        reasoningPatterns: cappedReasoningPatterns,
         teachingRecommendations,
       });
     } catch (error) {

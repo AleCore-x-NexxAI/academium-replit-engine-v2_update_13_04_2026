@@ -694,6 +694,7 @@ interface CohortAnalyticsData {
     concept: string;
     validationFriction: number;
     timeFriction: number;
+    evidenceUse: number;
     combinedFriction: number;
     hardestStep: number | null;
     topExamples: string[];
@@ -865,6 +866,7 @@ function ConceptGapsSection({ conceptGaps }: { conceptGaps?: CohortAnalyticsData
                   <div className="flex gap-4 flex-wrap text-xs text-muted-foreground">
                     <span>Rechazos: {gap.validationFriction}</span>
                     <span>Tiempo promedio: {gap.timeFriction} min</span>
+                    <span>Uso de evidencia: {gap.evidenceUse}%</span>
                   </div>
                   {gap.topExamples.length > 0 && (
                     <div className="space-y-1">
