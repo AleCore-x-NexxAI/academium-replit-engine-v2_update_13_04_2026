@@ -1895,10 +1895,14 @@ Be constructive and educational, not judgmental.`;
       if (allSessions.length === 0) {
         return res.json({
           totalStudents: 0,
+          completedStudents: 0,
           decisionDistribution: [],
           stuckNodes: [],
           styleProfiles: [],
           classStrengths: [],
+          conceptGaps: [],
+          reasoningPatterns: [],
+          teachingRecommendations: [],
         });
       }
 
@@ -1909,8 +1913,8 @@ Be constructive and educational, not judgmental.`;
         options?: string[];
       }> = (scenario.initialState as any)?.decisionPoints || [];
 
-      const allTurns: Array<{ turnNumber: number; studentInput: string; agentResponse: any; sessionId: string }> = [];
-      const allEvents: Array<{ turnNumber: number | null; eventType: string; eventData: any; sessionId: string }> = [];
+      const allTurns: Array<{ turnNumber: number; studentInput: string; agentResponse: any; sessionId: string; createdAt: Date | null }> = [];
+      const allEvents: Array<{ turnNumber: number | null; eventType: string; eventData: any; sessionId: string; createdAt: Date }> = [];
 
       for (const session of allSessions) {
         const sessionTurns = await storage.getTurnsBySession(session.id);
@@ -1920,6 +1924,7 @@ Be constructive and educational, not judgmental.`;
             studentInput: t.studentInput,
             agentResponse: t.agentResponse as any,
             sessionId: session.id,
+            createdAt: t.createdAt,
           });
         }
         const sessionEvents = await storage.getTurnEvents(session.id);
@@ -1929,6 +1934,7 @@ Be constructive and educational, not judgmental.`;
             eventType: e.eventType,
             eventData: e.eventData as any,
             sessionId: session.id,
+            createdAt: e.createdAt,
           });
         }
       }
@@ -2145,6 +2151,230 @@ Be constructive and educational, not judgmental.`;
         .sort((a, b) => b.averageScore - a.averageScore)
         .slice(0, 8);
 
+      // 5. Concept Gaps (Section A)
+      const courseConcepts: string[] = (scenario as any).courseConcepts || [];
+      const initialState = scenario.initialState as any;
+      const conceptGaps: Array<{
+        concept: string;
+        validationFriction: number;
+        timeFriction: number;
+        combinedFriction: number;
+        hardestStep: number | null;
+        topExamples: string[];
+      }> = [];
+
+      if (courseConcepts.length > 0 && decisionPoints.length > 0) {
+        const conceptsPerStep: Record<number, string[]> = {};
+        for (const dp of decisionPoints) {
+          const stepNum = dp.number;
+          const promptLower = (dp.prompt || "").toLowerCase();
+          const matchedConcepts = courseConcepts.filter(c => promptLower.includes(c.toLowerCase()));
+          if (matchedConcepts.length > 0) {
+            conceptsPerStep[stepNum] = matchedConcepts;
+          } else {
+            const idx = decisionPoints.indexOf(dp);
+            const assignedIdx = idx % courseConcepts.length;
+            conceptsPerStep[stepNum] = [courseConcepts[assignedIdx]];
+          }
+        }
+
+        const rejectionsByStep: Record<number, number> = {};
+        for (const e of allEvents) {
+          if (e.eventType === "input_rejected" && e.turnNumber != null) {
+            rejectionsByStep[e.turnNumber] = (rejectionsByStep[e.turnNumber] || 0) + 1;
+          }
+        }
+
+        const avgTimeByStep: Record<number, number> = {};
+        const sessionTurnTimes: Record<string, Record<number, Date>> = {};
+        for (const t of allTurns) {
+          if (t.createdAt) {
+            if (!sessionTurnTimes[t.sessionId]) sessionTurnTimes[t.sessionId] = {};
+            if (!sessionTurnTimes[t.sessionId][t.turnNumber] || t.createdAt < sessionTurnTimes[t.sessionId][t.turnNumber]) {
+              sessionTurnTimes[t.sessionId][t.turnNumber] = t.createdAt;
+            }
+          }
+        }
+        for (const [, turnMap] of Object.entries(sessionTurnTimes)) {
+          const sortedTurns = Object.entries(turnMap).map(([n, d]) => ({ n: parseInt(n), d })).sort((a, b) => a.n - b.n);
+          for (let i = 1; i < sortedTurns.length; i++) {
+            const diffMs = sortedTurns[i].d.getTime() - sortedTurns[i - 1].d.getTime();
+            const diffMin = diffMs / 60000;
+            if (diffMin > 0 && diffMin < 120) {
+              const step = sortedTurns[i].n;
+              if (!avgTimeByStep[step]) avgTimeByStep[step] = 0;
+              avgTimeByStep[step] += diffMin;
+            }
+          }
+        }
+        const sessionCount = Object.keys(sessionTurnTimes).length;
+        for (const step of Object.keys(avgTimeByStep)) {
+          avgTimeByStep[parseInt(step)] = sessionCount > 0 ? avgTimeByStep[parseInt(step)] / sessionCount : 0;
+        }
+
+        const conceptFriction: Record<string, { valFriction: number; timeFriction: number; stepFrictions: Record<number, number> }> = {};
+        for (const concept of courseConcepts) {
+          conceptFriction[concept] = { valFriction: 0, timeFriction: 0, stepFrictions: {} };
+        }
+
+        for (const [stepStr, concepts] of Object.entries(conceptsPerStep)) {
+          const step = parseInt(stepStr);
+          const rejections = rejectionsByStep[step] || 0;
+          const timeAtStep = avgTimeByStep[step] || 0;
+          for (const concept of concepts) {
+            if (conceptFriction[concept]) {
+              conceptFriction[concept].valFriction += rejections;
+              conceptFriction[concept].timeFriction += timeAtStep;
+              conceptFriction[concept].stepFrictions[step] = rejections + Math.round(timeAtStep);
+            }
+          }
+        }
+
+        for (const concept of courseConcepts) {
+          const cf = conceptFriction[concept];
+          const combined = cf.valFriction + Math.round(cf.timeFriction);
+          let hardestStep: number | null = null;
+          let maxStepFriction = 0;
+          for (const [step, friction] of Object.entries(cf.stepFrictions)) {
+            if (friction > maxStepFriction) {
+              maxStepFriction = friction;
+              hardestStep = parseInt(step);
+            }
+          }
+
+          const topExamples: string[] = [];
+          if (!isSmallCohort && hardestStep != null) {
+            const turnsAtStep = allTurns.filter(t => t.turnNumber === hardestStep);
+            const seen = new Set<string>();
+            for (const t of turnsAtStep) {
+              if (topExamples.length >= 3) break;
+              if (seen.has(t.sessionId)) continue;
+              seen.add(t.sessionId);
+              const input = t.studentInput.trim();
+              if (input.length > 15 && input.length < 250) {
+                topExamples.push(input.length > 140 ? input.substring(0, 137) + "..." : input);
+              }
+            }
+          }
+
+          conceptGaps.push({
+            concept,
+            validationFriction: cf.valFriction,
+            timeFriction: Math.round(cf.timeFriction * 10) / 10,
+            combinedFriction: combined,
+            hardestStep,
+            topExamples,
+          });
+        }
+        conceptGaps.sort((a, b) => b.combinedFriction - a.combinedFriction);
+      }
+
+      // 6. Reasoning Patterns (Section B)
+      const allStudentInputs = allTurns.map(t => t.studentInput.toLowerCase());
+      const reflectionTurns = allTurns.filter(t => {
+        const totalDec = initialState?.totalDecisions || decisionPoints.length || 3;
+        return t.turnNumber === totalDec + 1;
+      });
+
+      const stakeholderNames = ((initialState?.stakeholders || []) as Array<{ name: string }>)
+        .map((s: { name: string }) => s.name.toLowerCase())
+        .filter((n: string) => n.length > 2);
+      const companyName = (initialState?.companyName || "").toLowerCase();
+
+      const completedSessionIds = new Set(allSessions.filter(s => s.status === "completed").map(s => s.id));
+      const completedInputs = allTurns.filter(t => completedSessionIds.has(t.sessionId)).map(t => t.studentInput.toLowerCase());
+      const totalCompletedInputs = completedInputs.length || 1;
+
+      const tradeOffKeywords = ["trade-off", "tradeoff", "por un lado", "sin embargo", "a cambio", "costo-beneficio", "por otro lado", "equilibrio entre", "compromiso entre"];
+      const riskKeywords = ["riesgo", "mitigar", "contingencia", "plan b", "prevención", "peor escenario", "worst case"];
+      const uncertaintyKeywords = ["no estoy seguro", "podría", "supongo", "asumo", "quizás", "tal vez", "posiblemente"];
+
+      const countPattern = (inputs: string[], keywords: string[]) => {
+        return inputs.filter(input => keywords.some(kw => input.includes(kw))).length;
+      };
+
+      const tradeOffCount = countPattern(completedInputs, tradeOffKeywords);
+      const stakeholderCount = stakeholderNames.length > 0
+        ? completedInputs.filter(input => stakeholderNames.some((n: string) => input.includes(n))).length
+        : 0;
+      const riskCount = countPattern(completedInputs, riskKeywords);
+      const evidenceCount = companyName.length > 2
+        ? completedInputs.filter(input => input.includes(companyName)).length
+        : 0;
+      const uncertaintyCount = countPattern(completedInputs, uncertaintyKeywords);
+
+      const completedReflections = reflectionTurns.filter(t => completedSessionIds.has(t.sessionId));
+      const reflectionKeywords = ["haría diferente", "aprendí", "cambiaría", "me di cuenta", "próxima vez", "en retrospectiva"];
+      const reflectionCount = completedReflections.filter(t =>
+        reflectionKeywords.some(kw => t.studentInput.toLowerCase().includes(kw))
+      ).length;
+
+      const pct = (count: number) => totalCompletedInputs > 0 ? Math.round((count / totalCompletedInputs) * 100) : 0;
+      const reflectionPct = completedReflections.length > 0
+        ? Math.round((reflectionCount / completedReflections.length) * 100) : 0;
+
+      const reasoningPatterns = [
+        { pattern: "Menciona trade-offs", percentage: pct(tradeOffCount), count: tradeOffCount },
+        { pattern: "Identifica stakeholders", percentage: pct(stakeholderCount), count: stakeholderCount },
+        { pattern: "Considera mitigación de riesgos", percentage: pct(riskCount), count: riskCount },
+        { pattern: "Usa evidencia del caso", percentage: pct(evidenceCount), count: evidenceCount },
+        { pattern: "Reconoce incertidumbre", percentage: pct(uncertaintyCount), count: uncertaintyCount },
+        { pattern: "Reflexión presente", percentage: reflectionPct, count: reflectionCount },
+      ].filter(p => p.count > 0 || p.pattern === "Menciona trade-offs" || p.pattern === "Reflexión presente")
+       .sort((a, b) => b.percentage - a.percentage);
+
+      // 7. Teaching Recommendations (Section C)
+      const teachingRecommendations: string[] = [];
+
+      if (conceptGaps.length >= 2) {
+        const topGaps = conceptGaps.slice(0, 2).map(g => g.concept);
+        teachingRecommendations.push(`Principales brechas conceptuales: ${topGaps.join(", ")}. Considere dedicar más tiempo a estos temas en clase.`);
+      } else if (conceptGaps.length === 1) {
+        teachingRecommendations.push(`Brecha conceptual identificada: ${conceptGaps[0].concept}. Considere reforzar este concepto.`);
+      } else {
+        const highFrictionSteps = stuckNodes.filter(n => n.nudgeRate >= 30);
+        if (highFrictionSteps.length > 0) {
+          teachingRecommendations.push(`Alta fricción en ${highFrictionSteps.length} punto(s) de decisión. Revise si los estudiantes tienen suficiente contexto previo.`);
+        } else {
+          teachingRecommendations.push("Los estudiantes navegan la simulación sin brechas conceptuales significativas.");
+        }
+      }
+
+      const topFrictionType = (() => {
+        const totalValFriction = conceptGaps.reduce((s, g) => s + g.validationFriction, 0);
+        const totalTimeFriction = conceptGaps.reduce((s, g) => s + g.timeFriction, 0);
+        if (totalValFriction > totalTimeFriction && totalValFriction > 0) {
+          return "rechazo de respuestas (los estudiantes envían respuestas que requieren re-elaboración)";
+        } else if (totalTimeFriction > 0) {
+          return "tiempo prolongado en decisiones (los estudiantes tardan más en formular respuestas)";
+        }
+        const highNudge = stuckNodes.filter(n => n.nudgeRate >= 40);
+        if (highNudge.length > 0) return "orientación frecuente (NUDGE) en puntos clave de decisión";
+        return null;
+      })();
+      if (topFrictionType) {
+        teachingRecommendations.push(`Fricción más común: ${topFrictionType}.`);
+      } else {
+        teachingRecommendations.push("No se detectó fricción significativa en las respuestas del grupo.");
+      }
+
+      const weakestPattern = reasoningPatterns.length > 0
+        ? reasoningPatterns[reasoningPatterns.length - 1]
+        : null;
+      if (weakestPattern && weakestPattern.percentage < 30) {
+        const suggestions: Record<string, string> = {
+          "Menciona trade-offs": "Introduzca ejercicios de análisis de disyuntivas antes de la simulación.",
+          "Identifica stakeholders": "Realice un mapeo de stakeholders como actividad previa.",
+          "Considera mitigación de riesgos": "Agregue una actividad de identificación de riesgos en clase.",
+          "Usa evidencia del caso": "Enfatice la importancia de citar datos del caso en las respuestas.",
+          "Reconoce incertidumbre": "Fomente la reflexión sobre supuestos y limitaciones de información.",
+          "Reflexión presente": "Dedique más tiempo a la etapa de reflexión post-simulación.",
+        };
+        teachingRecommendations.push(`Próximo paso sugerido: ${suggestions[weakestPattern.pattern] || "Refuerce los patrones de razonamiento menos observados."}`);
+      } else {
+        teachingRecommendations.push("El grupo muestra un buen balance en los patrones de razonamiento observados.");
+      }
+
       res.json({
         totalStudents: allSessions.length,
         completedStudents: allSessions.filter(s => s.status === "completed").length,
@@ -2152,6 +2382,9 @@ Be constructive and educational, not judgmental.`;
         stuckNodes,
         styleProfiles,
         classStrengths,
+        conceptGaps,
+        reasoningPatterns,
+        teachingRecommendations,
       });
     } catch (error) {
       console.error("Error fetching cohort analytics:", error);

@@ -34,6 +34,10 @@ import {
   GraduationCap,
   Sparkles,
   Flame,
+  BookOpen,
+  Copy,
+  Search,
+  ChevronUp,
 } from "lucide-react";
 import {
   BarChart,
@@ -686,6 +690,20 @@ interface CohortAnalyticsData {
   }>;
   styleProfiles: Array<{ key: string; label: string; count: number; representativePhrases?: string[] }>;
   classStrengths: Array<{ name: string; averageScore: number; sampleSize: number }>;
+  conceptGaps?: Array<{
+    concept: string;
+    validationFriction: number;
+    timeFriction: number;
+    combinedFriction: number;
+    hardestStep: number | null;
+    topExamples: string[];
+  }>;
+  reasoningPatterns?: Array<{
+    pattern: string;
+    percentage: number;
+    count: number;
+  }>;
+  teachingRecommendations?: string[];
 }
 
 const CHART_COLORS = [
@@ -769,6 +787,202 @@ const PROFILE_COLORS: Record<string, string> = {
   risk: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
   balanced: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
 };
+
+function ConceptGapsSection({ conceptGaps }: { conceptGaps?: CohortAnalyticsData["conceptGaps"] }) {
+  const [expandedConcept, setExpandedConcept] = useState<string | null>(null);
+
+  if (!conceptGaps || conceptGaps.length === 0) {
+    return (
+      <Card className="p-6" data-testid="card-concept-gaps">
+        <div className="flex items-center gap-2 mb-4">
+          <Search className="w-5 h-5 text-blue-500" />
+          <h3 className="font-semibold">Brechas Conceptuales</h3>
+        </div>
+        <div className="text-center py-6">
+          <BookOpen className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Sin conceptos configurados. Agrega etiquetas de conceptos del curso en el editor para habilitar esta sección.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  const maxFriction = Math.max(...conceptGaps.map(g => g.combinedFriction), 1);
+
+  return (
+    <Card className="p-6" data-testid="card-concept-gaps">
+      <div className="flex items-center gap-2 mb-4">
+        <Search className="w-5 h-5 text-blue-500" />
+        <h3 className="font-semibold">Brechas Conceptuales</h3>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Señales de fricción por concepto del curso — dónde los estudiantes encontraron más dificultad.
+      </p>
+      <div className="space-y-3">
+        {conceptGaps.map((gap, idx) => {
+          const barPct = maxFriction > 0 ? Math.min((gap.combinedFriction / maxFriction) * 100, 100) : 0;
+          const isExpanded = expandedConcept === gap.concept;
+          const chartColor = CHART_COLORS[idx % CHART_COLORS.length];
+
+          return (
+            <div key={gap.concept} data-testid={`concept-gap-${idx}`}>
+              <button
+                type="button"
+                className="w-full text-left rounded-lg p-3 bg-muted/30 hover-elevate"
+                onClick={() => setExpandedConcept(isExpanded ? null : gap.concept)}
+                data-testid={`button-expand-concept-${idx}`}
+              >
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    {gap.concept}
+                  </Badge>
+                  <div className="flex-1 min-w-[100px]">
+                    <div className="w-full bg-background/50 rounded-full h-2.5">
+                      <div
+                        className="h-2.5 rounded-full transition-all"
+                        style={{ width: `${barPct}%`, backgroundColor: chartColor }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    Fricción: {gap.combinedFriction}
+                  </span>
+                  {gap.hardestStep != null && (
+                    <Badge variant="outline" className="text-xs shrink-0">
+                      Paso más difícil: {gap.hardestStep}
+                    </Badge>
+                  )}
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                </div>
+              </button>
+              {isExpanded && (
+                <div className="mt-2 ml-4 pl-4 border-l-2 border-muted space-y-2">
+                  <div className="flex gap-4 flex-wrap text-xs text-muted-foreground">
+                    <span>Rechazos: {gap.validationFriction}</span>
+                    <span>Tiempo promedio: {gap.timeFriction} min</span>
+                  </div>
+                  {gap.topExamples.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Ejemplos anónimos:</p>
+                      {gap.topExamples.map((ex, i) => (
+                        <p key={i} className="text-xs italic text-muted-foreground/80 pl-2 truncate">
+                          &ldquo;{ex}&rdquo;
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {gap.topExamples.length === 0 && (
+                    <p className="text-xs text-muted-foreground/60">
+                      Ejemplos disponibles con 5+ estudiantes.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function ReasoningPatternsSection({ reasoningPatterns }: { reasoningPatterns?: CohortAnalyticsData["reasoningPatterns"] }) {
+  if (!reasoningPatterns || reasoningPatterns.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="p-6" data-testid="card-reasoning-patterns">
+      <div className="flex items-center gap-2 mb-4">
+        <Lightbulb className="w-5 h-5 text-amber-500" />
+        <h3 className="font-semibold">Patrones de Razonamiento</h3>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Señales observadas en las respuestas del grupo — qué patrones de pensamiento aparecen con más frecuencia.
+      </p>
+      <div className="space-y-3">
+        {reasoningPatterns.map((rp, idx) => (
+          <div key={rp.pattern} className="flex items-center gap-3" data-testid={`reasoning-pattern-${idx}`}>
+            <span className="text-sm w-56 shrink-0 truncate">{rp.pattern}</span>
+            <div className="flex-1">
+              <div className="w-full bg-muted rounded-full h-2.5">
+                <div
+                  className="h-2.5 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(rp.percentage, 100)}%`,
+                    backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
+                  }}
+                />
+              </div>
+            </div>
+            <span className="text-sm font-medium shrink-0 w-12 text-right">{rp.percentage}%</span>
+            <span className="text-xs text-muted-foreground shrink-0">
+              ({rp.count})
+            </span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function TeachingRecommendationsSection({ recommendations }: { recommendations?: string[] }) {
+  const { toast } = useToast();
+
+  if (!recommendations || recommendations.length === 0) {
+    return null;
+  }
+
+  const handleCopy = () => {
+    const text = recommendations.map((r, i) => `${i + 1}. ${r}`).join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ title: "Copiado", description: "Recomendaciones copiadas al portapapeles." });
+    }).catch(() => {
+      toast({ title: "Error", description: "No se pudieron copiar.", variant: "destructive" });
+    });
+  };
+
+  return (
+    <Card className="p-6" data-testid="card-teaching-recommendations">
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-5 h-5 text-emerald-500" />
+          <h3 className="font-semibold">Recomendaciones para la Enseñanza</h3>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleCopy}
+          data-testid="button-copy-recommendations"
+        >
+          <Copy className="w-4 h-4" />
+        </Button>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Insights accionables basados en los patrones observados en la clase.
+      </p>
+      <div className="space-y-3">
+        {recommendations.map((rec, idx) => (
+          <div
+            key={idx}
+            className="flex gap-3 p-3 rounded-lg bg-muted/30"
+            data-testid={`recommendation-${idx}`}
+          >
+            <div className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{idx + 1}</span>
+            </div>
+            <p className="text-sm">{rec}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
   const { data, isLoading } = useQuery<CohortAnalyticsData>({
@@ -1031,6 +1245,10 @@ function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
           </div>
         </Card>
       )}
+
+      <ConceptGapsSection conceptGaps={data.conceptGaps} />
+      <ReasoningPatternsSection reasoningPatterns={data.reasoningPatterns} />
+      <TeachingRecommendationsSection recommendations={data.teachingRecommendations} />
     </div>
   );
 }
