@@ -2306,8 +2306,6 @@ Be constructive and educational, not judgmental.`;
       const stakeholderNames = ((initialState?.stakeholders || []) as Array<{ name: string }>)
         .map((s: { name: string }) => s.name.toLowerCase())
         .filter((n: string) => n.length > 2);
-      const companyName = (initialState?.companyName || "").toLowerCase();
-
       const completedSessionIds = new Set(allSessions.filter(s => s.status === "completed").map(s => s.id));
       const completedInputs = allTurns.filter(t => completedSessionIds.has(t.sessionId)).map(t => t.studentInput.toLowerCase());
       const totalCompletedInputs = completedInputs.length || 1;
@@ -2325,8 +2323,8 @@ Be constructive and educational, not judgmental.`;
         ? completedInputs.filter(input => stakeholderNames.some((n: string) => input.includes(n))).length
         : 0;
       const riskCount = countPattern(completedInputs, riskKeywords);
-      const evidenceCount = companyName.length > 2
-        ? completedInputs.filter(input => input.includes(companyName)).length
+      const evidenceCount = scenarioFacts.length > 0
+        ? completedInputs.filter(input => scenarioFacts.some(f => input.includes(f))).length
         : 0;
       const uncertaintyCount = countPattern(completedInputs, uncertaintyKeywords);
 
@@ -2347,8 +2345,7 @@ Be constructive and educational, not judgmental.`;
         { pattern: "Usa evidencia del caso", percentage: pct(evidenceCount), count: evidenceCount },
         { pattern: "Reconoce incertidumbre", percentage: pct(uncertaintyCount), count: uncertaintyCount },
         { pattern: "Reflexión presente", percentage: reflectionPct, count: reflectionCount },
-      ].filter(p => p.count > 0 || p.pattern === "Menciona trade-offs" || p.pattern === "Reflexión presente")
-       .sort((a, b) => b.percentage - a.percentage);
+      ].filter(p => p.count > 0 || p.pattern === "Menciona trade-offs" || p.pattern === "Reflexión presente");
 
       // 7. Teaching Recommendations (Section C)
       const teachingRecommendations: string[] = [];
@@ -2386,7 +2383,7 @@ Be constructive and educational, not judgmental.`;
       }
 
       const weakestPattern = reasoningPatterns.length > 0
-        ? reasoningPatterns[reasoningPatterns.length - 1]
+        ? reasoningPatterns.reduce((min, p) => p.percentage < min.percentage ? p : min, reasoningPatterns[0])
         : null;
       if (weakestPattern && weakestPattern.percentage < 30) {
         const suggestions: Record<string, string> = {
