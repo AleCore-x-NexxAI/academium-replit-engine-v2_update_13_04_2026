@@ -1,7 +1,7 @@
 import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, DepthEvaluatorOutput } from "./types";
 import type { DecisionPoint } from "@shared/schema";
-import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING } from "./guardrails";
+import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING, getLanguageDirective } from "./guardrails";
 
 /**
  * S4.2: Relevance + Structure depth evaluator
@@ -239,7 +239,9 @@ Esta es la última decisión del escenario. El estudiante DEBE demostrar SÍNTES
 3. Cómo las consecuencias previas influyen en esta decisión final
 Si la respuesta no hace referencia a decisiones anteriores o no integra el contexto acumulado, solicita revisión pidiendo que conecte esta decisión con lo aprendido en las decisiones previas.` : ""}`;
 
-  const systemPrompt = options?.customPrompt || (strictness === "strict" ? STRICT_DEPTH_EVALUATOR_PROMPT : DEFAULT_DEPTH_EVALUATOR_PROMPT);
+  const lang = context.language;
+  const basePrompt = options?.customPrompt || (strictness === "strict" ? STRICT_DEPTH_EVALUATOR_PROMPT : DEFAULT_DEPTH_EVALUATOR_PROMPT);
+  const systemPrompt = basePrompt + getLanguageDirective(lang);
 
   try {
     const response = await generateChatCompletion(

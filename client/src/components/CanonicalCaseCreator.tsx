@@ -129,6 +129,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
   const [tradeoffFocus, setTradeoffFocus] = useState<string[]>([]);
   const [customTradeoff, setCustomTradeoff] = useState("");
   const [stepCount, setStepCount] = useState(3);
+  const [language, setLanguage] = useState<"es" | "en">("es");
   const [draftId, setDraftId] = useState<string | null>(null);
   const [canonicalCase, setCanonicalCase] = useState<CanonicalCaseData | null>(null);
   const [scenarioData, setScenarioData] = useState<GeneratedScenarioData | null>(null);
@@ -162,6 +163,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
         tradeoffFocus,
         customTradeoff: customTradeoff.trim() || undefined,
         stepCount,
+        language,
       });
       return response.json() as Promise<GenerateResponse>;
     },
@@ -220,7 +222,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
       if (!draftId || !scenarioData) throw new Error("No draft to publish");
       const dataWithConcepts = { ...scenarioData, courseConcepts: conceptTags.length > 0 ? conceptTags : undefined };
       await apiRequest("PUT", `/api/canonical-case/${draftId}`, { scenarioData: dataWithConcepts });
-      const response = await apiRequest("POST", `/api/drafts/${draftId}/publish`);
+      const response = await apiRequest("POST", `/api/drafts/${draftId}/publish`, { language });
       return response.json();
     },
     onSuccess: () => {
@@ -453,7 +455,22 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
               </Select>
             </div>
 
-            {/* NEW: Enfoque de tradeoff */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-semibold">Idioma de la Simulación</Label>
+                <HelpIcon content="El idioma en que los agentes de IA y la interfaz del estudiante se presentarán." />
+              </div>
+              <Select value={language} onValueChange={(v) => setLanguage(v as "es" | "en")}>
+                <SelectTrigger className="w-[200px]" data-testid="select-language-canonical">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="es">Español</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Label className="text-base font-semibold">Número de Decisiones</Label>

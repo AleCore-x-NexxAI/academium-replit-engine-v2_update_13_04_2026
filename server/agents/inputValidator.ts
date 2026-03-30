@@ -25,80 +25,94 @@ import { generateChatCompletion, SupportedModel } from "../openai";
 export interface InputValidationResult {
   isValid: boolean;
   rejectionReason?: string;
-  userMessage?: string; // Message to show the user if rejected
+  userMessage?: string;
 }
 
-// List of offensive words/patterns - ONLY block on truly offensive content
 const OFFENSIVE_PATTERNS = [
-  // Spanish insults (severe only)
   /\b(mierda|puta|puto|cabrón|cabron|hijo\s*de\s*puta|verga|chingar|pinche|culero|joto|marica|maricón|maricon|zorra)\b/i,
-  // English insults (severe only)
   /\b(fuck|fucking|bitch|bastard|dick|cock|pussy|cunt|retard)\b/i,
-  // General offensive patterns
   /\b(kill\s*(yourself|urself)|kys|die|hate\s*you)\b/i,
 ];
 
-// Patterns that indicate clear nonsense/gibberish - only the most obvious
 const NONSENSE_PATTERNS = [
-  /^[a-z]{1,2}$/i, // 1-2 random letters only
-  /^(asdf|qwer|zxcv|hjkl)+$/i, // Pure keyboard mashing
-  /^[^a-záéíóúñü\s]{10,}$/i, // Long strings with no letters at all
-  /^(.)\1{6,}$/i, // Same character repeated 7+ times
-  /^[0-9\s\W]+$/i, // Only numbers and symbols (no letters at all)
+  /^[a-z]{1,2}$/i,
+  /^(asdf|qwer|zxcv|hjkl)+$/i,
+  /^[^a-záéíóúñü\s]{10,}$/i,
+  /^(.)\1{6,}$/i,
+  /^[0-9\s\W]+$/i,
 ];
 
-// POC: Very lenient minimum - just needs SOMETHING
 const MIN_INPUT_LENGTH = 3;
 
-/**
- * S6.B: Quick validation - LENIENT with LOCKED rejection messages
- * Only blocks on: empty, profanity, or clear nonsense
- * Returns null if validation passes, structured error message if fails
- */
+type Language = "es" | "en";
+
+const REJECTION_MESSAGES: Record<Language, Record<string, string>> = {
+  es: {
+    REJECTION_EMPTY: "Tu respuesta está vacía.",
+    REJECTION_PROFANITY: "Tu respuesta contiene lenguaje que no podemos procesar.",
+    REJECTION_NONSENSE: "Tu respuesta no parece relacionada con el caso.",
+    DEFAULT: "Para continuar, necesito que conectes tu respuesta con el caso y expliques tu prioridad.",
+  },
+  en: {
+    REJECTION_EMPTY: "Your response is empty.",
+    REJECTION_PROFANITY: "Your response contains language we cannot process.",
+    REJECTION_NONSENSE: "Your response does not seem related to the case.",
+    DEFAULT: "To continue, please connect your response to the case and explain your priority.",
+  },
+};
+
 function quickValidation(input: string): string | null {
   const trimmed = input.trim();
   
-  // Block 1: Empty input only
   if (trimmed.length < MIN_INPUT_LENGTH) {
-    return "REJECTION_EMPTY"; // Signal for S6.B format
+    return "REJECTION_EMPTY";
   }
   
-  // Block 2: Offensive patterns (profanity/unsafe)
   for (const pattern of OFFENSIVE_PATTERNS) {
     if (pattern.test(trimmed)) {
-      return "REJECTION_PROFANITY"; // Signal for S6.B format
+      return "REJECTION_PROFANITY";
     }
   }
   
-  // Block 3: Clear nonsense/spam only
   for (const pattern of NONSENSE_PATTERNS) {
     if (pattern.test(trimmed)) {
-      return "REJECTION_NONSENSE"; // Signal for S6.B format
+      return "REJECTION_NONSENSE";
     }
   }
   
-  return null; // Passed - accept everything else
+  return null;
 }
 
-/**
- * S4.2: Relevance + Structure validation (NOT length-based)
- * 
- * ACCEPT if student does AT LEAST ONE of:
- * 1. States a clear priority (what they optimize for)
- * 2. References at least one relevant case element
- * 3. Mentions one trade-off or risk they're accepting
- * 
- * Examples that PASS:
- * - "Prioritizo X porque Y."
- * - "Elijo X para lograr Y, aunque afecte Z."
- * - "Mi prioridad es X; el riesgo principal es Y."
- */
-async function llmValidation(
-  input: string,
-  caseContext: { title: string; objective: string; recentHistory?: string },
-  model?: SupportedModel
-): Promise<InputValidationResult> {
-  const systemPrompt = `Eres un validador MUY PERMISIVO para una simulación educativa de negocios.
+function getSystemPrompt(language: Language): string {
+  if (language === "en") {
+    return `You are a VERY PERMISSIVE validator for an educational business simulation.
+
+Your goal: verify that the student is responding about the case — you do NOT judge quality, depth, or structure.
+
+ACCEPT if the response has ANY connection to the case:
+- Mentions something related to the topic, company, characters, or situation of the case
+- Proposes some action, decision, or direction (even if brief)
+- Expresses an opinion or stance on the problem
+- Short but relevant responses: "I prioritize quality", "Reduce costs", "I focus on the team" → ACCEPT
+- Long responses that touch on the topic even if they ramble → ACCEPT
+
+REJECT ONLY if the response has NO relation to the case:
+- Meaningless text, random characters, or spam
+- Offensive or inappropriate content
+- Empty or 1-2 generic word responses: "yes", "no", "ok", "I don't know"
+- Completely off-topic responses about something totally different from the case
+- Generic responses that mention NOTHING about the case: "We need to make good decisions", "It's important to analyze"
+
+WHEN IN DOUBT: ALWAYS ACCEPT. Prefer to accept 10 mediocre responses rather than reject 1 valid one.
+
+Respond in JSON:
+{
+  "isValid": true/false,
+  "reason": "brief explanation"
+}`;
+  }
+
+  return `Eres un validador MUY PERMISIVO para una simulación educativa de negocios.
 
 Tu objetivo: verificar que el estudiante está respondiendo sobre el caso — NO juzgas calidad, profundidad ni estructura.
 
@@ -123,8 +137,21 @@ Responde en JSON:
   "isValid": true/false,
   "reason": "breve explicación"
 }`;
+}
 
-  const userPrompt = `CASO: ${caseContext.title}
+function getUserPrompt(input: string, caseContext: { title: string; objective: string; recentHistory?: string }, language: Language): string {
+  if (language === "en") {
+    return `CASE: ${caseContext.title}
+OBJECTIVE: ${caseContext.objective}
+${caseContext.recentHistory ? `RECENT CONTEXT:\n${caseContext.recentHistory}` : ""}
+
+STUDENT RESPONSE:
+"${input}"
+
+Does the response show reasoning connected to the case? Respond in JSON.`;
+  }
+
+  return `CASO: ${caseContext.title}
 OBJETIVO: ${caseContext.objective}
 ${caseContext.recentHistory ? `CONTEXTO RECIENTE:\n${caseContext.recentHistory}` : ""}
 
@@ -132,12 +159,21 @@ RESPUESTA DEL ESTUDIANTE:
 "${input}"
 
 ¿La respuesta muestra razonamiento conectado al caso? Responde en JSON.`;
+}
+
+async function llmValidation(
+  input: string,
+  caseContext: { title: string; objective: string; recentHistory?: string },
+  language: Language,
+  model?: SupportedModel
+): Promise<InputValidationResult> {
+  const messages = REJECTION_MESSAGES[language];
 
   try {
     const response = await generateChatCompletion(
       [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
+        { role: "system", content: getSystemPrompt(language) },
+        { role: "user", content: getUserPrompt(input, caseContext, language) }
       ],
       { 
         responseFormat: "json",
@@ -152,7 +188,7 @@ RESPUESTA DEL ESTUDIANTE:
       return {
         isValid: false,
         rejectionReason: result.reason,
-        userMessage: S6B_REJECTION_MESSAGE
+        userMessage: messages.DEFAULT
       };
     }
     
@@ -160,39 +196,15 @@ RESPUESTA DEL ESTUDIANTE:
     
   } catch (error) {
     console.error("[InputValidator] LLM validation error:", error);
-    // On error, ALWAYS accept
     return { isValid: true };
   }
 }
 
-/**
- * S6.B LOCKED rejection message - always use this structure
- * Never feels like "incorrect" - student knows how to fix quickly
- */
-const S6B_REJECTION_MESSAGE = `Para continuar, necesito que conectes tu respuesta con el caso y expliques tu prioridad.`;
-
-/**
- * Get specific rejection reason based on type
- */
-function getS6BRejectionReason(type: string): string {
-  switch (type) {
-    case "REJECTION_EMPTY":
-      return "Tu respuesta está vacía.";
-    case "REJECTION_PROFANITY":
-      return "Tu respuesta contiene lenguaje que no podemos procesar.";
-    case "REJECTION_NONSENSE":
-      return "Tu respuesta no parece relacionada con el caso.";
-    default:
-      return S6B_REJECTION_MESSAGE;
-  }
+function getS6BRejectionReason(type: string, language: Language): string {
+  const messages = REJECTION_MESSAGES[language];
+  return messages[type] || messages.DEFAULT;
 }
 
-/**
- * Main validation function - validates user input before simulation processing
- * 
- * S6.B: Rejection only for profanity/unsafe, empty, or totally unrelated spam/nonsense
- * Uses LOCKED rejection message structure
- */
 export async function validateSimulationInput(
   input: string,
   caseContext: { 
@@ -203,28 +215,28 @@ export async function validateSimulationInput(
   options?: { 
     skipLlmValidation?: boolean; 
     model?: SupportedModel;
+    language?: Language;
   }
 ): Promise<InputValidationResult> {
+  const language: Language = options?.language || "es";
   
-  // Step 1: Quick regex-based validation (catches obvious issues fast)
   const quickResult = quickValidation(input);
   if (quickResult) {
     console.log("[InputValidator] Quick validation failed:", quickResult);
     return {
       isValid: false,
       rejectionReason: quickResult,
-      userMessage: getS6BRejectionReason(quickResult)
+      userMessage: getS6BRejectionReason(quickResult, language)
     };
   }
   
-  // Step 2: LLM-based validation for nuanced checks (unless skipped)
   if (!options?.skipLlmValidation) {
-    const llmResult = await llmValidation(input, caseContext, options?.model);
+    const llmResult = await llmValidation(input, caseContext, language, options?.model);
     if (!llmResult.isValid) {
       console.log("[InputValidator] LLM validation failed:", llmResult.rejectionReason);
       return {
         ...llmResult,
-        userMessage: S6B_REJECTION_MESSAGE
+        userMessage: REJECTION_MESSAGES[language].DEFAULT
       };
     }
   }

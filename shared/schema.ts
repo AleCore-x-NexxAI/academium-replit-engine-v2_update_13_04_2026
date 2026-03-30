@@ -74,6 +74,7 @@ export const scenarios = pgTable("scenarios", {
   isGlobalDemo: boolean("is_global_demo").default(false).notNull(), // Global demo visible to all students
   joinCode: varchar("join_code", { length: 10 }), // Kahoot-style join code for students
   courseConcepts: text("course_concepts").array(), // Course concept tags (3-8 tags) for analytics
+  language: varchar("language", { length: 5 }).default("es").notNull(), // "es" (Spanish) or "en" (English)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

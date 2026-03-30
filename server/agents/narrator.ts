@@ -1,6 +1,6 @@
 import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, NarratorOutput, DomainExpertOutput, EvaluatorOutput } from "./types";
-import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING } from "./guardrails";
+import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING, getLanguageDirective } from "./guardrails";
 
 export const DEFAULT_NARRATOR_PROMPT = `Eres el NARRADOR DE CONSECUENCIAS para Academium, una plataforma de entrenamiento en toma de decisiones experiencial.
 
@@ -136,7 +136,8 @@ Observed patterns: ${evaluation.flags.join(", ") || "None specific"}
 Generate a consequence-focused narrative response. Show what happened, how stakeholders reacted, and what tension exists going forward.
 Return ONLY valid JSON matching the specified format.`;
 
-  const systemPrompt = context.agentPrompts?.narrator || DEFAULT_NARRATOR_PROMPT;
+  const basePrompt = context.agentPrompts?.narrator || DEFAULT_NARRATOR_PROMPT;
+  const systemPrompt = basePrompt + getLanguageDirective(context.language);
 
   const response = await generateChatCompletion(
     [

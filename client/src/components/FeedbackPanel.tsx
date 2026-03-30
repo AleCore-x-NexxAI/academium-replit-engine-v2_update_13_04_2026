@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, RefreshCw } from "lucide-react";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
 interface FeedbackPanelProps {
   feedback: {
@@ -15,6 +16,7 @@ interface FeedbackPanelProps {
   revisionPrompt?: string | null;
   revisionAttempts?: number;
   maxRevisions?: number;
+  language?: SimulationLanguage;
 }
 
 export function FeedbackPanel({
@@ -24,11 +26,12 @@ export function FeedbackPanel({
   revisionPrompt,
   revisionAttempts = 0,
   maxRevisions = 2,
+  language = "es",
 }: FeedbackPanelProps) {
   return (
     <div className="flex flex-col p-6">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-6">
-        Observaciones
+        {t("feedback.observations", language)}
       </h3>
 
       <AnimatePresence mode="wait">
@@ -44,7 +47,7 @@ export function FeedbackPanel({
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-5 h-5 text-primary" />
-                  <span className="font-medium">Profundiza tu Respuesta</span>
+                  <span className="font-medium">{t("feedback.deepen", language)}</span>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {revisionAttempts}/{maxRevisions}
@@ -56,7 +59,7 @@ export function FeedbackPanel({
               </p>
 
               <p className="text-xs text-muted-foreground">
-                Tómate un momento para reflexionar y ampliar tu respuesta.
+                {t("feedback.reflect", language)}
               </p>
             </Card>
           </motion.div>
@@ -73,7 +76,7 @@ export function FeedbackPanel({
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-4">
                 <MessageSquare className="w-5 h-5 text-primary" />
-                <span className="font-medium">Nota del Mentor</span>
+                <span className="font-medium">{t("feedback.mentor", language)}</span>
               </div>
 
               <p className="text-sm leading-relaxed text-foreground">
@@ -93,7 +96,7 @@ export function FeedbackPanel({
         >
           <Card className="p-6 bg-muted/30">
             <p className="text-sm text-center text-muted-foreground">
-              Has completado esta simulación. Revisa tu línea de decisiones para reflexionar sobre tu experiencia.
+              {t("results.gameover.msg", language)}
             </p>
           </Card>
         </motion.div>

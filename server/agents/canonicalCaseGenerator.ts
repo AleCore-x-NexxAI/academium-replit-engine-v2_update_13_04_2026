@@ -210,28 +210,30 @@ export interface CanonicalCaseData {
 export async function generateCanonicalCase(
   topic: string,
   additionalContext?: string,
-  stepCount?: number
+  stepCount?: number,
+  language?: "es" | "en"
 ): Promise<CanonicalCaseData> {
   const effectiveSteps = Math.min(MAX_DECISIONS, Math.max(MIN_DECISIONS, stepCount ?? DEFAULT_DECISIONS));
   const durationMin = Math.round((effectiveSteps / 3) * 20);
   const durationMax = Math.round((effectiveSteps / 3) * 25);
+  const isEn = language === "en";
 
   const contextAddition = additionalContext 
     ? `\n\nContexto adicional del profesor:\n${additionalContext}` 
     : "";
 
+  const langDirective = isEn
+    ? `\n\nCRITICAL LANGUAGE OVERRIDE: Generate ALL content in ENGLISH. All titles, descriptions, prompts, options, contexts, constraints, and objectives MUST be in English. Zero Spanish.`
+    : "";
+
   const response = await generateChatCompletion(
     [
-      { role: "system", content: buildCanonicalPrompt(effectiveSteps) },
+      { role: "system", content: buildCanonicalPrompt(effectiveSteps) + langDirective },
       { 
         role: "user", 
-        content: `Crea un caso de negocios canónico basado en este tema/industria:
-
-TEMA: ${topic}${contextAddition}
-
-Genera un caso de negocios COMPLETO siguiendo la estructura canónica, TODO en español latinoamericano.
-El caso debe durar ${durationMin}-${durationMax} minutos para completar.
-Recuerda: ${effectiveSteps} puntos de decisión exactamente, sin respuestas correctas, tono de mentoría.` 
+        content: isEn
+          ? `Create a canonical business case based on this topic/industry:\n\nTOPIC: ${topic}${contextAddition}\n\nGenerate a COMPLETE business case following the canonical structure, ALL in English.\nThe case should last ${durationMin}-${durationMax} minutes to complete.\nRemember: exactly ${effectiveSteps} decision points, no correct answers, mentoring tone.`
+          : `Crea un caso de negocios canónico basado en este tema/industria:\n\nTEMA: ${topic}${contextAddition}\n\nGenera un caso de negocios COMPLETO siguiendo la estructura canónica, TODO en español latinoamericano.\nEl caso debe durar ${durationMin}-${durationMax} minutos para completar.\nRecuerda: ${effectiveSteps} puntos de decisión exactamente, sin respuestas correctas, tono de mentoría.`
       },
     ],
     { responseFormat: "json", maxTokens: 4096 + (effectiveSteps > 3 ? (effectiveSteps - 3) * 512 : 0), agentName: "canonicalCaseGenerator" }

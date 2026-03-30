@@ -89,6 +89,7 @@ const createScenarioSchema = z.object({
     })),
   }).optional(),
   isPublished: z.boolean().optional(),
+  language: z.enum(["es", "en"]).optional(),
 });
 
 const startSimulationSchema = z.object({
@@ -385,14 +386,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Scenario not found" });
       }
 
-      // Fetch user to check role for admin access
       const user = await storage.getUser(userId);
       const isAdmin = user?.role === "admin";
       if (scenario.authorId !== userId && !isAdmin) {
         return res.status(403).json({ message: "Not authorized" });
       }
 
-      const updated = await storage.updateScenario(req.params.id, req.body);
+      const { title, description, domain, language, initialState, status } = req.body;
+      const updateData: Record<string, any> = {};
+      if (title !== undefined) updateData.title = title;
+      if (description !== undefined) updateData.description = description;
+      if (domain !== undefined) updateData.domain = domain;
+      if (status !== undefined) updateData.status = status;
+      if (initialState !== undefined) updateData.initialState = initialState;
+      if (language !== undefined) {
+        if (language !== "es" && language !== "en") {
+          return res.status(400).json({ message: "language must be 'es' or 'en'" });
+        }
+        updateData.language = language;
+      }
+
+      const updated = await storage.updateScenario(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
       console.error("Error updating scenario:", error);
@@ -554,6 +568,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Per-scenario LLM configuration
         llmModel: scenarioLlmModel,
         agentPrompts: scenarioAgentPrompts,
+        language: (session.scenario?.language as "es" | "en") || "es",
         scenario: {
           title: session.scenario?.title || "Business Simulation",
           domain: session.scenario?.domain || "General",
@@ -654,6 +669,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .slice(-4)
           .map(h => `${h.role}: ${h.content}`)
           .join("\n");
+        const scenarioLanguage = (session.scenario?.language as "es" | "en") || "es";
         const result = await validateSimulationInput(
           input,
           {
@@ -661,7 +677,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             objective: initialState?.objective || "Navigate the challenge",
             recentHistory,
           },
-          { model: "gpt-4o-mini" }
+          { model: "gpt-4o-mini", language: scenarioLanguage }
         );
         if (result.isValid) {
           storage.createTurnEvent({
@@ -1530,6 +1546,7 @@ Be constructive and educational, not judgmental.`;
     tradeoffFocus: z.array(z.string()).optional(),
     customTradeoff: z.string().optional(),
     stepCount: z.number().int().min(3).max(10).optional(),
+    language: z.enum(["es", "en"]).optional(),
   });
 
   app.post("/api/canonical-case/generate", isAuthenticated, async (req: any, res) => {
@@ -1546,7 +1563,7 @@ Be constructive and educational, not judgmental.`;
         return res.status(400).json({ message: "Datos inválidos", errors: parseResult.error.errors });
       }
 
-      const { topic, additionalContext, tradeoffFocus, customTradeoff, stepCount } = parseResult.data;
+      const { topic, additionalContext, tradeoffFocus, customTradeoff, stepCount, language: caseLang } = parseResult.data;
 
       const tradeoffParts: string[] = [];
       if (tradeoffFocus && tradeoffFocus.length > 0) {
@@ -1563,7 +1580,7 @@ Be constructive and educational, not judgmental.`;
         builtContext = builtContext ? `${builtContext}\n${tradeoffSection}` : tradeoffSection;
       }
 
-      const canonicalCase = await generateCanonicalCase(topic, builtContext || undefined, stepCount);
+      const canonicalCase = await generateCanonicalCase(topic, builtContext || undefined, stepCount, caseLang);
       const scenarioData = convertCanonicalToScenarioData(canonicalCase);
 
       const initialMessage: DraftConversationMessage = {
@@ -1651,6 +1668,7 @@ Be constructive and educational, not judgmental.`;
         rubric: generatedScenario.rubric,
         courseConcepts: generatedScenario.courseConcepts || null,
         isPublished: true,
+        language: req.body.language || "es",
       });
 
       await storage.updateScenarioDraft(draft.id, {

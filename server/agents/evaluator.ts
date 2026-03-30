@@ -1,7 +1,7 @@
 import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, EvaluatorOutput } from "./types";
 import { COMPETENCY_DEFINITIONS } from "./types";
-import { HARD_PROHIBITIONS, MENTOR_TONE } from "./guardrails";
+import { HARD_PROHIBITIONS, MENTOR_TONE, getLanguageDirective } from "./guardrails";
 
 export const DEFAULT_EVALUATOR_PROMPT = `Eres un OBSERVADOR DE COMPETENCIAS para Academium, una plataforma de entrenamiento en toma de decisiones experiencial.
 
@@ -135,8 +135,8 @@ IMPORTANTE - Tu mensaje de retroalimentación DEBE:
 
 Devuelve tu evaluación completa en JSON.`;
 
-  // Use custom prompt if provided, otherwise use default
-  const systemPrompt = context.agentPrompts?.evaluator || DEFAULT_EVALUATOR_PROMPT;
+  const basePrompt = context.agentPrompts?.evaluator || DEFAULT_EVALUATOR_PROMPT;
+  const systemPrompt = basePrompt + getLanguageDirective(context.language);
   
   try {
     const response = await generateChatCompletion(

@@ -2,6 +2,7 @@ import { generateChatCompletion, SupportedModel } from "../openai";
 import type { AgentContext, DomainExpertOutput } from "./types";
 import { CAUSE_EFFECT_RULES } from "./types";
 import type { Indicator } from "@shared/schema";
+import { getLanguageDirective } from "./guardrails";
 
 function buildDomainExpertPrompt(indicators: Indicator[]): string {
   const indicatorList = indicators.map((ind, i) => {
@@ -99,7 +100,8 @@ export async function calculateKPIImpact(context: AgentContext): Promise<DomainE
     ? context.indicators
     : DEFAULT_INDICATORS;
 
-  const systemPrompt = context.agentPrompts?.domainExpert || buildDomainExpertPrompt(indicators);
+  const basePrompt = context.agentPrompts?.domainExpert || buildDomainExpertPrompt(indicators);
+  const systemPrompt = basePrompt + getLanguageDirective(context.language);
 
   const industryInfo = [];
   if (context.scenario.industry) industryInfo.push(`Industria: ${context.scenario.industry}`);

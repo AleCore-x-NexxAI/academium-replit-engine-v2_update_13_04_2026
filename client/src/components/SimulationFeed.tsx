@@ -4,12 +4,14 @@ import { User, Bot, MessageSquare } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { HistoryEntry } from "@shared/schema";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
 interface SimulationFeedProps {
   history: HistoryEntry[];
   isTyping: boolean;
   thinkingSteps?: { message: string; completed: boolean }[];
   queueStatus?: { position: number; estimatedWaitMs: number } | null;
+  language?: SimulationLanguage;
 }
 
 const npcAvatars: Record<string, { initial: string; color: string }> = {
@@ -185,7 +187,7 @@ function TypingDots() {
   );
 }
 
-function QueueIndicator({ position, estimatedWaitMs }: { position: number; estimatedWaitMs: number }) {
+function QueueIndicator({ position, estimatedWaitMs, language = "es" }: { position: number; estimatedWaitMs: number; language?: SimulationLanguage }) {
   const waitSec = Math.ceil(estimatedWaitMs / 1000);
   return (
     <motion.div
@@ -211,12 +213,12 @@ function QueueIndicator({ position, estimatedWaitMs }: { position: number; estim
             />
             <span className="text-sm text-foreground">
               {position > 0
-                ? `Tu decisión está en cola (posición ${position})`
-                : "Procesando tu decisión..."}
+                ? t("sim.queue", language).replace("{n}", String(position))
+                : t("sim.processing", language)}
             </span>
           </div>
           <span className="text-xs text-muted-foreground block pl-4">
-            Tiempo estimado: ~{waitSec > 60 ? `${Math.ceil(waitSec / 60)} min` : `${waitSec}s`}
+            {t("sim.estimated", language).replace("{n}", waitSec > 60 ? `${Math.ceil(waitSec / 60)} min` : String(waitSec))}
           </span>
         </div>
       </div>
@@ -229,6 +231,7 @@ export function SimulationFeed({
   isTyping,
   thinkingSteps,
   queueStatus,
+  language = "es",
 }: SimulationFeedProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -243,7 +246,7 @@ export function SimulationFeed({
         <div className="text-center p-8">
           <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
           <p className="text-muted-foreground">
-            La simulación comenzará en breve...
+            {language === "en" ? "The simulation will begin shortly..." : "La simulación comenzará en breve..."}
           </p>
         </div>
       </div>
@@ -259,7 +262,7 @@ export function SimulationFeed({
 
         <AnimatePresence>
           {queueStatus ? (
-            <QueueIndicator position={queueStatus.position} estimatedWaitMs={queueStatus.estimatedWaitMs} />
+            <QueueIndicator position={queueStatus.position} estimatedWaitMs={queueStatus.estimatedWaitMs} language={language} />
           ) : isTyping && thinkingSteps && thinkingSteps.length > 0 ? (
             <ThinkingIndicator steps={thinkingSteps} />
           ) : isTyping ? (

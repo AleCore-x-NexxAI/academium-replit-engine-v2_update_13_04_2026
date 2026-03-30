@@ -12,6 +12,8 @@ export interface AgentContext {
   // Per-scenario LLM configuration
   llmModel?: SupportedModel;
   agentPrompts?: AgentPrompts;
+  // Per-scenario language setting
+  language?: "es" | "en";
   // Decision structure
   totalDecisions?: number;
   currentDecision?: number;

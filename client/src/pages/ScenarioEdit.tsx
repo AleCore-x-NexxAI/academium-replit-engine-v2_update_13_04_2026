@@ -88,6 +88,7 @@ const scenarioFormSchema = z.object({
   resourceConstraints: z.string().optional(),
   keyConstraintsText: z.string().optional(),
   learningObjectivesText: z.string().optional(),
+  language: z.enum(["es", "en"]).default("es"),
 });
 
 type ScenarioFormData = z.infer<typeof scenarioFormSchema>;
@@ -157,6 +158,7 @@ export default function ScenarioEdit() {
       resourceConstraints: "",
       keyConstraintsText: "",
       learningObjectivesText: "",
+      language: "es",
     },
   });
 
@@ -187,6 +189,7 @@ export default function ScenarioEdit() {
         learningObjectivesText: Array.isArray(initialState?.learningObjectives)
           ? initialState.learningObjectives.join("\n")
           : "",
+        language: (scenario.language as "es" | "en") || "es",
       });
       if (Array.isArray(initialState?.decisionPoints)) {
         setDecisionPoints(initialState.decisionPoints);
@@ -231,6 +234,7 @@ export default function ScenarioEdit() {
         title: data.title,
         description: data.description,
         domain: data.domain,
+        language: data.language || "es",
         initialState: {
           ...currentState,
           playerRole: data.role,
@@ -435,6 +439,27 @@ export default function ScenarioEdit() {
                             <SelectItem value="beginner">Beginner</SelectItem>
                             <SelectItem value="intermediate">Intermediate</SelectItem>
                             <SelectItem value="advanced">Advanced</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="language"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Idioma de la Simulación</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-language-edit">
+                              <SelectValue placeholder="Idioma" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="es">Español</SelectItem>
+                            <SelectItem value="en">English</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

@@ -8,8 +8,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import type { DecisionPoint } from "@shared/schema";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
-// POC: Simplified props - rubric and hints removed per POC spec
 interface InputConsoleProps {
   onSubmit: (text: string) => Promise<any>;
   mode: "guided" | "assessment";
@@ -24,11 +24,10 @@ interface InputConsoleProps {
   revisionAttempts?: number;
   maxRevisions?: number;
   validationError?: string | null;
-  // S14/S6: Explicit turn status
   turnStatus?: "pass" | "nudge" | "block" | null;
-  // S9.1: Reflection as separate Step 4
   isReflectionStep?: boolean;
   reflectionPrompt?: string;
+  language?: SimulationLanguage;
 }
 
 export function InputConsole({
@@ -43,12 +42,12 @@ export function InputConsole({
   pendingRevision = false,
   revisionPrompt,
   revisionAttempts = 0,
-  maxRevisions = 1, // S4.1: Only 1 revision max
+  maxRevisions = 1,
   validationError,
   turnStatus,
-  // S9.1: Reflection as separate Step 4
   isReflectionStep = false,
   reflectionPrompt,
+  language = "es",
 }: InputConsoleProps) {
   const [input, setInput] = useState("");
   const [selectedOption, setSelectedOption] = useState<string>("");
@@ -59,8 +58,6 @@ export function InputConsole({
   const isMultipleChoice = currentDecisionPoint?.format === "multiple_choice";
   const requiresJustification = currentDecisionPoint?.requiresJustification ?? false;
   const decisionOptions = currentDecisionPoint?.options || [];
-
-  // POC: Hints removed - handleRequestHint removed per spec
 
   const justificationRef = useRef<HTMLTextAreaElement>(null);
 
@@ -86,7 +83,7 @@ export function InputConsole({
       if (!selectedOption) return;
       submissionText = selectedOption;
       if (requiresJustification && justification.trim()) {
-        submissionText += `\n\nJustificación: ${justification.trim()}`;
+        submissionText += `\n\n${language === "en" ? "Justification" : "Justificación"}: ${justification.trim()}`;
       }
     } else {
       if (!input.trim()) return;
@@ -109,8 +106,6 @@ export function InputConsole({
       setIsSubmitting(false);
     }
   };
-
-  // POC: handleOptionClick removed - "Suggested Actions" panel removed per spec
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -137,11 +132,11 @@ export function InputConsole({
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span className="text-xs font-medium text-amber-700 dark:text-amber-300 uppercase tracking-wide">
-                {turnStatus === "nudge" ? "Buen inicio — profundiza un poco más" : "El mentor te invita a profundizar"}
+                {turnStatus === "nudge" ? t("input.nudge.title", language) : t("input.mentor.invite", language)}
               </span>
             </div>
             <Badge variant="outline" className="text-xs">
-              Revisión {revisionAttempts} de {maxRevisions}
+              {t("input.revision.label", language)} {revisionAttempts} {t("input.revision.of", language)} {maxRevisions}
             </Badge>
           </div>
           <p className="text-sm text-foreground leading-relaxed">
@@ -168,27 +163,26 @@ export function InputConsole({
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">
                 {turnStatus === "block"
-                  ? "Tu respuesta no pudo procesarse. Intenta reformularla."
-                  : "Para continuar, necesito que conectes tu respuesta con el caso y expliques tu prioridad."}
+                  ? t("input.validation.block", language)
+                  : t("input.validation.connect", language)}
               </p>
               
               <div className="text-sm text-muted-foreground">
-                <span className="font-medium">Sugerencia rápida:</span>
+                <span className="font-medium">{t("input.suggestion.title", language)}</span>
                 <ul className="list-disc list-inside mt-1 space-y-0.5">
-                  <li>Menciona qué priorizas (equipo, tiempo, riesgo, etc.)</li>
-                  <li>Da 1 razón basada en el contexto</li>
+                  <li>{t("input.suggestion.priority", language)}</li>
+                  <li>{t("input.suggestion.reason", language)}</li>
                 </ul>
               </div>
               
               <p className="text-sm text-muted-foreground italic bg-background/50 px-2 py-1.5 rounded border border-border/50">
-                Estructura útil: "Prioritizo ____ porque ____. Esto implica ____."
+                {t("input.suggestion.structure", language)}
               </p>
             </div>
           </div>
         </motion.div>
       )}
 
-      {/* S9.1: Reflection Step Header (Step 4) - Separate from decisions */}
       {isReflectionStep && !pendingRevision && !isGameOver && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -202,26 +196,25 @@ export function InputConsole({
                   <CheckCircle2 className="w-4 h-4 text-chart-3" />
                 </div>
                 <span className="text-sm font-semibold text-chart-3 uppercase tracking-wide">
-                  Paso {(totalDecisions || 0) + 1}: Reflexión
+                  {t("input.reflection.step", language)} {(totalDecisions || 0) + 1}: {t("input.reflection.label", language)}
                 </span>
               </div>
               <Badge variant="outline" className="bg-background text-xs">
-                Final
+                {t("input.reflection.final", language)}
               </Badge>
             </div>
             <p className="text-base font-medium text-foreground leading-relaxed" data-testid="text-reflection-prompt">
-              {reflectionPrompt || "¿Qué aprendiste de esta experiencia? ¿Qué harías diferente?"}
+              {reflectionPrompt || t("input.reflection.default", language)}
             </p>
             <div className="mt-3 pt-3 border-t border-chart-3/10">
               <p className="text-sm text-muted-foreground italic" data-testid="text-reflection-nudge">
-                Si quieres, añade 1 aprendizaje y 1 cosa que harías distinto.
+                {t("input.reflection.nudge", language)}
               </p>
             </div>
           </Card>
         </motion.div>
       )}
 
-      {/* S3.1: Decision Header Block - Visually unmistakable task */}
       {currentDecisionPoint?.prompt && !pendingRevision && !isReflectionStep && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -235,20 +228,19 @@ export function InputConsole({
                   <Send className="w-4 h-4 text-primary" />
                 </div>
                 <span className="text-sm font-semibold text-primary uppercase tracking-wide">
-                  Tu Decisión
+                  {t("input.decision.title", language)}
                 </span>
               </div>
               <Badge variant="outline" className="bg-background text-xs">
                 {decisionNumber && totalDecisions
-                  ? `${decisionNumber} de ${totalDecisions}`
-                  : "Activa"}
+                  ? `${decisionNumber} ${t("input.decision.of", language)} ${totalDecisions}`
+                  : t("input.decision.active", language)}
               </Badge>
             </div>
             <p className="text-sm font-medium text-foreground leading-relaxed" data-testid="text-decision-prompt">
               {currentDecisionPoint.prompt}
             </p>
             
-            {/* S7.1: Focus Cue - mentorship-style guidance */}
             {currentDecisionPoint.focusCue && (
               <div className="mt-2 pt-2 border-t border-primary/10">
                 <p className="text-sm text-muted-foreground italic" data-testid="text-focus-cue">
@@ -257,11 +249,10 @@ export function InputConsole({
               </div>
             )}
             
-            {/* S5.1: Thinking Scaffold - guide reasoning without giving answers */}
             {currentDecisionPoint.thinkingScaffold && currentDecisionPoint.thinkingScaffold.length > 0 && (
               <div className="mt-2 pt-2 border-t border-primary/10">
                 <p className="text-sm font-medium text-muted-foreground mb-1" data-testid="text-thinking-scaffold-label">
-                  Piensa en:
+                  {t("input.thinking.label", language)}
                 </p>
                 <ul className="space-y-0.5" data-testid="list-thinking-scaffold">
                   {currentDecisionPoint.thinkingScaffold.map((item, index) => (
@@ -276,7 +267,7 @@ export function InputConsole({
             
             {currentDecisionPoint.includesReflection && (
               <Badge variant="secondary" className="text-xs mt-3">
-                Incluye reflexión
+                {t("input.reflection.badge", language)}
               </Badge>
             )}
           </Card>
@@ -334,13 +325,13 @@ export function InputConsole({
               className="mt-4"
             >
               <Label className="text-sm font-medium mb-2 block">
-                Justifica tu decisión
+                {t("input.justify.label", language)}
               </Label>
               <Textarea
                 ref={justificationRef}
                 value={justification}
                 onChange={(e) => setJustification(e.target.value)}
-                placeholder="Explica por qué elegiste esta opción..."
+                placeholder={t("input.justify.placeholder", language)}
                 disabled={isDisabled}
                 rows={2}
                 className="max-h-[120px] overflow-y-auto resize-none text-sm"
@@ -350,8 +341,6 @@ export function InputConsole({
           )}
         </motion.div>
       )}
-
-{/* POC: "Suggested Actions" panel removed per spec - no action chips shown */}
 
       {!isMultipleChoice && (
         <div className="flex gap-3">
@@ -363,8 +352,8 @@ export function InputConsole({
               onKeyDown={handleKeyDown}
               placeholder={
                 isGameOver
-                  ? "La simulación ha terminado"
-                  : "¿Cuál es tu decisión?"
+                  ? t("input.placeholder.gameover", language)
+                  : t("input.placeholder.decision", language)
               }
               disabled={isDisabled}
               rows={2}
@@ -385,13 +374,10 @@ export function InputConsole({
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />
-                  Enviar
+                  {t("input.submit", language)}
                 </>
               )}
             </Button>
-
-{/* POC: Rubric button hidden per spec - no grading/scoring visible to students */}
-            {/* POC: Hints OFF by default per spec - can be enabled by professor toggle (not implemented in POC) */}
           </div>
         </div>
       )}
@@ -408,7 +394,7 @@ export function InputConsole({
             ) : (
               <>
                 <Send className="w-4 h-4 mr-2" />
-                Enviar Decisión
+                {t("input.submit.decision", language)}
               </>
             )}
           </Button>
@@ -422,12 +408,12 @@ export function InputConsole({
           className="mt-3 text-center space-y-3"
         >
           <p className="text-sm text-muted-foreground">
-            La simulación ha terminado.
+            {t("input.gameover.text", language)}
           </p>
           {onViewResults && (
             <Button onClick={onViewResults} data-testid="button-view-results">
               <BarChart3 className="w-4 h-4 mr-2" />
-              Ver Resultados
+              {t("input.results", language)}
             </Button>
           )}
         </motion.div>

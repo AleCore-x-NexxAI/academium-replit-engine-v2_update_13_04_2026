@@ -26,13 +26,16 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { SimulationSession, Scenario, TurnResponse, KPIs, Indicator, DecisionPoint } from "@shared/schema";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
-const THINKING_STEPS = [
-  { message: "Analizando tu decisión...", completed: false },
-  { message: "Consultando stakeholders...", completed: false },
-  { message: "Calculando impacto empresarial...", completed: false },
-  { message: "Generando resultado...", completed: false },
-];
+function getThinkingSteps(lang: SimulationLanguage) {
+  return [
+    { message: t("sim.thinking.1", lang), completed: false },
+    { message: t("sim.thinking.2", lang), completed: false },
+    { message: t("sim.thinking.3", lang), completed: false },
+    { message: t("sim.thinking.4", lang), completed: false },
+  ];
+}
 
 export default function Simulation() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -87,11 +90,13 @@ export default function Simulation() {
     enabled: !!sessionId && isAuthenticated,
   });
 
+  const lang: SimulationLanguage = (session?.scenario?.language as SimulationLanguage) || "es";
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       toast({
-        title: "Por favor inicia sesión",
-        description: "Necesitas iniciar sesión para acceder a las simulaciones.",
+        title: t("sim.auth.login", lang),
+        description: t("sim.auth.login.desc", lang),
         variant: "destructive",
       });
       setTimeout(() => {
@@ -103,15 +108,15 @@ export default function Simulation() {
   useEffect(() => {
     if (sessionError && isUnauthorizedError(sessionError as Error)) {
       toast({
-        title: "Sesión Expirada",
-        description: "Por favor inicia sesión nuevamente.",
+        title: t("sim.auth.expired", lang),
+        description: t("sim.auth.expired.desc", lang),
         variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
     }
-  }, [sessionError, toast]);
+  }, [sessionError, toast, lang]);
 
   // Only initialize the session once when first loaded, not on every refetch
   // This preserves currentFeedback after turns are submitted
@@ -143,7 +148,7 @@ export default function Simulation() {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = "Si sales ahora, perderás todo el progreso de esta simulación. ¿Estás seguro?";
+      e.returnValue = t("sim.beforeunload", lang);
       return e.returnValue;
     };
 
@@ -277,11 +282,12 @@ export default function Simulation() {
     onMutate: () => {
       setPreviousKpis({ ...kpis });
       setProcessing(true);
-      setThinkingSteps(THINKING_STEPS.map((s) => ({ ...s })));
+      const steps = getThinkingSteps(lang);
+      setThinkingSteps(steps.map((s) => ({ ...s })));
 
       let stepIndex = 0;
       const interval = setInterval(() => {
-        if (stepIndex < THINKING_STEPS.length) {
+        if (stepIndex < steps.length) {
           updateThinkingStep(stepIndex, true);
           stepIndex++;
         } else {
@@ -295,7 +301,7 @@ export default function Simulation() {
       const status = response.turnStatus || null;
       setLastTurnStatus(status);
       if (status === "block" && !response.requiresRevision) {
-        setValidationError(response.narrative?.text || "Tu respuesta no pudo procesarse. Intenta reformularla.");
+        setValidationError(response.narrative?.text || t("input.validation.block", lang));
         queryClient.invalidateQueries({ queryKey: ["/api/simulations", sessionId] });
         return;
       }
@@ -309,8 +315,8 @@ export default function Simulation() {
     onError: (error: any) => {
       if (isUnauthorizedError(error as Error)) {
         toast({
-          title: "Sesión Expirada",
-          description: "Por favor inicia sesión nuevamente.",
+          title: t("sim.auth.expired", lang),
+          description: t("sim.auth.expired.desc", lang),
           variant: "destructive",
         });
         setTimeout(() => {
@@ -338,8 +344,8 @@ export default function Simulation() {
       
       if (errorMessage.includes("not active") || errorMessage.includes("Session is not active")) {
         toast({
-          title: "Simulación Completada",
-          description: "Esta simulación ha terminado. ¡Revisa tus resultados para ver cómo te fue!",
+          title: t("sim.completed", lang),
+          description: t("sim.completed.desc", lang),
         });
         return;
       }
@@ -349,10 +355,10 @@ export default function Simulation() {
         errorMessage.includes("ai_service_unavailable");
       
       toast({
-        title: isAIError ? "Servicio Temporalmente Ocupado" : "Error",
+        title: isAIError ? t("sim.error.busy", lang) : t("sim.error.generic", lang),
         description: isAIError 
-          ? "El servicio de IA no está disponible en este momento. Por favor espera unos segundos e intenta de nuevo."
-          : "No se pudo procesar tu decisión. Por favor intenta de nuevo.",
+          ? t("sim.error.busy.desc", lang)
+          : t("sim.error.generic.desc", lang),
         variant: "destructive",
       });
     },
@@ -377,7 +383,7 @@ export default function Simulation() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Cargando simulación...</p>
+          <p className="text-muted-foreground">{t("sim.loading", lang)}</p>
         </div>
       </div>
     );
@@ -388,11 +394,11 @@ export default function Simulation() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">Simulación No Encontrada</h2>
+          <h2 className="text-xl font-semibold mb-2">{t("sim.notfound", lang)}</h2>
           <p className="text-muted-foreground mb-6">
-            Esta simulación puede haber sido eliminada o no tienes acceso.
+            {t("sim.notfound.desc", lang)}
           </p>
-          <Button onClick={() => navigate("/")}>Volver al Inicio</Button>
+          <Button onClick={() => navigate("/")}>{t("sim.back", lang)}</Button>
         </div>
       </div>
     );
@@ -422,10 +428,10 @@ export default function Simulation() {
           </p>
           <p className="text-xs text-muted-foreground">
             {isReflectionStep
-              ? `Paso ${totalDecisions + 1}: Reflexión`
+              ? `${t("sim.step", lang)} ${totalDecisions + 1}: ${t("sim.reflection", lang)}`
               : totalDecisions > 0
-              ? `Decisión ${currentDecision} de ${totalDecisions}`
-              : `Turno ${session.currentState.turnCount + 1}`}
+              ? `${t("sim.decision", lang)} ${currentDecision} ${t("sim.of", lang)} ${totalDecisions}`
+              : `${t("sim.turn", lang)} ${session.currentState.turnCount + 1}`}
           </p>
         </div>
 
@@ -472,13 +478,13 @@ export default function Simulation() {
               scenario={session.scenario}
               currentDecision={currentDecision}
               totalDecisions={totalDecisions}
+              language={lang}
             />
           </motion.div>
         </motion.div>
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Collapsible Briefing Panel */}
         {isBriefingCollapsed ? (
           <div className="hidden lg:flex flex-col border-r bg-card shrink-0">
             <button
@@ -488,7 +494,7 @@ export default function Simulation() {
             >
               <PanelLeftOpen className="w-5 h-5 text-primary" />
               <span className="text-xs font-medium text-muted-foreground writing-mode-vertical" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
-                Briefing
+                {lang === "en" ? "Briefing" : "Briefing"}
               </span>
             </button>
           </div>
@@ -504,6 +510,7 @@ export default function Simulation() {
                 currentDecision={currentDecision}
                 totalDecisions={totalDecisions}
                 onCollapse={() => setIsBriefingCollapsed(true)}
+                language={lang}
               />
             )}
           </motion.aside>
@@ -516,6 +523,7 @@ export default function Simulation() {
               isTyping={isProcessing}
               thinkingSteps={thinkingSteps}
               queueStatus={queueStatus}
+              language={lang}
             />
           </div>
 
@@ -537,6 +545,7 @@ export default function Simulation() {
             turnStatus={lastTurnStatus}
             isReflectionStep={isReflectionStep}
             reflectionPrompt={session.scenario?.initialState?.reflectionPrompt}
+            language={lang}
           />
         </main>
 
@@ -556,6 +565,7 @@ export default function Simulation() {
               totalDecisions={totalDecisions}
               metricExplanations={metricExplanations}
               sessionId={sessionId}
+              language={lang}
             />
           </div>
           <FeedbackPanel
@@ -566,6 +576,7 @@ export default function Simulation() {
             revisionPrompt={revisionPrompt}
             revisionAttempts={revisionAttempts}
             maxRevisions={maxRevisions}
+            language={lang}
           />
         </motion.aside>
       </div>
@@ -575,25 +586,24 @@ export default function Simulation() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-destructive" />
-              ¿Salir de la simulación?
+              {t("sim.exit.title", lang)}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-left">
-              Si sales ahora, <strong>perderás todo el progreso</strong> de esta simulación. 
-              En el mundo empresarial real, las decisiones no pueden deshacerse una vez tomadas.
+              {t("sim.exit.desc", lang)}
               <br /><br />
-              Esta simulación quedará marcada como abandonada y no podrás continuarla.
+              {t("sim.exit.desc2", lang)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-exit">
-              Continuar simulación
+              {t("sim.exit.cancel", lang)}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmExit}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-exit"
             >
-              Salir y perder progreso
+              {t("sim.exit.confirm", lang)}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

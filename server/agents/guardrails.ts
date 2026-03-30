@@ -155,6 +155,13 @@ PROHIBIDO:
 Si no conoces la traducción, usa una explicación descriptiva en español.
 `;
 
+export function getLanguageDirective(lang?: "es" | "en"): string {
+  if (lang === "en") {
+    return `\n## LANGUAGE RULE: ENGLISH REQUIRED (NON-NEGOTIABLE)\n\nAll generated content MUST be in ENGLISH.\n\n⚠️ ZERO words in Spanish. ZERO exceptions.\n\nUse clear, professional, academic English throughout all responses, narratives, feedback, explanations, and prompts.\n`;
+  }
+  return POC_SPANISH_ONLY;
+}
+
 export const FINAL_CLOSURE_GUIDELINES = `
 ## MENSAJE DE CIERRE FINAL (Para feedback de simulación completada)
 

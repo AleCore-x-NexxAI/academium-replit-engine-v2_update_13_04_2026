@@ -36,6 +36,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Scenario, SimulationSession } from "@shared/schema";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
 const domainIcons: Record<string, React.ReactNode> = {
   Marketing: <Target className="w-5 h-5" />,
@@ -52,6 +53,7 @@ interface ScenarioCardProps {
 }
 
 function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
+  const lang: SimulationLanguage = (scenario.language as SimulationLanguage) || "es";
   const isAdmin = userRole === "admin";
   const isProfessor = userRole === "professor";
   const isProfessorAndAuthor = isProfessor && scenario.authorId === userId;
@@ -129,7 +131,7 @@ function ScenarioCard({ scenario, userId, userRole }: ScenarioCardProps) {
       <Link href={`/simulation/start/${scenario.id}`}>
         <Button className="w-full" data-testid={`button-comenzar-${scenario.id}`}>
           <Play className="w-4 h-4 mr-2" />
-          Comenzar
+          {t("home.start", lang)}
         </Button>
       </Link>
     </Card>
@@ -257,9 +259,9 @@ function ProfessorWelcome({ userName }: { userName: string }) {
 }
 
 function SessionCard({ session }: { session: SimulationSession & { scenario?: Scenario } }) {
-  // Only completed sessions are shown to students
+  const lang: SimulationLanguage = (session.scenario?.language as SimulationLanguage) || "es";
   const completedDate = session.updatedAt 
-    ? new Date(session.updatedAt).toLocaleDateString("es-ES", {
+    ? new Date(session.updatedAt).toLocaleDateString(lang === "en" ? "en-US" : "es-ES", {
         day: "numeric",
         month: "long",
         year: "numeric",
@@ -282,11 +284,11 @@ function SessionCard({ session }: { session: SimulationSession & { scenario?: Sc
 
             <div className="flex-1 min-w-0">
               <h4 className="font-medium truncate mb-1">
-                {session.scenario?.title || "Simulación"}
+                {session.scenario?.title || t("results.fallback.simulation", lang)}
               </h4>
               <Badge variant="secondary" className="text-xs">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
-                Completada
+                {t("results.percent.complete", lang)}
               </Badge>
             </div>
           </div>
@@ -295,7 +297,7 @@ function SessionCard({ session }: { session: SimulationSession & { scenario?: Sc
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                {session.currentState.turnCount} decisiones
+                {session.currentState.turnCount} {t("results.decisions", lang).toLowerCase()}
               </span>
               {completedDate && (
                 <span className="flex items-center gap-1">
@@ -305,7 +307,7 @@ function SessionCard({ session }: { session: SimulationSession & { scenario?: Sc
               )}
             </div>
             <span className="flex items-center gap-1 text-primary font-medium">
-              Ver Resultados
+              {t("input.results", lang)}
               <ChevronRight className="w-4 h-4" />
             </span>
           </div>

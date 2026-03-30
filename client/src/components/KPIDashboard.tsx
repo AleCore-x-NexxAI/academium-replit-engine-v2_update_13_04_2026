@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
 import type { KPIs, Indicator, MetricExplanation } from "@shared/schema";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
 interface KPIDashboardProps {
   kpis: KPIs;
@@ -22,6 +23,7 @@ interface KPIDashboardProps {
   totalDecisions?: number;
   metricExplanations?: Record<string, MetricExplanation>;
   sessionId?: string;
+  language?: SimulationLanguage;
 }
 
 interface IndicatorInfo {
@@ -30,40 +32,41 @@ interface IndicatorInfo {
   downMeaning: string;
 }
 
-const indicatorExplanations: Record<string, IndicatorInfo> = {
-  revenue: {
-    description: "Refleja la salud financiera del proyecto y los recursos disponibles para la operación.",
-    upMeaning: "Las decisiones han optimizado recursos o generado ahorros/ingresos adicionales.",
-    downMeaning: "Las decisiones han generado costos adicionales o consumido más recursos de lo planeado.",
-  },
-  morale: {
-    description: "Mide el nivel de motivación, compromiso y bienestar emocional del equipo de trabajo.",
-    upMeaning: "El equipo se siente más motivado, valorado y comprometido con el proyecto.",
-    downMeaning: "El equipo experimenta estrés, frustración o desmotivación ante las decisiones tomadas.",
-  },
-  reputation: {
-    description: "Mide la percepción pública y credibilidad de la organización en el mercado.",
-    upMeaning: "Las decisiones han mejorado la imagen pública y la credibilidad de la marca.",
-    downMeaning: "Las decisiones han afectado negativamente la percepción de la marca.",
-  },
-  efficiency: {
-    description: "Indica la optimización de procesos y el uso efectivo de recursos operativos.",
-    upMeaning: "Las operaciones son más ágiles y los procesos más eficientes.",
-    downMeaning: "Hay ineficiencias operativas o desperdicio de recursos.",
-  },
-  trust: {
-    description: "Mide el nivel de confianza que las partes interesadas tienen en la organización.",
-    upMeaning: "Los stakeholders confían más en las decisiones y dirección de la organización.",
-    downMeaning: "La confianza de los stakeholders ha disminuido debido a las decisiones tomadas.",
-  },
-  budgetHealth: {
-    description: "Refleja la salud financiera y disponibilidad de recursos del presupuesto operativo.",
-    upMeaning: "El presupuesto está sano con recursos disponibles para operar e invertir.",
-    downMeaning: "El presupuesto está bajo presión con recursos limitados.",
-  },
-};
+function getIndicatorExplanations(lang: SimulationLanguage): Record<string, IndicatorInfo> {
+  return {
+    revenue: {
+      description: t("kpi.explain.revenue", lang),
+      upMeaning: t("kpi.explain.revenue.up", lang),
+      downMeaning: t("kpi.explain.revenue.down", lang),
+    },
+    morale: {
+      description: t("kpi.explain.morale", lang),
+      upMeaning: t("kpi.explain.morale.up", lang),
+      downMeaning: t("kpi.explain.morale.down", lang),
+    },
+    reputation: {
+      description: t("kpi.explain.reputation", lang),
+      upMeaning: t("kpi.explain.reputation.up", lang),
+      downMeaning: t("kpi.explain.reputation.down", lang),
+    },
+    efficiency: {
+      description: t("kpi.explain.efficiency", lang),
+      upMeaning: t("kpi.explain.efficiency.up", lang),
+      downMeaning: t("kpi.explain.efficiency.down", lang),
+    },
+    trust: {
+      description: t("kpi.explain.trust", lang),
+      upMeaning: t("kpi.explain.trust.up", lang),
+      downMeaning: t("kpi.explain.trust.down", lang),
+    },
+    budgetHealth: {
+      description: t("kpi.explain.budgetHealth", lang),
+      upMeaning: t("kpi.explain.budgetHealth.up", lang),
+      downMeaning: t("kpi.explain.budgetHealth.down", lang),
+    },
+  };
+}
 
-// S8.1: Default directionality for known indicators
 const indicatorDirectionality: Record<string, "up_better" | "down_better"> = {
   revenue: "up_better",
   morale: "up_better",
@@ -73,7 +76,7 @@ const indicatorDirectionality: Record<string, "up_better" | "down_better"> = {
   teamMorale: "up_better",
   budgetHealth: "up_better",
   budgetImpact: "up_better",
-  operationalRisk: "down_better", // Lower risk is better
+  operationalRisk: "down_better",
   strategicFlexibility: "up_better",
 };
 
@@ -88,9 +91,10 @@ interface IndicatorCardProps {
   direction?: "up_better" | "down_better";
   indicatorDescription?: string;
   sessionId?: string;
+  language: SimulationLanguage;
 }
 
-function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction, indicatorDescription, sessionId }: IndicatorCardProps) {
+function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, explanation, direction, indicatorDescription, sessionId, language }: IndicatorCardProps) {
   const [causalChain, setCausalChain] = useState<string[] | null>(explanation?.causalChain || null);
   const [isLoadingChain, setIsLoadingChain] = useState(false);
 
@@ -101,30 +105,29 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
 
   const delta = previousValue !== undefined ? value - previousValue : 0;
   
-  // S8.1: Determine if the change is "good" or "bad" based on directionality
   const effectiveDirection = direction || indicatorDirectionality[indicatorId] || "up_better";
   const isGoodChange = effectiveDirection === "up_better" ? delta > 0 : delta < 0;
   const isBadChange = effectiveDirection === "up_better" ? delta < 0 : delta > 0;
   
-  const info = indicatorExplanations[indicatorId];
+  const explanations = getIndicatorExplanations(language);
+  const info = explanations[indicatorId];
   const hasExplanation = explanation && delta !== 0;
 
   const tooltipDescription = info?.description || indicatorDescription || label;
   const tooltipUpMeaning = info?.upMeaning
     || (effectiveDirection === "up_better"
-      ? "↑ indica mejora en este indicador."
-      : "↑ indica deterioro en este indicador.");
+      ? t("kpi.direction.up.tooltip", language)
+      : t("kpi.direction.up.bad.tooltip", language));
   const tooltipDownMeaning = info?.downMeaning
     || (effectiveDirection === "down_better"
-      ? "↓ indica mejora en este indicador."
-      : "↓ indica deterioro en este indicador.");
+      ? t("kpi.direction.down.good.tooltip", language)
+      : t("kpi.direction.down.tooltip", language));
 
   return (
     <Card
       className="p-5 transition-all duration-300"
       data-testid={`indicator-card-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
-      {/* S3.3: Larger indicator header with S8.1 directionality */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className={`${color} p-2 rounded-lg`}>{icon}</div>
@@ -156,15 +159,13 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
                 </TooltipContent>
               </Tooltip>
             </div>
-            {/* S8.1: Directionality cue */}
             <span className="text-xs text-muted-foreground" data-testid={`direction-${indicatorId}`}>
-              {effectiveDirection === "up_better" ? "↑ mejor" : "↓ mejor"}
+              {effectiveDirection === "up_better" ? t("kpi.direction.up", language) : t("kpi.direction.down", language)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* S3.3: Larger value display */}
       <div className="flex items-end justify-between gap-3">
         <motion.span
           key={value}
@@ -175,7 +176,6 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
           {value}
         </motion.span>
 
-        {/* S8.1: Delta styling respects directionality (green=good, red=bad) */}
         <AnimatePresence mode="wait">
           {delta !== 0 && (
             <motion.div
@@ -197,7 +197,6 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
         </AnimatePresence>
       </div>
 
-      {/* S3.3: Larger progress bar */}
       <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
         <motion.div
           className="h-full rounded-full bg-primary"
@@ -248,10 +247,10 @@ function IndicatorCard({ indicatorId, label, value, previousValue, icon, color, 
               {isLoadingChain ? (
                 <>
                   <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Cargando...</span>
+                  <span>{t("kpi.loading", language)}</span>
                 </>
               ) : (
-                <span className="font-medium">¿Por qué?</span>
+                <span className="font-medium">{t("kpi.why", language)}</span>
               )}
             </button>
           ) : null}
@@ -368,39 +367,40 @@ export function KPIDashboard({
   totalDecisions,
   metricExplanations,
   sessionId,
+  language = "es",
 }: KPIDashboardProps) {
   const kpiConfig = [
     {
       key: "revenue",
-      label: "Ingresos / Presupuesto",
+      label: t("kpi.label.revenue", language),
       icon: <DollarSign className="w-4 h-4" />,
       format: "currency" as const,
       color: "bg-chart-1/10 text-chart-1",
     },
     {
       key: "morale",
-      label: "Moral del Equipo",
+      label: t("kpi.label.morale", language),
       icon: <Users className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-2/10 text-chart-2",
     },
     {
       key: "reputation",
-      label: "Reputación de Marca",
+      label: t("kpi.label.reputation", language),
       icon: <Star className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-3/10 text-chart-3",
     },
     {
       key: "efficiency",
-      label: "Eficiencia Operacional",
+      label: t("kpi.label.efficiency", language),
       icon: <Gauge className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-4/10 text-chart-4",
     },
     {
       key: "trust",
-      label: "Confianza de Stakeholders",
+      label: t("kpi.label.trust", language),
       icon: <Shield className="w-4 h-4" />,
       format: "percentage" as const,
       color: "bg-chart-5/10 text-chart-5",
@@ -423,56 +423,54 @@ export function KPIDashboard({
           )}
           {role && (
             <p className="text-sm text-muted-foreground mb-1">
-              <span className="font-medium">Rol:</span> {role}
+              <span className="font-medium">{t("kpi.role", language)}</span> {role}
             </p>
           )}
           {objective && (
             <p className="text-sm text-muted-foreground">
-              <span className="font-medium">Objetivo:</span> {objective}
+              <span className="font-medium">{t("kpi.objective", language)}</span> {objective}
             </p>
           )}
           {currentDecision && totalDecisions && (
             <div className="mt-3 flex items-center gap-2">
               <Activity className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium">
-                Decisión {currentDecision} de {totalDecisions}
+                {t("kpi.decision.of", language).replace("{current}", String(currentDecision)).replace("{total}", String(totalDecisions))}
               </span>
             </div>
           )}
         </div>
       )}
 
-      {/* S3.3: Larger indicators with better spacing */}
       <div className="p-6 flex-1 overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-primary" />
             <h3 className="text-base font-semibold text-foreground">
-              {useIndicators ? "Indicadores" : "Indicadores Clave"}
+              {useIndicators ? t("kpi.indicators", language) : t("kpi.indicators.key", language)}
             </h3>
           </div>
-          {/* S8.1: Legend tooltip */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
                 <HelpCircle className="w-3.5 h-3.5" />
-                <span>Cómo leer</span>
+                <span>{t("kpi.tooltip.howtoread", language)}</span>
               </button>
             </TooltipTrigger>
             <TooltipContent side="left" className="max-w-xs p-3">
               <div className="space-y-2 text-xs">
-                <p className="font-medium">Cómo leer los indicadores</p>
+                <p className="font-medium">{t("kpi.tooltip.title", language)}</p>
                 <div className="space-y-1.5 pt-1 border-t border-border/50">
                   <p className="flex items-center gap-2">
-                    <span className="text-chart-2 font-medium">↑ mejor</span>
-                    <span className="text-muted-foreground">Más alto es mejor</span>
+                    <span className="text-chart-2 font-medium">{t("kpi.direction.up", language)}</span>
+                    <span className="text-muted-foreground">{t("kpi.tooltip.upbetter", language)}</span>
                   </p>
                   <p className="flex items-center gap-2">
-                    <span className="text-chart-4 font-medium">↓ mejor</span>
-                    <span className="text-muted-foreground">Más bajo es mejor</span>
+                    <span className="text-chart-4 font-medium">{t("kpi.direction.down", language)}</span>
+                    <span className="text-muted-foreground">{t("kpi.tooltip.downbetter", language)}</span>
                   </p>
                   <p className="pt-1 text-muted-foreground">
-                    Los cambios verdes son positivos para tu objetivo. Los rojos requieren atención.
+                    {t("kpi.tooltip.greenpositive", language)}
                   </p>
                 </div>
               </div>
@@ -498,6 +496,7 @@ export function KPIDashboard({
                   direction={indicator.direction}
                   indicatorDescription={indicator.description}
                   sessionId={sessionId}
+                  language={language}
                 />
               );
             })

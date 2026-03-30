@@ -92,6 +92,9 @@ const scenarioFormSchema = z.object({
   keyConstraintsText: z.string().optional(),
   learningObjectivesText: z.string().optional(),
   ethicalDimensionsText: z.string().optional(),
+  
+  // Language
+  language: z.enum(["es", "en"]).default("es"),
 });
 
 type ScenarioFormData = z.infer<typeof scenarioFormSchema>;
@@ -555,6 +558,7 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
       keyConstraintsText: "",
       learningObjectivesText: "",
       ethicalDimensionsText: "",
+      language: "es",
       kpiRevenue: 100000,
       kpiMorale: 75,
       kpiReputation: 75,
@@ -663,6 +667,7 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
         rubric,
         courseConcepts: courseConcepts.length > 0 ? courseConcepts : undefined,
         isPublished: true,
+        language: data.language || "es",
       });
     },
     onSuccess: () => {
@@ -777,6 +782,27 @@ function ManualScenarioForm({ onSuccess }: { onSuccess: () => void }) {
                           {DIFFICULTY_LEVELS.map((level) => (
                             <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="language"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Idioma de la Simulación</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-language-manual">
+                            <SelectValue placeholder="Idioma" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="es">Español</SelectItem>
+                          <SelectItem value="en">English</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

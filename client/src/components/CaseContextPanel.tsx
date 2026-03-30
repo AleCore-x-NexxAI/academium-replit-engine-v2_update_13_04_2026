@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Scenario, DecisionPoint } from "@shared/schema";
+import { t, type SimulationLanguage } from "@/lib/i18n";
 
 interface CaseContextPanelProps {
   scenario: Scenario;
@@ -25,6 +26,7 @@ interface CaseContextPanelProps {
   isExpanded?: boolean;
   onToggle?: () => void;
   onCollapse?: () => void;
+  language?: SimulationLanguage;
 }
 
 export function CaseContextPanel({
@@ -34,14 +36,16 @@ export function CaseContextPanel({
   isExpanded = true,
   onToggle,
   onCollapse,
+  language,
 }: CaseContextPanelProps) {
   const [showFullContext, setShowFullContext] = useState(true);
   const initialState = scenario.initialState;
+  const lang = language || (scenario.language as SimulationLanguage) || "es";
 
   const caseContext = initialState?.caseContext || initialState?.introText || "";
   const coreChallenge = initialState?.coreChallenge || "";
   const reflectionPrompt = initialState?.reflectionPrompt || "";
-  const role = initialState?.role || "Líder de Negocios";
+  const role = initialState?.role || (lang === "en" ? "Business Leader" : "Líder de Negocios");
   const objective = initialState?.objective || "";
   const companyName = initialState?.companyName || "";
   const industry = initialState?.industry || scenario.domain;
@@ -49,14 +53,13 @@ export function CaseContextPanel({
 
   return (
     <div className="h-full flex flex-col">
-      {/* S3.2: Briefing Panel Header */}
       <div className="p-4 border-b bg-gradient-to-r from-primary/5 to-transparent shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <FileText className="w-4 h-4 text-primary" />
             </div>
-            <span className="font-semibold text-foreground">Tu Briefing</span>
+            <span className="font-semibold text-foreground">{t("case.briefing", lang)}</span>
           </div>
           <div className="flex items-center gap-1">
             {onToggle && (
@@ -90,7 +93,6 @@ export function CaseContextPanel({
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
-          {/* Title Section */}
           <div>
             <h2 className="text-lg font-bold mb-2 text-foreground" data-testid="text-case-title">
               {scenario.title}
@@ -110,25 +112,23 @@ export function CaseContextPanel({
 
           <Separator />
 
-          {/* S3.2: Role Panel - More prominent */}
           <div className="p-4 rounded-lg bg-chart-1/5 border border-chart-1/20">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-md bg-chart-1/20 flex items-center justify-center">
                 <User className="w-4 h-4 text-chart-1" />
               </div>
-              <span className="text-xs font-bold uppercase tracking-wide text-chart-1">Tu Rol</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-chart-1">{t("case.role", lang)}</span>
             </div>
             <p className="text-sm font-medium text-foreground">{role}</p>
           </div>
 
-          {/* S3.2: Objective Panel - More prominent */}
           {objective && (
             <div className="p-4 rounded-lg bg-chart-2/5 border border-chart-2/20">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-7 h-7 rounded-md bg-chart-2/20 flex items-center justify-center">
                   <Target className="w-4 h-4 text-chart-2" />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-wide text-chart-2">Objetivo</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-chart-2">{t("case.objective", lang)}</span>
               </div>
               <p className="text-sm text-foreground leading-relaxed">{objective}</p>
             </div>
@@ -136,7 +136,6 @@ export function CaseContextPanel({
 
           <Separator />
 
-          {/* S3.2: Context Section - Collapsible but visible by default */}
           <div className="rounded-lg border bg-muted/20 overflow-hidden">
             <button
               type="button"
@@ -148,7 +147,7 @@ export function CaseContextPanel({
                 <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
                   <BookOpen className="w-4 h-4 text-primary" />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-wide text-primary">Contexto</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-primary">{t("case.context", lang)}</span>
               </div>
               {showFullContext ? (
                 <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -175,7 +174,7 @@ export function CaseContextPanel({
                         <div className="flex items-center gap-2 mb-1">
                           <Target className="w-3.5 h-3.5 text-primary" />
                           <span className="font-semibold text-xs text-primary uppercase tracking-wide">
-                            Desafío Central
+                            {t("case.challenge", lang)}
                           </span>
                         </div>
                         <p className="text-sm text-foreground">{coreChallenge}</p>
@@ -193,7 +192,7 @@ export function CaseContextPanel({
               <div>
                 <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
                   <Target className="w-4 h-4 text-primary" />
-                  Estructura de Decisiones
+                  {t("case.decisions", lang)}
                 </h4>
                 <div className="space-y-2">
                   {decisionPoints.map((dp: DecisionPoint, index: number) => {
@@ -220,10 +219,10 @@ export function CaseContextPanel({
                         </Badge>
                         <span className="truncate">
                           {dp.number === 1
-                            ? "Orientación"
+                            ? t("case.orientation", lang)
                             : dp.number === (decisionPoints?.length || 3)
-                            ? "Integración"
-                            : "Análisis"}
+                            ? t("case.integration", lang)
+                            : t("case.analysis", lang)}
                         </span>
                       </div>
                     );
@@ -239,7 +238,7 @@ export function CaseContextPanel({
               <Card className="p-3 bg-muted/30">
                 <div className="flex items-center gap-2 mb-2">
                   <MessageSquare className="w-4 h-4 text-primary" />
-                  <span className="font-medium text-sm">Reflexión Final</span>
+                  <span className="font-medium text-sm">{t("case.reflection", lang)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {reflectionPrompt}
@@ -249,7 +248,7 @@ export function CaseContextPanel({
           )}
 
           <div className="text-xs text-muted-foreground text-center pt-4">
-            Progreso: Decisión {currentDecision} de {totalDecisions}
+            {t("case.progress", lang).replace("{current}", String(currentDecision)).replace("{total}", String(totalDecisions))}
           </div>
         </div>
       </ScrollArea>

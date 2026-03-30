@@ -5,7 +5,7 @@ import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative } from "./narrator";
 import { evaluateDepth } from "./depthEvaluator";
 import { generateChatCompletion, SupportedModel } from "../openai";
-import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING } from "./guardrails";
+import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING, getLanguageDirective } from "./guardrails";
 import { storage } from "../storage";
 
 const MAX_REVISIONS = 2;
@@ -65,11 +65,12 @@ async function interpretIntent(
   input: string,
   history: HistoryEntry[],
   scenario: { title: string; context: string },
-  options?: { customPrompt?: string; model?: SupportedModel; sessionId?: string }
+  options?: { customPrompt?: string; model?: SupportedModel; sessionId?: string; language?: "es" | "en" }
 ): Promise<{ isValid: boolean; interpretedAction?: string; helpfulPrompt?: string }> {
   try {
     const recentContext = history.slice(-4).map(h => `${h.role}: ${h.content}`).join("\n");
-    const systemPrompt = options?.customPrompt || DEFAULT_DIRECTOR_PROMPT;
+    const basePrompt = options?.customPrompt || DEFAULT_DIRECTOR_PROMPT;
+    const systemPrompt = basePrompt + getLanguageDirective(options?.language);
     
     const response = await generateChatCompletion(
       [
@@ -145,18 +146,17 @@ function checkGameOver(kpis: KPIs, context?: AgentContext): boolean {
  * Only reject: profanity, empty, or completely unrelated spam
  * Accept everything else - we want authentic reflection, not quota-writing
  */
-function validateReflection(input: string): { isValid: boolean; message?: string } {
+function validateReflection(input: string, language?: "es" | "en"): { isValid: boolean; message?: string } {
   const trimmed = input.trim();
+  const isEn = language === "en";
   
-  // Block empty
   if (trimmed.length < 3) {
     return { 
       isValid: false, 
-      message: "Por favor, comparte una breve reflexión sobre tu experiencia." 
+      message: isEn ? "Please share a brief reflection on your experience." : "Por favor, comparte una breve reflexión sobre tu experiencia." 
     };
   }
   
-  // Block profanity (same patterns as inputValidator)
   const OFFENSIVE_PATTERNS = [
     /\b(mierda|puta|puto|cabrón|cabron|hijo\s*de\s*puta|verga|chingar|pinche|culero|joto|marica|maricón|maricon|zorra)\b/i,
     /\b(fuck|fucking|bitch|bastard|dick|cock|pussy|cunt|retard)\b/i,
@@ -167,12 +167,11 @@ function validateReflection(input: string): { isValid: boolean; message?: string
     if (pattern.test(trimmed)) {
       return { 
         isValid: false, 
-        message: "Por favor, comparte una reflexión respetuosa sobre tu experiencia." 
+        message: isEn ? "Please share a respectful reflection on your experience." : "Por favor, comparte una reflexión respetuosa sobre tu experiencia." 
       };
     }
   }
   
-  // Block clear nonsense/gibberish
   const NONSENSE_PATTERNS = [
     /^[a-z]{1,2}$/i,
     /^(asdf|qwer|zxcv|hjkl)+$/i,
@@ -184,12 +183,11 @@ function validateReflection(input: string): { isValid: boolean; message?: string
     if (pattern.test(trimmed)) {
       return { 
         isValid: false, 
-        message: "Por favor, comparte tus pensamientos sobre la simulación." 
+        message: isEn ? "Please share your thoughts about the simulation." : "Por favor, comparte tus pensamientos sobre la simulación." 
       };
     }
   }
   
-  // Accept everything else
   return { isValid: true };
 }
 
@@ -201,7 +199,8 @@ function validateReflection(input: string): { isValid: boolean; message?: string
 export async function processReflection(
   context: AgentContext
 ): Promise<DirectorOutput> {
-  const validation = validateReflection(context.studentInput);
+  const validation = validateReflection(context.studentInput, context.language);
+  const isEn = context.language === "en";
   
   if (!validation.isValid) {
     const updatedHistory: HistoryEntry[] = [
@@ -213,14 +212,14 @@ export async function processReflection(
       },
       {
         role: "system",
-        content: validation.message || "Por favor, comparte una reflexión sobre tu experiencia.",
+        content: validation.message || (isEn ? "Please share a reflection on your experience." : "Por favor, comparte una reflexión sobre tu experiencia."),
         timestamp: new Date().toISOString(),
       },
     ];
     
     return {
       narrative: {
-        text: validation.message || "Por favor, comparte una reflexión sobre tu experiencia.",
+        text: validation.message || (isEn ? "Please share a reflection on your experience." : "Por favor, comparte una reflexión sobre tu experiencia."),
         mood: "neutral",
       },
       kpiUpdates: {},
@@ -247,15 +246,13 @@ export async function processReflection(
     };
   }
   
-  // Reflection is valid - complete the simulation
-  // S9.1 Optional nudge (non-blocking, just for the record)
-  const optionalNudge = "Si quieres, añade 1 aprendizaje y 1 cosa que harías distinto.";
+  const optionalNudge = isEn
+    ? "If you'd like, add 1 learning and 1 thing you'd do differently."
+    : "Si quieres, añade 1 aprendizaje y 1 cosa que harías distinto.";
   
-  const completionMessage = `¡Gracias por compartir tu reflexión! Has completado la simulación.
-
-${context.studentInput.length < 50 ? `💡 ${optionalNudge}` : ""}
-
-Tu perspectiva es valiosa para el proceso de aprendizaje.`;
+  const completionMessage = isEn
+    ? `Thank you for sharing your reflection! You have completed the simulation.\n\n${context.studentInput.length < 50 ? optionalNudge : ""}\n\nYour perspective is valuable to the learning process.`
+    : `¡Gracias por compartir tu reflexión! Has completado la simulación.\n\n${context.studentInput.length < 50 ? optionalNudge : ""}\n\nTu perspectiva es valiosa para el proceso de aprendizaje.`;
 
   const newHistory: HistoryEntry[] = [
     ...context.history as HistoryEntry[],
@@ -279,7 +276,7 @@ Tu perspectiva es valiosa para el proceso de aprendizaje.`;
     kpiUpdates: {},
     feedback: {
       score: 100,
-      message: "Reflexión completada",
+      message: isEn ? "Reflection completed" : "Reflexión completada",
     },
     isGameOver: true, // Simulation is now truly complete
     turnStatus: "pass",
@@ -309,7 +306,7 @@ export async function processStudentTurn(
     context.studentInput,
     context.history as HistoryEntry[],
     { title: context.scenario.title, context: `${context.scenario.domain} - ${context.scenario.objective}` },
-    { customPrompt: context.agentPrompts?.director, model: context.llmModel, sessionId: context.sessionId }
+    { customPrompt: context.agentPrompts?.director, model: context.llmModel, sessionId: context.sessionId, language: context.language }
   );
   storage.createTurnEvent({
     sessionId: context.sessionId,
@@ -326,8 +323,10 @@ export async function processStudentTurn(
   }).catch(err => console.error("[TurnEvent] Failed to log director agent_call:", err));
 
   if (!intentResult.isValid) {
-    const helpPrompt = intentResult.helpfulPrompt || 
-      "¡Quiero ayudarte a navegar esta situación! ¿Qué acción te gustaría tomar? Puedes intentar cualquier cosa - negociar, investigar, tomar decisiones audaces, o incluso enfoques no convencionales.";
+    const defaultHelp = context.language === "en"
+      ? "I want to help you navigate this situation! What action would you like to take? You can try anything - negotiate, investigate, make bold decisions, or even unconventional approaches."
+      : "¡Quiero ayudarte a navegar esta situación! ¿Qué acción te gustaría tomar? Puedes intentar cualquier cosa - negociar, investigar, tomar decisiones audaces, o incluso enfoques no convencionales.";
+    const helpPrompt = intentResult.helpfulPrompt || defaultHelp;
     
     const updatedHistory: HistoryEntry[] = [
       ...context.history as HistoryEntry[],
@@ -343,6 +342,10 @@ export async function processStudentTurn(
       },
     ];
     
+    const feedbackMsg = context.language === "en"
+      ? "Tell me what you want to do and I'll make it happen in the simulation!"
+      : "¡Cuéntame qué quieres hacer y lo haré realidad en la simulación!";
+    
     return {
       narrative: {
         text: helpPrompt,
@@ -351,7 +354,7 @@ export async function processStudentTurn(
       kpiUpdates: {},
       feedback: {
         score: 0,
-        message: "¡Cuéntame qué quieres hacer y lo haré realidad en la simulación!",
+        message: feedbackMsg,
       },
       isGameOver: false,
       turnStatus: "block",
