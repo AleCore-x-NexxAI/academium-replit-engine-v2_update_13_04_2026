@@ -19,6 +19,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -64,6 +71,7 @@ export default function ManualCaseCreator({
   const { toast } = useToast();
   const { t } = useTranslation();
   const [optionalOpen, setOptionalOpen] = useState(false);
+  const [language, setLanguage] = useState<"es" | "en">("es");
   
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -110,6 +118,7 @@ export default function ManualCaseCreator({
         learningObjectives: formData.learningObjectives || undefined,
         stakeholders: formData.stakeholders || undefined,
         isPublished: false,
+        language,
       });
       return response.json();
     },
@@ -151,6 +160,7 @@ export default function ManualCaseCreator({
         learningObjectives: formData.learningObjectives || undefined,
         stakeholders: formData.stakeholders || undefined,
         isPublished: true,
+        language,
       });
       return response.json();
     },
@@ -208,6 +218,23 @@ export default function ManualCaseCreator({
             placeholder={t("manualCase.caseTitlePlaceholder")}
             data-testid="input-case-title"
           />
+        </div>
+
+        {/* Simulation Language */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label>{t("common.simulationLanguage")}</Label>
+            <HelpIcon content={t("common.simulationLanguageHelp")} />
+          </div>
+          <Select value={language} onValueChange={(v) => setLanguage(v as "es" | "en")}>
+            <SelectTrigger className="w-[200px]" data-testid="select-language-manual">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="es">{t("common.spanish")}</SelectItem>
+              <SelectItem value="en">{t("common.english")}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Case Context */}

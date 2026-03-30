@@ -450,8 +450,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Label className="text-base font-semibold">{t("canonicalCase.simulationLanguage")}</Label>
-                <HelpIcon content={t("canonicalCase.simulationLanguageHelp")} />
+                <Label className="text-base font-semibold">{t("common.simulationLanguage")}</Label>
+                <HelpIcon content={t("common.simulationLanguageHelp")} />
               </div>
               <Select value={language} onValueChange={(v) => setLanguage(v as "es" | "en")}>
                 <SelectTrigger className="w-[200px]" data-testid="select-language-canonical">
@@ -460,6 +460,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                 <SelectContent>
                   <SelectItem value="es">{t("common.spanish")}</SelectItem>
                   <SelectItem value="en">{t("common.english")}</SelectItem>
+
                 </SelectContent>
               </Select>
             </div>
