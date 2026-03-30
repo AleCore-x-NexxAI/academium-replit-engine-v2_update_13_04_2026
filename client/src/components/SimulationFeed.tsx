@@ -5,7 +5,7 @@ import { User, Bot, MessageSquare } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { HistoryEntry } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { t as tSim, type SimulationLanguage } from "@/lib/i18n";
 
 interface SimulationFeedProps {
   history: HistoryEntry[];
@@ -189,7 +189,6 @@ function TypingDots() {
 }
 
 function QueueIndicator({ position, estimatedWaitMs, language = "es" }: { position: number; estimatedWaitMs: number; language?: SimulationLanguage }) {
-  const { t: translate } = useTranslation();
   const waitSec = Math.ceil(estimatedWaitMs / 1000);
   return (
     <motion.div
@@ -215,12 +214,12 @@ function QueueIndicator({ position, estimatedWaitMs, language = "es" }: { positi
             />
             <span className="text-sm text-foreground">
               {position > 0
-                ? t("sim.queue", language).replace("{n}", String(position))
-                : t("sim.processing", language)}
+                ? tSim("sim.queue", language).replace("{n}", String(position))
+                : tSim("sim.processing", language)}
             </span>
           </div>
           <span className="text-xs text-muted-foreground block pl-4">
-            {t("sim.estimated", language).replace("{n}", waitSec > 60 ? `${Math.ceil(waitSec / 60)} min` : String(waitSec))}
+            {tSim("sim.estimated", language).replace("{n}", waitSec > 60 ? `${Math.ceil(waitSec / 60)} min` : String(waitSec))}
           </span>
         </div>
       </div>
@@ -249,7 +248,7 @@ export function SimulationFeed({
         <div className="text-center p-8">
           <MessageSquare className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
           <p className="text-muted-foreground">
-            {translate("simulationFeed.startingSoon")}
+            {t("simulationFeed.startingSoon")}
           </p>
         </div>
       </div>

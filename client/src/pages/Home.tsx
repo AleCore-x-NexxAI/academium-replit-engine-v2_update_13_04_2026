@@ -38,7 +38,6 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { useTranslation } from "@/contexts/LanguageContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Scenario, SimulationSession } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
 
 const domainIcons: Record<string, React.ReactNode> = {
   Marketing: <Target className="w-5 h-5" />,

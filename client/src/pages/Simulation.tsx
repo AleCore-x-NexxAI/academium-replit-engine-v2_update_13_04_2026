@@ -28,14 +28,14 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { SimulationSession, Scenario, TurnResponse, KPIs, Indicator, DecisionPoint } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { t as tSim, type SimulationLanguage } from "@/lib/i18n";
 
 function getThinkingSteps(lang: SimulationLanguage) {
   return [
-    { message: t("sim.thinking.1", lang), completed: false },
-    { message: t("sim.thinking.2", lang), completed: false },
-    { message: t("sim.thinking.3", lang), completed: false },
-    { message: t("sim.thinking.4", lang), completed: false },
+    { message: tSim("sim.thinking.1", lang), completed: false },
+    { message: tSim("sim.thinking.2", lang), completed: false },
+    { message: tSim("sim.thinking.3", lang), completed: false },
+    { message: tSim("sim.thinking.4", lang), completed: false },
   ];
 }
 export default function Simulation() {
@@ -97,8 +97,8 @@ export default function Simulation() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       toast({
-        title: t("sim.auth.login", lang),
-        description: t("sim.auth.login.desc", lang),
+        title: tSim("sim.auth.login", lang),
+        description: tSim("sim.auth.login.desc", lang),
         variant: "destructive",
       });
       setTimeout(() => {
@@ -110,8 +110,8 @@ export default function Simulation() {
   useEffect(() => {
     if (sessionError && isUnauthorizedError(sessionError as Error)) {
       toast({
-        title: t("sim.auth.expired", lang),
-        description: t("sim.auth.expired.desc", lang),
+        title: tSim("sim.auth.expired", lang),
+        description: tSim("sim.auth.expired.desc", lang),
         variant: "destructive",
       });
       setTimeout(() => {
@@ -150,7 +150,7 @@ export default function Simulation() {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = t("sim.beforeunload", lang);
+      e.returnValue = tSim("sim.beforeunload", lang);
       return e.returnValue;
     };
 
@@ -303,7 +303,7 @@ export default function Simulation() {
       const status = response.turnStatus || null;
       setLastTurnStatus(status);
       if (status === "block" && !response.requiresRevision) {
-        setValidationError(response.narrative?.text || t("input.validation.block", lang));
+        setValidationError(response.narrative?.text || tSim("input.validation.block", lang));
         queryClient.invalidateQueries({ queryKey: ["/api/simulations", sessionId] });
         return;
       }
@@ -317,8 +317,8 @@ export default function Simulation() {
     onError: (error: any) => {
       if (isUnauthorizedError(error as Error)) {
         toast({
-          title: t("sim.auth.expired", lang),
-          description: t("sim.auth.expired.desc", lang),
+          title: tSim("sim.auth.expired", lang),
+          description: tSim("sim.auth.expired.desc", lang),
           variant: "destructive",
         });
         setTimeout(() => {
@@ -345,8 +345,8 @@ export default function Simulation() {
       
       if (errorMessage.includes("not active") || errorMessage.includes("Session is not active")) {
         toast({
-          title: t("sim.completed", lang),
-          description: t("sim.completed.desc", lang),
+          title: tSim("sim.completed", lang),
+          description: tSim("sim.completed.desc", lang),
         });
         return;
       }
@@ -356,10 +356,10 @@ export default function Simulation() {
         errorMessage.includes("ai_service_unavailable");
       
       toast({
-        title: isAIError ? t("sim.error.busy", lang) : t("sim.error.generic", lang),
+        title: isAIError ? tSim("sim.error.busy", lang) : tSim("sim.error.generic", lang),
         description: isAIError 
-          ? t("sim.error.busy.desc", lang)
-          : t("sim.error.generic.desc", lang),
+          ? tSim("sim.error.busy.desc", lang)
+          : tSim("sim.error.generic.desc", lang),
         variant: "destructive",
       });
     },
@@ -384,7 +384,7 @@ export default function Simulation() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">{t("sim.loading", lang)}</p>
+          <p className="text-muted-foreground">{tSim("sim.loading", lang)}</p>
         </div>
       </div>
     );
@@ -395,11 +395,11 @@ export default function Simulation() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">{t("sim.notfound", lang)}</h2>
+          <h2 className="text-xl font-semibold mb-2">{tSim("sim.notfound", lang)}</h2>
           <p className="text-muted-foreground mb-6">
-            {t("sim.notfound.desc", lang)}
+            {tSim("sim.notfound.desc", lang)}
           </p>
-          <Button onClick={() => navigate("/")}>{t("sim.back", lang)}</Button>
+          <Button onClick={() => navigate("/")}>{tSim("sim.back", lang)}</Button>
         </div>
       </div>
     );
@@ -429,10 +429,10 @@ export default function Simulation() {
           </p>
           <p className="text-xs text-muted-foreground">
             {isReflectionStep
-              ? `${t("sim.step", lang)} ${totalDecisions + 1}: ${t("sim.reflection", lang)}`
+              ? `${tSim("sim.step", lang)} ${totalDecisions + 1}: ${tSim("sim.reflection", lang)}`
               : totalDecisions > 0
-              ? `${t("sim.decision", lang)} ${currentDecision} ${t("sim.of", lang)} ${totalDecisions}`
-              : `${t("sim.turn", lang)} ${session.currentState.turnCount + 1}`}
+              ? `${tSim("sim.decision", lang)} ${currentDecision} ${tSim("sim.of", lang)} ${totalDecisions}`
+              : `${tSim("sim.turn", lang)} ${session.currentState.turnCount + 1}`}
           </p>
         </div>
 
@@ -588,24 +588,24 @@ export default function Simulation() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-destructive" />
-              {t("sim.exit.title", lang)}
+              {tSim("sim.exit.title", lang)}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-left">
-              {t("sim.exit.desc", lang)}
+              {tSim("sim.exit.desc", lang)}
               <br /><br />
-              {t("sim.exit.desc2", lang)}
+              {tSim("sim.exit.desc2", lang)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-exit">
-              {t("sim.exit.cancel", lang)}
+              {tSim("sim.exit.cancel", lang)}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmExit}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-exit"
             >
-              {t("sim.exit.confirm", lang)}
+              {tSim("sim.exit.confirm", lang)}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

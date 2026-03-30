@@ -39,7 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "@/contexts/LanguageContext";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import type { SimulationSession, Scenario, Turn, Indicator, MetricExplanation } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { t as tSim, type SimulationLanguage } from "@/lib/i18n";
 
 const KPI_ICONS: Record<string, React.ElementType> = {
   revenue: DollarSign,
@@ -51,11 +51,11 @@ const KPI_ICONS: Record<string, React.ElementType> = {
 
 function getKpiLabels(lang: SimulationLanguage): Record<string, string> {
   return {
-    revenue: t("kpi.revenue", lang),
-    morale: t("kpi.morale", lang),
-    reputation: t("kpi.reputation", lang),
-    efficiency: t("kpi.efficiency", lang),
-    trust: t("kpi.trust", lang),
+    revenue: tSim("kpi.revenue", lang),
+    morale: tSim("kpi.morale", lang),
+    reputation: tSim("kpi.reputation", lang),
+    efficiency: tSim("kpi.efficiency", lang),
+    trust: tSim("kpi.trust", lang),
   };
 }
 
@@ -74,16 +74,16 @@ const INDICATOR_ICONS: Record<string, React.ElementType> = {
 
 function getIndicatorLabels(lang: SimulationLanguage): Record<string, string> {
   return {
-    teamMorale: t("kpi.teamMorale", lang),
-    budgetHealth: t("kpi.budgetHealth", lang),
-    budgetImpact: t("kpi.budgetImpact", lang),
-    operationalRisk: t("kpi.operationalRisk", lang),
-    strategicFlexibility: t("kpi.strategicFlexibility", lang),
-    revenue: t("kpi.revenue", lang),
-    morale: t("kpi.morale.full", lang),
-    reputation: t("kpi.reputation.full", lang),
-    efficiency: t("kpi.efficiency.full", lang),
-    trust: t("kpi.trust.full", lang),
+    teamMorale: tSim("kpi.teamMorale", lang),
+    budgetHealth: tSim("kpi.budgetHealth", lang),
+    budgetImpact: tSim("kpi.budgetImpact", lang),
+    operationalRisk: tSim("kpi.operationalRisk", lang),
+    strategicFlexibility: tSim("kpi.strategicFlexibility", lang),
+    revenue: tSim("kpi.revenue", lang),
+    morale: tSim("kpi.morale.full", lang),
+    reputation: tSim("kpi.reputation.full", lang),
+    efficiency: tSim("kpi.efficiency.full", lang),
+    trust: tSim("kpi.trust.full", lang),
   };
 }
 
@@ -165,20 +165,20 @@ function IndicatorResultCard({ item, index, useIndicators, explanations, directi
         <h3 className="font-semibold text-sm mb-1">{label}</h3>
         {direction && (
           <p className="text-xs text-muted-foreground mb-2">
-            {direction === "down_better" ? t("kpi.direction.down", { lang: language }) : t("kpi.direction.up", { lang: language })}
+            {direction === "down_better" ? tSim("kpi.direction.down", language) : tSim("kpi.direction.up", language)}
           </p>
         )}
         
         <div className="flex items-center gap-3 mt-2">
           <div className="text-center" data-testid={`indicator-${key}-start`}>
-            <span className="text-xs text-muted-foreground block">{t("results.start", { lang: language })}</span>
+            <span className="text-xs text-muted-foreground block">{tSim("results.start", language)}</span>
             <span className="text-lg font-semibold">
               {useIndicators ? initial : formatKpiValue(key, initial, language)}
             </span>
           </div>
           <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
           <div className="text-center" data-testid={`indicator-${key}-end`}>
-            <span className="text-xs text-muted-foreground block">{t("results.end", { lang: language })}</span>
+            <span className="text-xs text-muted-foreground block">{tSim("results.end", language)}</span>
             <span className="text-2xl font-bold">
               {useIndicators ? finalVal : formatKpiValue(key, finalVal, language)}
             </span>
@@ -207,7 +207,7 @@ function IndicatorResultCard({ item, index, useIndicators, explanations, directi
             >
               <Lightbulb className="w-4 h-4 text-amber-500" />
               <span className="text-xs font-medium">
-                {expanded ? t("results.hide", { lang: language }) : t("results.why", { lang: language })}
+                {expanded ? tSim("results.hide", language) : tSim("results.why", language)}
               </span>
               <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ml-auto ${expanded ? 'rotate-180' : ''}`} />
             </Button>
@@ -227,7 +227,7 @@ function IndicatorResultCard({ item, index, useIndicators, explanations, directi
                 {explanations!.map((exp, i) => (
                   <div key={i} className="text-xs space-y-1">
                     <p className="font-medium text-foreground/80">
-                      {t("results.decision.label", { lang: language })} {exp.turnNumber}: {exp.shortReason}
+                      {tSim("results.decision.label", language)} {exp.turnNumber}: {exp.shortReason}
                     </p>
                     {exp.causalChain.length > 0 && (
                       <ul className="pl-3 space-y-0.5">
@@ -276,8 +276,8 @@ export default function SessionResults() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       toast({
-        title: t("results.auth.required", lang),
-        description: t("results.auth.required.desc", lang),
+        title: tSim("results.auth.required", lang),
+        description: tSim("results.auth.required.desc", lang),
         variant: "destructive",
       });
       setTimeout(() => {
@@ -305,11 +305,11 @@ export default function SessionResults() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Brain className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">{t("results.session.notfound", lang)}</h2>
+          <h2 className="text-xl font-semibold mb-2">{tSim("results.session.notfound", lang)}</h2>
           <p className="text-muted-foreground mb-6">
-            {t("results.session.notfound.desc", lang)}
+            {tSim("results.session.notfound.desc", lang)}
           </p>
-          <Button onClick={() => navigate("/")}>{t("results.back", lang)}</Button>
+          <Button onClick={() => navigate("/")}>{tSim("results.back", lang)}</Button>
         </div>
       </div>
     );
@@ -387,7 +387,7 @@ export default function SessionResults() {
           </div>
         </div>
         <div className="text-center">
-          <p className="text-sm font-medium">{t("results.experience", lang)}</p>
+          <p className="text-sm font-medium">{tSim("results.experience", lang)}</p>
         </div>
         <div className="w-20 flex justify-end">
           <LanguageToggle />
@@ -423,18 +423,18 @@ export default function SessionResults() {
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-chart-2/20 to-chart-3/20 border border-chart-2/30 mb-6"
               >
                 <Trophy className="w-4 h-4 text-chart-2" />
-                <span className="text-sm font-semibold text-chart-2">{t("results.completed", lang)}</span>
+                <span className="text-sm font-semibold text-chart-2">{tSim("results.completed", lang)}</span>
               </motion.div>
 
               <h1
                 className="text-4xl font-bold mb-3 bg-gradient-to-r from-foreground via-primary to-foreground bg-clip-text"
                 data-testid="text-scenario-title"
               >
-                {scenario?.title || t("results.fallback.title", lang)}
+                {scenario?.title || tSim("results.fallback.title", lang)}
               </h1>
               
               <p className="text-lg text-muted-foreground mb-8">
-                {t("results.navigated", lang)}
+                {tSim("results.navigated", lang)}
               </p>
 
               {/* Stats cards */}
@@ -450,7 +450,7 @@ export default function SessionResults() {
                   </div>
                   <div className="text-left">
                     <p className="text-2xl font-bold text-primary">{Math.min(turns?.length || 0, session.scenario?.initialState?.totalDecisions || 3)}</p>
-                    <p className="text-xs text-muted-foreground">{t("results.decisions", lang)}</p>
+                    <p className="text-xs text-muted-foreground">{tSim("results.decisions", lang)}</p>
                   </div>
                 </motion.div>
 
@@ -465,7 +465,7 @@ export default function SessionResults() {
                   </div>
                   <div className="text-left">
                     <p className="text-2xl font-bold text-chart-2">100%</p>
-                    <p className="text-xs text-muted-foreground">{t("results.percent.complete", lang)}</p>
+                    <p className="text-xs text-muted-foreground">{tSim("results.percent.complete", lang)}</p>
                   </div>
                 </motion.div>
               </div>
@@ -484,10 +484,10 @@ export default function SessionResults() {
             <div className="pl-4">
               <p className="text-base leading-relaxed" data-testid="text-closure-message">
                 <span className="font-semibold text-lg text-foreground block mb-2">
-                  {t("results.closure.title", lang)}
+                  {tSim("results.closure.title", lang)}
                 </span>
                 <span className="text-muted-foreground">
-                  {t("results.closure.body", lang)}
+                  {tSim("results.closure.body", lang)}
                 </span>
               </p>
             </div>
@@ -543,9 +543,9 @@ export default function SessionResults() {
           }
 
           const statusLabels = {
-            estable: t("results.status.stable", lang),
-            en_riesgo: t("results.status.atrisk", lang),
-            critico: t("results.status.critical", lang),
+            estable: tSim("results.status.stable", lang),
+            en_riesgo: tSim("results.status.atrisk", lang),
+            critico: tSim("results.status.critical", lang),
           };
 
           const topStrengths = improved.slice(0, 3);
@@ -563,9 +563,9 @@ export default function SessionResults() {
                     <StatusIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold">{t("results.summary", lang)}</h2>
+                    <h2 className="text-lg font-bold">{tSim("results.summary", lang)}</h2>
                     <Badge variant="outline" className={`text-xs font-semibold ${statusColor}`} data-testid="badge-overall-status">
-                      {t("results.status", lang)} {statusLabels[status]}
+                      {tSim("results.status", lang)} {statusLabels[status]}
                     </Badge>
                   </div>
                 </div>
@@ -574,20 +574,20 @@ export default function SessionResults() {
                   <p className="text-sm text-foreground/80 leading-relaxed" data-testid="text-overall-summary">
                     {status === "estable" && (
                       <>
-                        {t("results.stable.msg", lang)}
+                        {tSim("results.stable.msg", lang)}
                         {topStrengths.length > 0 && (
-                          <> {t("results.stable.strength", lang)} <strong>{topStrengths.map(s => s.label).join(", ")}</strong>.</>
+                          <> {tSim("results.stable.strength", lang)} <strong>{topStrengths.map(s => s.label).join(", ")}</strong>.</>
                         )}
                         {topConcerns.length > 0 && (
-                          <> {t("results.stable.concern", lang)} <strong>{topConcerns.map(c => c.label).join(", ")}</strong>.</>
+                          <> {tSim("results.stable.concern", lang)} <strong>{topConcerns.map(c => c.label).join(", ")}</strong>.</>
                         )}
                       </>
                     )}
                     {status === "en_riesgo" && (
                       <>
-                        {t("results.atrisk.msg", lang)}
+                        {tSim("results.atrisk.msg", lang)}
                         {topStrengths.length > 0 && (
-                          <> {t("results.stable.strength", lang)} <strong>{topStrengths.map(s => s.label).join(", ")}</strong>.</>
+                          <> {tSim("results.stable.strength", lang)} <strong>{topStrengths.map(s => s.label).join(", ")}</strong>.</>
                         )}
                         {topConcerns.length > 0 && (
                           <> <strong>{topConcerns.map(c => c.label).join(", ")}</strong>.</>
@@ -596,7 +596,7 @@ export default function SessionResults() {
                     )}
                     {status === "critico" && (
                       <>
-                        {t("results.critical.msg", lang)}
+                        {tSim("results.critical.msg", lang)}
                         {topConcerns.length > 0 && (
                           <> <strong>{topConcerns.map(c => c.label).join(", ")}</strong>.</>
                         )}
@@ -611,12 +611,12 @@ export default function SessionResults() {
                     <div className="pt-2">
                       <div className="flex items-center gap-1.5 mb-2">
                         <Zap className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{t("results.strengths", lang)}</span>
+                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{tSim("results.strengths", lang)}</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {topStrengths.map(s => (
                           <Badge key={s.key} variant="outline" className="text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" data-testid={`badge-strength-${s.key}`}>
-                            {s.label} ({t("results.improved", lang)} {Math.abs(Math.round(s.delta))} {t("results.pts", lang)})
+                            {s.label} ({tSim("results.improved", lang)} {Math.abs(Math.round(s.delta))} {tSim("results.pts", lang)})
                           </Badge>
                         ))}
                       </div>
@@ -627,12 +627,12 @@ export default function SessionResults() {
                     <div className="pt-1">
                       <div className="flex items-center gap-1.5 mb-2">
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{t("results.concerns", lang)}</span>
+                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{tSim("results.concerns", lang)}</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {topConcerns.map(c => (
                           <Badge key={c.key} variant="outline" className="text-xs bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300" data-testid={`badge-concern-${c.key}`}>
-                            {c.label} ({t("results.declined", lang)} {Math.abs(Math.round(c.delta))} {t("results.pts", lang)})
+                            {c.label} ({tSim("results.declined", lang)} {Math.abs(Math.round(c.delta))} {tSim("results.pts", lang)})
                           </Badge>
                         ))}
                       </div>
@@ -656,10 +656,10 @@ export default function SessionResults() {
             </div>
             <div>
               <h2 className="text-xl font-bold">
-                {useIndicators ? t("results.evolution.indicators", lang) : t("results.evolution.situation", lang)}
+                {useIndicators ? tSim("results.evolution.indicators", lang) : tSim("results.evolution.situation", lang)}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {t("results.evolution.desc", lang)}
+                {tSim("results.evolution.desc", lang)}
               </p>
             </div>
           </div>
@@ -668,7 +668,7 @@ export default function SessionResults() {
             <div className="flex items-center gap-2 mb-2 px-1">
               <Lightbulb className="w-4 h-4 text-amber-500" />
               <p className="text-sm text-muted-foreground" data-testid="text-why-hint">
-                {t("results.why.hint.pre", lang)} <span className="font-medium text-foreground">"{t("results.why.hint.action", lang)}"</span> {t("results.why.hint.post", lang)}
+                {tSim("results.why.hint.pre", lang)} <span className="font-medium text-foreground">"{tSim("results.why.hint.action", lang)}"</span> {tSim("results.why.hint.post", lang)}
               </p>
             </div>
           )}
@@ -712,7 +712,7 @@ export default function SessionResults() {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold mb-2 text-amber-700 dark:text-amber-300">
-                    {t("results.final.observations", lang)}
+                    {tSim("results.final.observations", lang)}
                   </h2>
                   <p
                     className="text-muted-foreground leading-relaxed"
@@ -766,9 +766,9 @@ export default function SessionResults() {
                   <Clock className="w-5 h-5 text-chart-1" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold" data-testid="heading-decision-timeline">{t("results.timeline.title", lang)}</h2>
+                  <h2 className="text-xl font-bold" data-testid="heading-decision-timeline">{tSim("results.timeline.title", lang)}</h2>
                   <p className="text-sm text-muted-foreground">
-                    {t("results.timeline.desc", lang)}
+                    {tSim("results.timeline.desc", lang)}
                   </p>
                 </div>
               </div>
@@ -797,7 +797,7 @@ export default function SessionResults() {
                               variant="outline"
                               className="bg-primary/5 border-primary/30 text-primary font-semibold"
                             >
-                              {t("results.decision.label", lang)} {turn.turnNumber}
+                              {tSim("results.decision.label", lang)} {turn.turnNumber}
                             </Badge>
                           </div>
 
@@ -806,7 +806,7 @@ export default function SessionResults() {
                               <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
                                 <Users className="w-3 h-3 text-primary" />
                               </div>
-                              <p className="text-sm font-semibold text-primary">{t("results.your.decision", lang)}</p>
+                              <p className="text-sm font-semibold text-primary">{tSim("results.your.decision", lang)}</p>
                             </div>
                             <p className="text-sm text-foreground leading-relaxed italic" data-testid={`text-decision-input-${turn.turnNumber}`}>
                               "{turn.studentInput}"
@@ -818,7 +818,7 @@ export default function SessionResults() {
                               <div className="w-5 h-5 rounded-full bg-chart-2/20 flex items-center justify-center">
                                 <Sparkles className="w-3 h-3 text-chart-2" />
                               </div>
-                              <p className="text-sm font-semibold text-chart-2">{t("results.outcome", lang)}</p>
+                              <p className="text-sm font-semibold text-chart-2">{tSim("results.outcome", lang)}</p>
                             </div>
                             <p className="text-sm text-muted-foreground leading-relaxed" data-testid={`text-decision-narrative-${turn.turnNumber}`}>
                               {turn.agentResponse.narrative?.text || turn.agentResponse.feedback?.message}
@@ -827,7 +827,7 @@ export default function SessionResults() {
 
                           {deltaEntries.length > 0 && (
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("results.impacts", lang)}</p>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{tSim("results.impacts", lang)}</p>
                               <div className="flex flex-wrap gap-2" data-testid={`chips-deltas-${turn.turnNumber}`}>
                                 {deltaEntries.map(([indicatorId, delta]) => {
                                   const direction = getIndicatorDirection(indicatorId);
@@ -881,7 +881,7 @@ export default function SessionResults() {
                               variant="outline"
                               className="bg-chart-3/10 border-chart-3/30 text-chart-3 font-semibold"
                             >
-                              {t("results.reflection.badge", lang)}
+                              {tSim("results.reflection.badge", lang)}
                             </Badge>
                           </div>
 
@@ -890,7 +890,7 @@ export default function SessionResults() {
                               <div className="w-5 h-5 rounded-full bg-chart-3/20 flex items-center justify-center">
                                 <Lightbulb className="w-3 h-3 text-chart-3" />
                               </div>
-                              <p className="text-sm font-semibold text-chart-3">{t("results.reflection.label", lang)}</p>
+                              <p className="text-sm font-semibold text-chart-3">{tSim("results.reflection.label", lang)}</p>
                             </div>
                             <p className="text-sm text-foreground leading-relaxed italic" data-testid="text-reflection-input">
                               "{lastReflection.studentInput}"
@@ -903,7 +903,7 @@ export default function SessionResults() {
                                 <div className="w-5 h-5 rounded-full bg-chart-3/20 flex items-center justify-center">
                                   <MessageSquare className="w-3 h-3 text-chart-3" />
                                 </div>
-                                <p className="text-sm font-semibold text-chart-3">{t("results.mentor.closure", lang)}</p>
+                                <p className="text-sm font-semibold text-chart-3">{tSim("results.mentor.closure", lang)}</p>
                               </div>
                               <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-reflection-narrative">
                                 {lastReflection.agentResponse.narrative.text}
@@ -934,7 +934,7 @@ export default function SessionResults() {
             className="px-8"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            {t("results.back.home", lang)}
+            {tSim("results.back.home", lang)}
           </Button>
           {scenario && (
             <Button
@@ -944,7 +944,7 @@ export default function SessionResults() {
               className="px-8 bg-gradient-to-r from-primary to-chart-2 hover:from-primary/90 hover:to-chart-2/90"
             >
               <Trophy className="w-4 h-4 mr-2" />
-              {t("results.try.again", lang)}
+              {tSim("results.try.again", lang)}
             </Button>
           )}
         </motion.div>
