@@ -132,13 +132,14 @@ interface IndicatorCardProps {
   explanations?: Array<{ turnNumber: number; shortReason: string; causalChain: string[] }>;
   direction?: string;
   defaultExpanded?: boolean;
+  language?: SimulationLanguage;
 }
 
-function IndicatorResultCard({ item, index, useIndicators, explanations, direction, defaultExpanded = false }: IndicatorCardProps) {
+function IndicatorResultCard({ item, index, useIndicators, explanations, direction, defaultExpanded = false, language: simLang = "es" }: IndicatorCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const { key, label, initial, final: finalVal, Icon } = item;
   const hasExplanations = explanations && explanations.length > 0;
-  const { t, language } = useTranslation();
+  const language = simLang;
   const locale = language === "en" ? "en-US" : "es-MX";
 
   useEffect(() => {
@@ -690,6 +691,7 @@ export default function SessionResults() {
                     explanations={indicatorExplanations[item.key]}
                     direction={(item as any).direction}
                     defaultExpanded={shouldAutoExpand}
+                    language={lang}
                   />
                 );
               });
