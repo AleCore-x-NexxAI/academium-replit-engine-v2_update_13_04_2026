@@ -3,7 +3,7 @@ import { useTranslation } from "@/contexts/LanguageContext";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, RefreshCw } from "lucide-react";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { type SimulationLanguage } from "@/lib/i18n";
 
 interface FeedbackPanelProps {
   feedback: {

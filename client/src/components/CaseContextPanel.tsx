@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Scenario, DecisionPoint } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { type SimulationLanguage } from "@/lib/i18n";
 
 interface CaseContextPanelProps {
   scenario: Scenario;

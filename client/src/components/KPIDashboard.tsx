@@ -10,7 +10,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useTranslation } from "@/contexts/LanguageContext";
 import type { KPIs, Indicator, MetricExplanation } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { type SimulationLanguage } from "@/lib/i18n";
 
 interface KPIDashboardProps {
   kpis: KPIs;

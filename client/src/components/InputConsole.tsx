@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import type { DecisionPoint } from "@shared/schema";
-import { t, type SimulationLanguage } from "@/lib/i18n";
+import { type SimulationLanguage } from "@/lib/i18n";
 
 interface InputConsoleProps {
   onSubmit: (text: string) => Promise<any>;
