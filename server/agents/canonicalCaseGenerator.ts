@@ -327,7 +327,8 @@ export async function generateCanonicalCase(
 }
 
 export function convertCanonicalToScenarioData(
-  canonical: CanonicalCaseData
+  canonical: CanonicalCaseData,
+  language?: "es" | "en"
 ): GeneratedScenarioData {
   const defaultKpis: KPIs = {
     revenue: 1000000,
@@ -346,9 +347,10 @@ export function convertCanonicalToScenarioData(
     ],
   };
 
+  const challengeLabel = language === "en" ? "Core Challenge" : "Desafío Central";
   const introText = `${canonical.caseContext}
 
-**Desafío Central:**
+**${challengeLabel}:**
 ${canonical.coreChallenge}`;
 
   const initialState: InitialState = {

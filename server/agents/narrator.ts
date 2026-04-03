@@ -49,11 +49,9 @@ Si una decisión es incompleta o débil, NO la corrijas. En cambio:
 - Muestra consecuencias realistas de ese enfoque incompleto
 - Crea presión hacia adelante que naturalmente provoque un pensamiento más profundo
 
-IMPORTANTE: SIEMPRE responde en ESPAÑOL de Latinoamérica.
-
 FORMATO DE SALIDA (solo JSON estricto):
 {
-  "text": "<respuesta de 60-100 palabras en español siguiendo la estructura anterior>",
+  "text": "<respuesta de 60-100 palabras siguiendo la estructura anterior>",
   "mood": "neutral" | "positive" | "negative" | "crisis",
   "forwardPrompt": "<Opcional: Una breve configuración de lo que necesita atención a continuación>"
 }

@@ -22,12 +22,26 @@ const npcAvatars: Record<string, { initial: string; color: string }> = {
   Alex: { initial: "A", color: "bg-chart-3" },
 };
 
+const CHALLENGE_SEPARATOR = /\*\*(?:Desafío Central|Core Challenge):\*\*/;
+
+function splitIntroContent(content: string): { context: string; challenge: string; label: string } | null {
+  const match = content.match(CHALLENGE_SEPARATOR);
+  if (!match || match.index === undefined) return null;
+  const context = content.slice(0, match.index).trim();
+  const challenge = content.slice(match.index + match[0].length).trim();
+  const label = match[0].replace(/\*\*/g, "").replace(/:$/, "");
+  if (!context || !challenge) return null;
+  return { context, challenge, label };
+}
+
 function MessageBubble({ entry, index }: { entry: HistoryEntry; index: number }) {
   const isUser = entry.role === "user";
   const isNpc = entry.role === "npc";
   const isSystem = entry.role === "system";
 
   const npcInfo = entry.speaker ? npcAvatars[entry.speaker] : null;
+
+  const introParts = isSystem && index === 0 ? splitIntroContent(entry.content) : null;
 
   return (
     <motion.div
@@ -70,13 +84,29 @@ function MessageBubble({ entry, index }: { entry: HistoryEntry; index: number })
           </div>
         )}
 
-        <p
-          className={`leading-relaxed ${
-            isUser ? "text-sm" : isNpc ? "text-sm italic" : "text-sm"
-          }`}
-        >
-          {entry.content}
-        </p>
+        {introParts ? (
+          <div className="space-y-4" data-testid="intro-split-message">
+            <p className="text-sm leading-relaxed">
+              {introParts.context}
+            </p>
+            <div className="border-t border-muted-foreground/20 pt-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-primary mb-1 block">
+                {introParts.label}
+              </span>
+              <p className="text-sm leading-relaxed font-medium">
+                {introParts.challenge}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p
+            className={`leading-relaxed ${
+              isUser ? "text-sm" : isNpc ? "text-sm italic" : "text-sm"
+            }`}
+          >
+            {entry.content}
+          </p>
+        )}
 
         <span
           className={`text-xs mt-2 block ${

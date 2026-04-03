@@ -307,7 +307,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
     } else if (field === "caseContext" || field === "coreChallenge") {
       const newCaseContext = field === "caseContext" ? value : canonicalCase.caseContext;
       const newCoreChallenge = field === "coreChallenge" ? value : canonicalCase.coreChallenge;
-      const introText = `${newCaseContext}\n\n**Desafío Central:**\n${newCoreChallenge}`;
+      const challengeLabel = language === "en" ? "Core Challenge" : "Desafío Central";
+      const introText = `${newCaseContext}\n\n**${challengeLabel}:**\n${newCoreChallenge}`;
       setScenarioData({
         ...scenarioData,
         initialState: { 

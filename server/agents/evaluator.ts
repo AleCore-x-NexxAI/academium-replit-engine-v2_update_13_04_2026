@@ -42,8 +42,6 @@ Cuando una decisión es débil o incompleta, tus notas internas deben:
 
 IMPORTANTE: NO intentes "arreglar" respuestas débiles a través de la retroalimentación. Ese no es tu rol.
 
-IMPORTANTE: El mensaje de retroalimentación SIEMPRE debe estar en ESPAÑOL de Latinoamérica.
-
 TIPOS DE BANDERAS (seguimiento interno):
 - STRATEGIC_THINKER: Muestra pensamiento a largo plazo
 - DECISIVE_LEADER: Actúa con claridad
@@ -63,7 +61,7 @@ FORMATO DE SALIDA (JSON estricto, sin markdown):
   },
   "feedback": {
     "score": <0-100 puntuación de seguimiento interno>,
-    "message": "<1-2 oraciones en ESPAÑOL de observación NEUTRAL sobre lo que abordó la decisión - NO evaluativa>",
+    "message": "<1-2 oraciones de observación NEUTRAL sobre lo que abordó la decisión - NO evaluativa>",
     "hint": null
   },
   "flags": ["<flag1>", "<flag2>", ...]
@@ -131,7 +129,6 @@ IMPORTANTE - Tu mensaje de retroalimentación DEBE:
 - Si hay decisiones anteriores, notar la evolución o consistencia del enfoque
 - Adaptar el tono según la etapa: ${decisionNumber === 1 ? "primera decisión - observar el enfoque inicial" : decisionNumber === totalDecisions ? "última decisión - observar la madurez del razonamiento" : "decisión intermedia - observar cómo se construye sobre las anteriores"}
 - Ser una observación NEUTRAL, no evaluativa
-- Estar en ESPAÑOL de Latinoamérica
 
 Devuelve tu evaluación completa en JSON.`;
 

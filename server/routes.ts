@@ -1581,7 +1581,7 @@ Be constructive and educational, not judgmental.`;
       }
 
       const canonicalCase = await generateCanonicalCase(topic, builtContext || undefined, stepCount, caseLang);
-      const scenarioData = convertCanonicalToScenarioData(canonicalCase);
+      const scenarioData = convertCanonicalToScenarioData(canonicalCase, caseLang);
 
       const initialMessage: DraftConversationMessage = {
         role: "assistant",
