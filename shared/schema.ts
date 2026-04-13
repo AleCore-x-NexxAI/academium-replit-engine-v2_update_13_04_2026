@@ -363,8 +363,8 @@ export interface CompetencyEvidenceEntry {
 
 export interface DecisionEvidenceLogEntry {
   signals_detected: SignalExtractionEntry;
-  rds_score: number;
-  rds_band: "SURFACE" | "ENGAGED" | "INTEGRATED";
+  rds_score: number | null;
+  rds_band: "SURFACE" | "ENGAGED" | "INTEGRATED" | null;
   competency_evidence: CompetencyEvidenceEntry;
   raw_signal_scores: {
     intent: number;
@@ -427,7 +427,6 @@ export interface TurnResponse {
   options?: string[];
   isGameOver: boolean;
   competencyScores?: Record<string, number>;
-  // S14/S6: Explicit turn status
   turnStatus?: "pass" | "nudge" | "block";
   // Weak answer handling (kept for backward compat)
   requiresRevision?: boolean;

@@ -39,8 +39,8 @@ export interface CompetencyEvidence {
 
 export interface DecisionEvidenceLog {
   signals_detected: SignalExtractionResult;
-  rds_score: number;
-  rds_band: RDSBand;
+  rds_score: number | null;
+  rds_band: RDSBand | null;
   competency_evidence: CompetencyEvidence;
   raw_signal_scores: {
     intent: number;

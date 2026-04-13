@@ -265,19 +265,21 @@ export async function processReflection(
 
 function buildMcqSignals(decisionPoint?: DecisionPoint): SignalExtractionResult {
   const tradeoffSignature = decisionPoint?.tradeoffSignature;
-  const hasTradeoff = tradeoffSignature && typeof tradeoffSignature === "object";
+  const hasTradeoff = tradeoffSignature &&
+    tradeoffSignature.dimension && tradeoffSignature.cost && tradeoffSignature.benefit;
+  const absent = { quality: SignalQuality.ABSENT, extracted_text: "" };
 
   return {
-    intent: { quality: SignalQuality.PRESENT, extracted_text: "MCQ selection" },
-    justification: { quality: SignalQuality.ABSENT, extracted_text: "" },
-    tradeoffAwareness: {
-      quality: hasTradeoff ? SignalQuality.PRESENT : SignalQuality.ABSENT,
-      extracted_text: hasTradeoff
-        ? `${tradeoffSignature.dimension}: ${tradeoffSignature.cost} vs ${tradeoffSignature.benefit}`
-        : "",
-    },
-    stakeholderAwareness: { quality: SignalQuality.ABSENT, extracted_text: "" },
-    ethicalAwareness: { quality: SignalQuality.ABSENT, extracted_text: "" },
+    intent: absent,
+    justification: absent,
+    tradeoffAwareness: hasTradeoff
+      ? {
+          quality: SignalQuality.PRESENT,
+          extracted_text: `${tradeoffSignature.dimension}: ${tradeoffSignature.cost} vs ${tradeoffSignature.benefit}`,
+        }
+      : absent,
+    stakeholderAwareness: absent,
+    ethicalAwareness: absent,
   };
 }
 
@@ -480,8 +482,8 @@ export async function processStudentTurn(
     const mcqSignals = buildMcqSignals(decisionPoint);
     evidenceLog = {
       signals_detected: mcqSignals,
-      rds_score: -1,
-      rds_band: RDSBand.SURFACE,
+      rds_score: null,
+      rds_band: null,
       competency_evidence: mapCompetencyEvidence(mcqSignals),
       raw_signal_scores: {
         intent: mcqSignals.intent.quality,
@@ -500,8 +502,9 @@ export async function processStudentTurn(
       eventData: {
         agentName: "signalExtractor",
         durationMs: 0,
-        source: "mcq_signature",
+        source: "mcq_tradeoff_signature",
         isMcq: true,
+        hasTradeoffSignature: !!decisionPoint?.tradeoffSignature,
         signals: evidenceLog.raw_signal_scores,
       },
     }).catch(err => console.error("[TurnEvent] Failed to log signalExtractor (MCQ):", err));
@@ -527,7 +530,7 @@ export async function processStudentTurn(
   const contextWithRDS: AgentContext = {
     ...context,
     studentInput: intentResult.interpretedAction || context.studentInput,
-    rdsBand: evidenceLog.rds_band,
+    rdsBand: evidenceLog.rds_band || undefined,
     signalExtractionResult: evidenceLog.signals_detected,
   };
 
