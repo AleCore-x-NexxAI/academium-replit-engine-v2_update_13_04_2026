@@ -768,17 +768,10 @@ export async function processStudentTurn(
     indicatorAccumulation: {},
   };
 
-  const defaultNarrative: import("./types").NarratorOutput = {
-    text: isEn ? "The decision has been registered." : "La decisión ha sido registrada.",
-    mood: "neutral",
-    suggestedOptions: [],
-  };
-
   const agentsStart = Date.now();
-  const [evalSettled, kpiSettled, narrativeSettled] = await Promise.allSettled([
+  const [evalSettled, kpiSettled] = await Promise.allSettled([
     evaluateDecision(contextWithRDS),
     calculateKPIImpact(contextWithRDS),
-    generateNarrative(contextWithRDS, defaultKPI, defaultEvaluation),
   ]);
 
   let evaluation: import("./types").EvaluatorOutput;
@@ -799,16 +792,7 @@ export async function processStudentTurn(
     kpiFailed = true;
   }
 
-  let narrative: import("./types").NarratorOutput;
-  if (narrativeSettled.status === "fulfilled") {
-    narrative = narrativeSettled.value;
-  } else {
-    console.error("[Director] Narrative generation failed:", narrativeSettled.reason);
-    narrative = defaultNarrative;
-    narrativeFailed = true;
-  }
-
-  const agentsDuration = Date.now() - agentsStart;
+  const parallelDuration = Date.now() - agentsStart;
 
   storage.createTurnEvent({
     sessionId: context.sessionId,
@@ -817,7 +801,7 @@ export async function processStudentTurn(
     rawStudentInput: context.studentInput,
     eventData: {
       agentName: "evaluator",
-      durationMs: agentsDuration,
+      durationMs: parallelDuration,
       feedbackScore: evaluation.feedback?.score,
       feedbackMessage: evaluation.feedback?.message,
       competencyScores: evaluation.competencyScores,
@@ -832,7 +816,7 @@ export async function processStudentTurn(
     rawStudentInput: context.studentInput,
     eventData: {
       agentName: "domainExpert",
-      durationMs: agentsDuration,
+      durationMs: parallelDuration,
       kpiDeltas: kpiImpact.kpiDeltas,
       indicatorDeltas: kpiImpact.indicatorDeltas,
       displayKPIs: kpiImpact.displayKPIs,
@@ -840,6 +824,28 @@ export async function processStudentTurn(
     },
   }).catch(err => console.error("[TurnEvent] Failed to log domainExpert agent_call:", err));
 
+  const newKpis = applyKPIDeltas(context.currentKpis, kpiImpact.kpiDeltas);
+
+  const narrativeContext: AgentContext = {
+    ...contextWithRDS,
+    currentKpis: newKpis,
+  };
+
+  let narrative: import("./types").NarratorOutput;
+  const narrativeStart = Date.now();
+  try {
+    narrative = await generateNarrative(narrativeContext, kpiImpact, evaluation);
+  } catch (err) {
+    console.error("[Director] Narrative generation failed:", err);
+    narrativeFailed = true;
+    narrative = {
+      text: isEn
+        ? "The narrative summary is not available at this time."
+        : "El resumen narrativo no está disponible en este momento.",
+      mood: "neutral",
+      suggestedOptions: [],
+    };
+  }
   storage.createTurnEvent({
     sessionId: context.sessionId,
     eventType: "agent_call",
@@ -847,14 +853,12 @@ export async function processStudentTurn(
     rawStudentInput: context.studentInput,
     eventData: {
       agentName: "narrator",
-      durationMs: agentsDuration,
+      durationMs: Date.now() - narrativeStart,
       mood: narrative.mood,
       narrativeLength: narrative.text?.length,
       failed: narrativeFailed,
     },
   }).catch(err => console.error("[TurnEvent] Failed to log narrator agent_call:", err));
-
-  const newKpis = applyKPIDeltas(context.currentKpis, kpiImpact.kpiDeltas);
 
   let causalExplanations: CausalExplanation[] = [];
   let explanationsFailed = false;
