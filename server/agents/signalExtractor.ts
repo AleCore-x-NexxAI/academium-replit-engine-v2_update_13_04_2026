@@ -175,7 +175,7 @@ function parseSignalResult(parsed: any): SignalExtractionResult {
 function defaultSignals(): SignalExtractionResult {
   const absent = { quality: SignalQuality.ABSENT, extracted_text: "" };
   return {
-    intent: { quality: SignalQuality.WEAK, extracted_text: "" },
+    intent: absent,
     justification: absent,
     tradeoffAwareness: absent,
     stakeholderAwareness: absent,

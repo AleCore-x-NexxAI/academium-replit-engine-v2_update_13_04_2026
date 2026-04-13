@@ -334,6 +334,43 @@ export interface HistoryEntry {
   timestamp: string;
 }
 
+export interface SignalScoreEntry {
+  quality: 0 | 1 | 2 | 3;
+  extracted_text: string;
+}
+
+export interface SignalExtractionEntry {
+  intent: SignalScoreEntry;
+  justification: SignalScoreEntry;
+  tradeoffAwareness: SignalScoreEntry;
+  stakeholderAwareness: SignalScoreEntry;
+  ethicalAwareness: SignalScoreEntry;
+}
+
+export type EvidenceLevelEntry = "demonstrated" | "emerging" | "not_evidenced";
+
+export interface CompetencyEvidenceEntry {
+  C1: EvidenceLevelEntry;
+  C2: EvidenceLevelEntry;
+  C3: EvidenceLevelEntry;
+  C4: EvidenceLevelEntry;
+  C5: EvidenceLevelEntry;
+}
+
+export interface DecisionEvidenceLogEntry {
+  signals_detected: SignalExtractionEntry;
+  rds_score: number;
+  rds_band: "SURFACE" | "ENGAGED" | "INTEGRATED";
+  competency_evidence: CompetencyEvidenceEntry;
+  raw_signal_scores: {
+    intent: number;
+    justification: number;
+    tradeoffAwareness: number;
+    stakeholderAwareness: number;
+    ethicalAwareness: number;
+  };
+}
+
 export interface SimulationState {
   turnCount: number;
   kpis: KPIs;
@@ -348,7 +385,7 @@ export interface SimulationState {
   pendingRevision?: boolean;
   revisionAttempts?: number;
   lastStudentInput?: string;
-  decisionEvidenceLogs?: any[];
+  decisionEvidenceLogs?: DecisionEvidenceLogEntry[];
   nudgeCounters?: Record<number, number>;
   integrityFlags?: boolean[];
 }

@@ -548,7 +548,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       currentDecisionNum = session.currentState.currentDecision || 1;
 
-      const context: AgentContext & { nudgeCounters?: Record<number, number>; decisionEvidenceLogs?: any[]; integrityFlags?: boolean[] } = {
+      const context: AgentContext = {
         sessionId,
         turnCount: session.currentState.turnCount,
         currentKpis: session.currentState.kpis,
@@ -562,9 +562,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         llmModel: scenarioLlmModel,
         agentPrompts: scenarioAgentPrompts,
         language: (session.scenario?.language as "es" | "en") || "es",
-        nudgeCounters: (session.currentState as any).nudgeCounters || {},
-        decisionEvidenceLogs: (session.currentState as any).decisionEvidenceLogs || [],
-        integrityFlags: (session.currentState as any).integrityFlags || [],
+        nudgeCounters: session.currentState.nudgeCounters || {},
+        decisionEvidenceLogs: session.currentState.decisionEvidenceLogs || [],
+        integrityFlags: session.currentState.integrityFlags || [],
         scenario: {
           title: session.scenario?.title || "Business Simulation",
           domain: session.scenario?.domain || "General",

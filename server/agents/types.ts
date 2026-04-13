@@ -111,6 +111,9 @@ export interface AgentContext {
   decisionPoints?: DecisionPoint[];
   rdsBand?: RDSBand;
   signalExtractionResult?: SignalExtractionResult;
+  nudgeCounters?: Record<number, number>;
+  decisionEvidenceLogs?: DecisionEvidenceLog[];
+  integrityFlags?: boolean[];
   scenario: {
     title: string;
     domain: string;

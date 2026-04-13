@@ -1,6 +1,6 @@
-import type { AgentContext, DirectorOutput, InputClassificationResult, DecisionEvidenceLog } from "./types";
-import { RDSBand } from "./types";
-import type { KPIs, SimulationState, TurnResponse, HistoryEntry } from "@shared/schema";
+import type { AgentContext, DirectorOutput, DecisionEvidenceLog, SignalExtractionResult } from "./types";
+import { RDSBand, SignalQuality, computeRDS, classifyRDSBand, mapCompetencyEvidence } from "./types";
+import type { KPIs, SimulationState, TurnResponse, HistoryEntry, DecisionPoint } from "@shared/schema";
 import { evaluateDecision } from "./evaluator";
 import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative } from "./narrator";
@@ -263,6 +263,22 @@ export async function processReflection(
   };
 }
 
+function buildMcqSignals(decisionPoint?: DecisionPoint): SignalExtractionResult {
+  const tradeoffSignature = (decisionPoint as any)?.tradeoffSignature;
+  const hasTradeoff = tradeoffSignature && typeof tradeoffSignature === "object";
+
+  return {
+    intent: { quality: SignalQuality.PRESENT, extracted_text: "MCQ selection" },
+    justification: { quality: SignalQuality.ABSENT, extracted_text: "" },
+    tradeoffAwareness: {
+      quality: hasTradeoff ? SignalQuality.PRESENT : SignalQuality.ABSENT,
+      extracted_text: hasTradeoff ? JSON.stringify(tradeoffSignature) : "",
+    },
+    stakeholderAwareness: { quality: SignalQuality.ABSENT, extracted_text: "" },
+    ethicalAwareness: { quality: SignalQuality.ABSENT, extracted_text: "" },
+  };
+}
+
 export async function processStudentTurn(
   context: AgentContext,
   revisionAttempts: number = 0
@@ -278,7 +294,7 @@ export async function processStudentTurn(
     .map(h => `${h.role}: ${h.content}`)
     .join("\n");
 
-  const nudgeCounters = (context as any).nudgeCounters || {};
+  const nudgeCounters = context.nudgeCounters || {};
   const currentNudgeCount = nudgeCounters[currentDecisionNum] || 0;
 
   const classificationStart = Date.now();
@@ -330,7 +346,7 @@ export async function processStudentTurn(
       },
     ];
 
-    const updatedIntegrityFlags = [...(context as any).integrityFlags || []];
+    const updatedIntegrityFlags = [...(context.integrityFlags || [])];
     if (classificationResult.integrity_flag) {
       updatedIntegrityFlags.push(true);
     }
@@ -453,83 +469,63 @@ export async function processStudentTurn(
       durationMs: Date.now() - intentStart,
       isValid: intentResult.isValid,
       interpretedAction: intentResult.interpretedAction,
-      helpfulPrompt: intentResult.helpfulPrompt,
     },
   }).catch(err => console.error("[TurnEvent] Failed to log director agent_call:", err));
 
-  if (!intentResult.isValid) {
-    const defaultHelp = isEn
-      ? "I want to help you navigate this situation! What action would you like to take?"
-      : "¡Quiero ayudarte a navegar esta situación! ¿Qué acción te gustaría tomar?";
-    const helpPrompt = intentResult.helpfulPrompt || defaultHelp;
+  let evidenceLog: DecisionEvidenceLog;
 
-    const updatedNudgeCounters = { ...nudgeCounters, [currentDecisionNum]: currentNudgeCount + 1 };
-
-    const nudgeHistory: HistoryEntry[] = [
-      ...context.history as HistoryEntry[],
-      {
-        role: "user",
-        content: context.studentInput,
-        timestamp: new Date().toISOString(),
-      },
-    ];
-
-    return {
-      narrative: {
-        text: helpPrompt,
-        mood: "neutral",
-      },
-      kpiUpdates: {},
-      feedback: {
-        score: 0,
-        message: "",
-      },
-      isGameOver: false,
-      turnStatus: "nudge",
-      requiresRevision: true,
-      revisionPrompt: helpPrompt,
-      revisionAttempt: currentNudgeCount + 1,
-      maxRevisions: MAX_REVISIONS,
-      updatedState: {
-        turnCount: context.turnCount,
-        kpis: context.currentKpis,
-        indicators: context.indicators,
-        history: nudgeHistory,
-        flags: [],
-        rubricScores: {},
-        currentDecision: context.currentDecision,
-        pendingRevision: true,
-        revisionAttempts: currentNudgeCount + 1,
-        lastStudentInput: context.studentInput,
-        nudgeCounters: updatedNudgeCounters,
+  if (isMcq) {
+    const mcqSignals = buildMcqSignals(decisionPoint);
+    const rds = computeRDS(mcqSignals);
+    evidenceLog = {
+      signals_detected: mcqSignals,
+      rds_score: rds,
+      rds_band: classifyRDSBand(rds),
+      competency_evidence: mapCompetencyEvidence(mcqSignals),
+      raw_signal_scores: {
+        intent: mcqSignals.intent.quality,
+        justification: mcqSignals.justification.quality,
+        tradeoffAwareness: mcqSignals.tradeoffAwareness.quality,
+        stakeholderAwareness: mcqSignals.stakeholderAwareness.quality,
+        ethicalAwareness: mcqSignals.ethicalAwareness.quality,
       },
     };
+    storage.createTurnEvent({
+      sessionId: context.sessionId,
+      eventType: "agent_call",
+      turnNumber: currentDecisionNum,
+      rawStudentInput: context.studentInput,
+      eventData: {
+        agentName: "signalExtractor",
+        durationMs: 0,
+        source: "mcq_signature",
+        rds_score: evidenceLog.rds_score,
+        rds_band: evidenceLog.rds_band,
+        signals: evidenceLog.raw_signal_scores,
+      },
+    }).catch(err => console.error("[TurnEvent] Failed to log signalExtractor (MCQ):", err));
+  } else {
+    const signalStart = Date.now();
+    evidenceLog = await extractSignals(context);
+    storage.createTurnEvent({
+      sessionId: context.sessionId,
+      eventType: "agent_call",
+      turnNumber: currentDecisionNum,
+      rawStudentInput: context.studentInput,
+      eventData: {
+        agentName: "signalExtractor",
+        durationMs: Date.now() - signalStart,
+        rds_score: evidenceLog.rds_score,
+        rds_band: evidenceLog.rds_band,
+        signals: evidenceLog.raw_signal_scores,
+        competency_evidence: evidenceLog.competency_evidence,
+      },
+    }).catch(err => console.error("[TurnEvent] Failed to log signalExtractor:", err));
   }
 
-  const interpretedContext: AgentContext = {
+  const contextWithRDS: AgentContext = {
     ...context,
     studentInput: intentResult.interpretedAction || context.studentInput,
-  };
-
-  const signalStart = Date.now();
-  const evidenceLog = await extractSignals(interpretedContext);
-  storage.createTurnEvent({
-    sessionId: context.sessionId,
-    eventType: "agent_call",
-    turnNumber: currentDecisionNum,
-    rawStudentInput: context.studentInput,
-    eventData: {
-      agentName: "signalExtractor",
-      durationMs: Date.now() - signalStart,
-      rds_score: evidenceLog.rds_score,
-      rds_band: evidenceLog.rds_band,
-      signals: evidenceLog.raw_signal_scores,
-      competency_evidence: evidenceLog.competency_evidence,
-    },
-  }).catch(err => console.error("[TurnEvent] Failed to log signalExtractor agent_call:", err));
-
-  const contextWithRDS: AgentContext = {
-    ...interpretedContext,
     rdsBand: evidenceLog.rds_band,
     signalExtractionResult: evidenceLog.signals_detected,
   };
@@ -633,7 +629,7 @@ export async function processStudentTurn(
     };
   });
 
-  const existingEvidenceLogs = (context as any).decisionEvidenceLogs || [];
+  const existingEvidenceLogs = context.decisionEvidenceLogs || [];
 
   storage.createTurnEvent({
     sessionId: context.sessionId,
@@ -652,7 +648,7 @@ export async function processStudentTurn(
     kpis: newKpis,
     indicators: updatedIndicators,
     history: newHistory,
-    flags: [...(context.history as any).flags || [], ...evaluation.flags],
+    flags: [...evaluation.flags],
     rubricScores: evaluation.competencyScores,
     currentDecision: decisionsComplete ? totalDecisions : nextDecision,
     isComplete: isGameOver,
