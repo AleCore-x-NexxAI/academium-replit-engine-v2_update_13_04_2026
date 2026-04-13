@@ -1,81 +1,263 @@
 import { generateChatCompletion, SupportedModel } from "../openai";
-import type { AgentContext, DomainExpertOutput } from "./types";
-import { CAUSE_EFFECT_RULES } from "./types";
-import type { Indicator } from "@shared/schema";
+import type { AgentContext, DomainExpertOutput, DisplayKPI, IndicatorAccumulation, MetricTier, TurnPosition } from "./types";
+import { RDSBand, SignalQuality } from "./types";
+import type { Indicator, IndicatorAccumulationEntry } from "@shared/schema";
 import { getLanguageDirective } from "./guardrails";
 
-function buildDomainExpertPrompt(indicators: Indicator[]): string {
+const MAX_DISPLAY_KPIS = 3;
+
+function determineTurnPosition(context: AgentContext): TurnPosition {
+  const current = context.currentDecision || context.turnCount + 1;
+  const total = context.totalDecisions || 0;
+  if (current <= 1) return "FIRST";
+  if (total > 0 && current >= total) return "FINAL";
+  return "INTERMEDIATE";
+}
+
+function getTierRange(tier: MetricTier): { min: number; max: number } {
+  switch (tier) {
+    case 1: return { min: 2, max: 5 };
+    case 2: return { min: 6, max: 10 };
+    case 3: return { min: 11, max: 16 };
+  }
+}
+
+function clampToTier(delta: number, tier: MetricTier): number {
+  const range = getTierRange(tier);
+  const sign = delta >= 0 ? 1 : -1;
+  const abs = Math.abs(delta);
+  const clamped = Math.max(range.min, Math.min(range.max, abs));
+  return sign * clamped;
+}
+
+function determineTier(
+  indicatorId: string,
+  rawDelta: number,
+  rdsBand: RDSBand | undefined,
+  signalQuality: number,
+  accumulation: IndicatorAccumulation | undefined,
+): MetricTier {
+  const absDelta = Math.abs(rawDelta);
+  if (absDelta === 0) return 1;
+
+  if (rdsBand === RDSBand.SURFACE) return 1;
+
+  if (absDelta >= 11) {
+    return 2;
+  }
+
+  if (absDelta >= 6 && (signalQuality >= SignalQuality.PRESENT)) {
+    if (accumulation && accumulation.consecutiveNegativeTurns >= 4 && signalQuality >= SignalQuality.PRESENT) {
+      return 2;
+    }
+    return 2;
+  }
+
+  if (accumulation && accumulation.consecutiveNegativeTurns >= 3 && absDelta >= 4) {
+    return 2;
+  }
+
+  return 1;
+}
+
+function updateAccumulation(
+  prev: IndicatorAccumulation | undefined,
+  delta: number,
+  tier: MetricTier,
+  turnNumber: number,
+): IndicatorAccumulation {
+  const base: IndicatorAccumulation = prev || {
+    trajectory: "neutral",
+    consecutiveNegativeTurns: 0,
+    consecutivePositiveTurns: 0,
+    lastTier: null,
+    totalMovements: 0,
+    firstAppearanceTurn: null,
+  };
+
+  if (delta === 0) return base;
+
+  const isPositive = delta > 0;
+  const isNegative = delta < 0;
+
+  let consecutiveNeg = isNegative ? base.consecutiveNegativeTurns + 1 : 0;
+  let consecutivePos = isPositive ? base.consecutivePositiveTurns + 1 : 0;
+
+  let trajectory = base.trajectory;
+  if (isPositive && base.trajectory === "negative") trajectory = "mixed";
+  else if (isNegative && base.trajectory === "positive") trajectory = "mixed";
+  else if (isPositive) trajectory = "positive";
+  else if (isNegative) trajectory = "negative";
+
+  return {
+    trajectory: trajectory as IndicatorAccumulation["trajectory"],
+    consecutiveNegativeTurns: consecutiveNeg,
+    consecutivePositiveTurns: consecutivePos,
+    lastTier: tier,
+    totalMovements: base.totalMovements + 1,
+    firstAppearanceTurn: base.firstAppearanceTurn ?? turnNumber,
+  };
+}
+
+function applyRecoveryAttenuation(
+  delta: number,
+  tier: MetricTier,
+  accumulation: IndicatorAccumulation | undefined,
+): MetricTier {
+  if (!accumulation) return tier;
+  if (delta > 0 && accumulation.trajectory === "negative") {
+    return 1;
+  }
+  return tier;
+}
+
+function selectDisplayKPIs(
+  indicators: Indicator[],
+  deltas: Record<string, number>,
+  tiers: Record<string, MetricTier>,
+  explanations: Record<string, any>,
+  accumulations: Record<string, IndicatorAccumulation>,
+  signalScores: Record<string, number>,
+  language: "es" | "en",
+): DisplayKPI[] {
+  const movedIndicators = indicators.filter(ind => (deltas[ind.id] || 0) !== 0);
+  if (movedIndicators.length === 0) return [];
+
+  const sorted = movedIndicators.sort((a, b) => {
+    const tierA = tiers[a.id] || 1;
+    const tierB = tiers[b.id] || 1;
+    if (tierB !== tierA) return tierB - tierA;
+
+    const firstA = accumulations[a.id]?.firstAppearanceTurn ?? 999;
+    const firstB = accumulations[b.id]?.firstAppearanceTurn ?? 999;
+    if (firstA === null && firstB !== null) return -1;
+    if (firstB === null && firstA !== null) return 1;
+
+    const sigA = signalScores[a.id] || 0;
+    const sigB = signalScores[b.id] || 0;
+    if (sigB !== sigA) return sigB - sigA;
+
+    return Math.abs(deltas[b.id] || 0) - Math.abs(deltas[a.id] || 0);
+  });
+
+  const selected = sorted.slice(0, MAX_DISPLAY_KPIS);
+
+  return selected.map(ind => {
+    const delta = deltas[ind.id] || 0;
+    const tier = tiers[ind.id] || 1;
+    const direction: "up" | "down" = delta > 0 ? "up" : "down";
+    const magnitudeMap: Record<MetricTier, { es: "Ligero" | "Moderado" | "Significativo"; en: "Slight" | "Moderate" | "Significant" }> = {
+      1: { es: "Ligero", en: "Slight" },
+      2: { es: "Moderado", en: "Moderate" },
+      3: { es: "Significativo", en: "Significant" },
+    };
+    const explanation = explanations[ind.id];
+    const shortReason = explanation?.shortReason || "";
+
+    return {
+      indicatorId: ind.id,
+      label: ind.label,
+      direction,
+      magnitude: magnitudeMap[tier].es,
+      magnitudeEn: magnitudeMap[tier].en,
+      tier,
+      delta,
+      shortReason,
+    };
+  });
+}
+
+function detectAndCorrectAntiPatterns(
+  indicators: Indicator[],
+  deltas: Record<string, number>,
+  tiers: Record<string, MetricTier>,
+): { correctedDeltas: Record<string, number>; corrections: string[] } {
+  const corrections: string[] = [];
+  const corrected = { ...deltas };
+  const moved = Object.entries(corrected).filter(([_, v]) => v !== 0);
+
+  if (moved.length >= 2) {
+    const allPositive = moved.every(([_, v]) => v > 0);
+    const allNegative = moved.every(([_, v]) => v < 0);
+    if (allPositive || allNegative) {
+      const weakest = moved.reduce((min, curr) =>
+        Math.abs(curr[1]) < Math.abs(min[1]) ? curr : min
+      );
+      const flipDirection = allPositive ? -1 : 1;
+      corrected[weakest[0]] = flipDirection * getTierRange(1).min;
+      tiers[weakest[0]] = 1;
+      corrections.push(`uniform_direction_corrected:${weakest[0]}`);
+    }
+  }
+
+  if (moved.length === 0 && indicators.length > 0) {
+    const target = indicators[0];
+    corrected[target.id] = target.direction === "down_better" ? -2 : 2;
+    tiers[target.id] = 1;
+    corrections.push(`zero_movement_corrected:${target.id}`);
+  }
+
+  for (const [key, tier] of Object.entries(tiers)) {
+    if (tier === 3) {
+      tiers[key] = 2;
+      if (corrected[key]) {
+        corrected[key] = clampToTier(corrected[key], 2);
+      }
+      corrections.push(`tier3_downgraded:${key}`);
+    }
+  }
+
+  return { correctedDeltas: corrected, corrections };
+}
+
+function buildDomainExpertPrompt(indicators: Indicator[], rdsBand?: RDSBand): string {
   const indicatorList = indicators.map((ind, i) => {
-    const directionNote = ind.direction === "down_better" 
-      ? "(menor es mejor)" 
+    const directionNote = ind.direction === "down_better"
+      ? "(menor es mejor)"
       : "(mayor es mejor)";
     return `${i + 1}. **${ind.id}** (0-100) - ${ind.label} ${directionNote}`;
   }).join("\n");
 
-  const indicatorJsonFields = indicators.map(ind => 
-    `    "${ind.id}": <número -20 a +20, o 0 si no cambia>`
+  const indicatorJsonFields = indicators.map(ind =>
+    `    "${ind.id}": <número -16 a +16, o 0 si no cambia>`
   ).join(",\n");
 
-  return `Eres un EXPERTO EN LA MATERIA y ANALISTA DE NEGOCIOS para Academium, una plataforma educativa de simulación de decisiones.
+  const tierGuidance = rdsBand === RDSBand.SURFACE
+    ? "IMPORTANTE: Banda SURFACE — TODOS los cambios deben ser Tier 1 (±2 a ±5)."
+    : "Distribuye cambios: Tier 1 (±2-5, cambios leves), Tier 2 (±6-10, cambios moderados). Tier 3 PROHIBIDO sin trigger pre-escrito.";
 
-TU DOBLE ROL:
-1. **Experto en la Materia**: Tienes profunda experiencia en el dominio del escenario. Entiendes las implicaciones del mundo real, estándares de la industria y mejores prácticas.
-2. **Analista de Impacto**: Calculas consecuencias realistas de las decisiones en indicadores clave.
+  return `Eres un EXPERTO EN LA MATERIA y ANALISTA DE IMPACTO para Academium, una plataforma de simulación de decisiones.
 
-## REGLAS CRÍTICAS (NO NEGOCIABLES)
+TU ROL: Calcular consecuencias realistas de decisiones en indicadores clave.
 
-### REGLA 1: 3-4 INDICADORES POR TURNO
-- Una decisión debe cambiar 3-4 indicadores por turno
-- Solo deja un indicador en 0 si genuinamente NO tiene relación con la decisión
-- Queremos que el estudiante VEA el impacto de sus decisiones en los resultados finales
+## SISTEMA DE NIVELES (TIERS)
+${tierGuidance}
+- Tier 1 (Ligero): ±2 a ±5 — efecto leve, la mayoría de movimientos
+- Tier 2 (Moderado): ±6 a ±10 — requiere señal fuerte del estudiante
+- Tier 3 (Significativo): ±11 a ±16 — SOLO con triggers pre-escritos
 
-### REGLA 2: SISTEMA DE NIVELES (TIERS) OBLIGATORIO
-Clasifica CADA cambio de indicador en un nivel:
-- **Tier 1**: ±3 a ±6 (cambio menor, impacto leve)
-- **Tier 2**: ±7 a ±12 (cambio moderado, impacto significativo — RANGO ESTÁNDAR)
-- **Tier 3**: ±13 a ±20 (cambio mayor, para decisiones arriesgadas o pivotales)
+## REGLAS
+- 2-4 indicadores deben cambiar por turno
+- CADA decisión DEBE tener al menos un indicador negativo (costo de oportunidad)
+- Los cambios deben ser ESPECÍFICOS a la decisión del estudiante
+- shortReason DEBE citar o parafrasear palabras del estudiante
 
-⚠️ La MAYORÍA de los cambios deben estar en Tier 2 (±7 a ±12). Tier 1 es para efectos secundarios menores. Tier 3 para decisiones audaces con grandes consecuencias.
-
-### REGLA 3: SENSIBILIDAD AL CONTEXTO (OBLIGATORIA)
-Los cambios en indicadores DEBEN ser ESPECÍFICOS a la decisión real del estudiante:
-- ANALIZA la decisión concreta y sus implicaciones únicas
-- DIFERENTES decisiones deben producir DIFERENTES impactos
-- NO apliques el mismo patrón genérico a todas las decisiones
-- Considera las DECISIONES ANTERIORES y su efecto acumulado
-- Si el estudiante tomó un enfoque conservador, el impacto será diferente que si fue agresivo
-
-### REGLA 4: EXPLICABILIDAD "¿POR QUÉ?" OBLIGATORIA
-Para CADA indicador que cambia, debes proveer:
-1. **shortReason**: Una línea explicando el cambio (visible siempre). CITA o parafrasea las palabras exactas del estudiante. NUNCA uses frases genéricas.
-
-### REGLA 4B: CALIDAD DE EXPLICACIONES (OBLIGATORIA)
-- **shortReason**: CITA o parafrasea las palabras exactas del estudiante. Si el estudiante dijo "voy a reducir el equipo de marketing", di "Reducción del equipo de marketing impacta la moral (-8)". NUNCA uses frases genéricas como "La decisión afecta positivamente".
-- **TEST DE UNICIDAD**: Si dos estudiantes con decisiones DIFERENTES recibirían el mismo shortReason, entonces está MAL — es demasiado genérico. Reescríbelo.
-
-### REGLA 5: COSTO DE OPORTUNIDAD
-⚠️ CADA decisión DEBE cambiar AL MENOS UN indicador NEGATIVAMENTE.
-- No existen decisiones "perfectas" sin consecuencias
-- Toda elección implica renunciar a algo
-
-LOS INDICADORES DEL ESCENARIO:
+LOS INDICADORES:
 ${indicatorList}
 
-IMPORTANTE: TODO el contenido SIEMPRE debe estar en ESPAÑOL de Latinoamérica. CERO palabras en inglés.
-
-FORMATO DE SALIDA (solo JSON estricto):
+FORMATO DE SALIDA (solo JSON):
 {
   "indicatorDeltas": {
 ${indicatorJsonFields}
   },
   "metricExplanations": {
     "<indicatorId>": {
-      "shortReason": "<Una línea específica citando la decisión del estudiante y el impacto numérico>",
-      "tier": <1, 2, o 3>
+      "shortReason": "<Una línea citando la decisión del estudiante>",
+      "tier": <1 o 2>
     }
   },
-  "reasoning": "<2-3 oraciones en español explicando los intercambios clave>",
-  "expertInsight": "<1-2 oraciones de contexto experto del dominio>"
+  "reasoning": "<2-3 oraciones explicando los intercambios>",
+  "expertInsight": "<1-2 oraciones de contexto experto>"
 }`;
 }
 
@@ -100,20 +282,23 @@ export async function calculateKPIImpact(context: AgentContext): Promise<DomainE
     ? context.indicators
     : DEFAULT_INDICATORS;
 
-  const basePrompt = context.agentPrompts?.domainExpert || buildDomainExpertPrompt(indicators);
+  const rdsBand = context.rdsBand;
+  const basePrompt = context.agentPrompts?.domainExpert || buildDomainExpertPrompt(indicators, rdsBand);
   const systemPrompt = basePrompt + getLanguageDirective(context.language);
+  const turnPosition = determineTurnPosition(context);
+  const language = context.language || "es";
 
   const industryInfo = [];
   if (context.scenario.industry) industryInfo.push(`Industria: ${context.scenario.industry}`);
-  if (context.scenario.companySize) industryInfo.push(`Tamaño de empresa: ${context.scenario.companySize}`);
+  if (context.scenario.companySize) industryInfo.push(`Tamaño: ${context.scenario.companySize}`);
   if (context.scenario.companyName) industryInfo.push(`Empresa: ${context.scenario.companyName}`);
-  
+
   const environmentInfo = [];
-  if (context.scenario.industryContext) environmentInfo.push(`Dinámica de industria: ${context.scenario.industryContext}`);
+  if (context.scenario.industryContext) environmentInfo.push(`Dinámica: ${context.scenario.industryContext}`);
   if (context.scenario.competitiveEnvironment) environmentInfo.push(`Competencia: ${context.scenario.competitiveEnvironment}`);
   if (context.scenario.regulatoryEnvironment) environmentInfo.push(`Regulaciones: ${context.scenario.regulatoryEnvironment}`);
   if (context.scenario.resourceConstraints) environmentInfo.push(`Recursos: ${context.scenario.resourceConstraints}`);
-  
+
   const constraintsInfo = context.scenario.keyConstraints?.length
     ? `RESTRICCIONES: ${context.scenario.keyConstraints.join("; ")}`
     : "";
@@ -131,32 +316,39 @@ export async function calculateKPIImpact(context: AgentContext): Promise<DomainE
     .map((h, i) => `  Decisión ${i + 1}: "${h.content}"`)
     .join("\n");
 
+  const signalInfo = context.signalExtractionResult
+    ? `\nSEÑALES DETECTADAS:
+- Intent: ${context.signalExtractionResult.intent.quality}/3 "${context.signalExtractionResult.intent.extracted_text}"
+- Justification: ${context.signalExtractionResult.justification.quality}/3
+- TradeoffAwareness: ${context.signalExtractionResult.tradeoffAwareness.quality}/3
+- StakeholderAwareness: ${context.signalExtractionResult.stakeholderAwareness.quality}/3
+- EthicalAwareness: ${context.signalExtractionResult.ethicalAwareness.quality}/3
+RDS Band: ${rdsBand || "N/A"}`
+    : "";
+
   const userPrompt = `
-CONTEXTO DE LA SIMULACIÓN:
+CONTEXTO:
 Escenario: "${context.scenario.title}"
 Dominio: ${context.scenario.domain}
 ${industryInfo.length > 0 ? industryInfo.join(" | ") : ""}
-Rol del estudiante: ${context.scenario.role}
+Rol: ${context.scenario.role}
 Objetivo: ${context.scenario.objective}
-Dificultad: ${context.scenario.difficultyLevel || "intermedio"}
+Posición: ${turnPosition} (Decisión ${context.turnCount + 1}${context.totalDecisions ? ` de ${context.totalDecisions}` : ""})
 
-${environmentInfo.length > 0 ? `ENTORNO EMPRESARIAL:\n${environmentInfo.join("\n")}\n` : ""}
+${environmentInfo.length > 0 ? `ENTORNO:\n${environmentInfo.join("\n")}\n` : ""}
 ${constraintsInfo}
 ${subjectMatterInfo}
 
 INDICADORES ACTUALES:
 ${currentIndicatorValues}
 
-NÚMERO DE DECISIÓN: ${context.turnCount + 1}${context.totalDecisions ? ` de ${context.totalDecisions}` : ""}
+${previousDecisions ? `DECISIONES ANTERIORES:\n${previousDecisions}\n` : ""}
+${signalInfo}
 
-${previousDecisions ? `DECISIONES ANTERIORES DEL ESTUDIANTE:\n${previousDecisions}\n` : ""}
-
-DECISIÓN ACTUAL DEL ESTUDIANTE:
+DECISIÓN ACTUAL:
 "${context.studentInput}"
 
-Como Experto en la Materia, analiza esta decisión específica y calcula los impactos en los indicadores con justificación del mundo real.
-IMPORTANTE: Los cambios deben reflejar ESTA decisión específica, no un patrón genérico. Diferentes decisiones DEBEN producir diferentes impactos.
-Devuelve SOLO JSON válido en el formato especificado.`;
+Calcula impactos específicos a esta decisión. Devuelve SOLO JSON válido.`;
 
   const response = await generateChatCompletion(
     [
@@ -168,36 +360,16 @@ Devuelve SOLO JSON válido en el formato especificado.`;
 
   try {
     const parsed = JSON.parse(response);
-    
+
     let indicatorDeltas: Record<string, number> = parsed.indicatorDeltas || {};
-    
+
     const validIds = new Set(indicators.map(i => i.id));
     indicatorDeltas = Object.fromEntries(
       Object.entries(indicatorDeltas).filter(([k]) => validIds.has(k))
     );
-    
-    const nonZeroEntries = Object.entries(indicatorDeltas).filter(([_, v]) => v !== 0);
-    if (nonZeroEntries.length > 4) {
-      const sorted = nonZeroEntries.sort((a, b) => Math.abs(b[1] as number) - Math.abs(a[1] as number));
-      const top4Keys = sorted.slice(0, 4).map(([k]) => k);
-      indicatorDeltas = Object.fromEntries(
-        Object.entries(indicatorDeltas).map(([k, v]) => [k, top4Keys.includes(k) ? v : 0])
-      );
-    }
-    
+
     for (const key of Object.keys(indicatorDeltas)) {
-      const val = indicatorDeltas[key] as number;
-      indicatorDeltas[key] = Math.max(-20, Math.min(20, val));
-    }
-    
-    const KNOWN_KPI_KEYS = ["revenue", "morale", "reputation", "efficiency", "trust"];
-    const kpiDeltas: Record<string, number> = {
-      revenue: 0, morale: 0, reputation: 0, efficiency: 0, trust: 0,
-    };
-    for (const [key, val] of Object.entries(indicatorDeltas)) {
-      if (KNOWN_KPI_KEYS.includes(key)) {
-        kpiDeltas[key] = key === "revenue" ? (val as number) * 1000 : (val as number);
-      }
+      indicatorDeltas[key] = Math.max(-16, Math.min(16, indicatorDeltas[key] as number));
     }
 
     const rawExplanations = parsed.metricExplanations || {};
@@ -208,12 +380,88 @@ Devuelve SOLO JSON válido en el formato especificado.`;
       }
     }
 
+    const signalScores: Record<string, number> = {};
+    if (context.signalExtractionResult) {
+      for (const ind of indicators) {
+        const id = ind.id;
+        if (id === "revenue") signalScores[id] = context.signalExtractionResult.intent.quality;
+        else if (id === "morale") signalScores[id] = context.signalExtractionResult.stakeholderAwareness.quality;
+        else if (id === "reputation") signalScores[id] = context.signalExtractionResult.ethicalAwareness.quality;
+        else if (id === "efficiency") signalScores[id] = context.signalExtractionResult.justification.quality;
+        else if (id === "trust") signalScores[id] = context.signalExtractionResult.stakeholderAwareness.quality;
+        else signalScores[id] = context.signalExtractionResult.intent.quality;
+      }
+    }
+
+    const prevAccumulations: Record<string, IndicatorAccumulation> = {};
+    if (context.indicatorAccumulation) {
+      for (const [k, v] of Object.entries(context.indicatorAccumulation)) {
+        prevAccumulations[k] = v as IndicatorAccumulation;
+      }
+    }
+
+    const tiers: Record<string, MetricTier> = {};
+    for (const ind of indicators) {
+      const delta = indicatorDeltas[ind.id] || 0;
+      if (delta === 0) continue;
+      let tier = determineTier(
+        ind.id,
+        delta,
+        rdsBand,
+        signalScores[ind.id] || 0,
+        prevAccumulations[ind.id],
+      );
+      tier = applyRecoveryAttenuation(delta, tier, prevAccumulations[ind.id]);
+      tiers[ind.id] = tier;
+    }
+
+    const { correctedDeltas, corrections } = detectAndCorrectAntiPatterns(
+      indicators, indicatorDeltas, tiers
+    );
+    indicatorDeltas = correctedDeltas;
+
+    for (const key of Object.keys(indicatorDeltas)) {
+      const delta = indicatorDeltas[key];
+      const tier = tiers[key];
+      if (delta !== 0 && tier) {
+        indicatorDeltas[key] = clampToTier(delta, tier);
+      }
+    }
+
+    const newAccumulations: Record<string, IndicatorAccumulation> = {};
+    const turnNum = context.turnCount + 1;
+    for (const ind of indicators) {
+      newAccumulations[ind.id] = updateAccumulation(
+        prevAccumulations[ind.id],
+        indicatorDeltas[ind.id] || 0,
+        tiers[ind.id] || 1,
+        turnNum,
+      );
+    }
+
+    const displayKPIs = selectDisplayKPIs(
+      indicators, indicatorDeltas, tiers, filteredExplanations, newAccumulations, signalScores, language
+    );
+
+    const KNOWN_KPI_KEYS = ["revenue", "morale", "reputation", "efficiency", "trust"];
+    const kpiDeltas: Record<string, number> = {
+      revenue: 0, morale: 0, reputation: 0, efficiency: 0, trust: 0,
+    };
+    for (const [key, val] of Object.entries(indicatorDeltas)) {
+      if (KNOWN_KPI_KEYS.includes(key)) {
+        kpiDeltas[key] = key === "revenue" ? (val as number) * 1000 : (val as number);
+      }
+    }
+
     return {
       kpiDeltas,
       indicatorDeltas,
       reasoning: parsed.reasoning || "Impacto calculado según el análisis de la decisión.",
       expertInsight: parsed.expertInsight || "",
       metricExplanations: filteredExplanations,
+      displayKPIs,
+      indicatorAccumulation: newAccumulations,
+      antiPatternCorrections: corrections.length > 0 ? corrections : undefined,
     };
   } catch {
     return {
@@ -222,6 +470,8 @@ Devuelve SOLO JSON válido en el formato especificado.`;
       reasoning: "No se pudo calcular el impacto preciso. Decisión registrada.",
       expertInsight: "",
       metricExplanations: {},
+      displayKPIs: [],
+      indicatorAccumulation: {},
     };
   }
 }

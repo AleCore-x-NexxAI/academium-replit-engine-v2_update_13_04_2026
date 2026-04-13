@@ -565,6 +565,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         nudgeCounters: session.currentState.nudgeCounters || {},
         decisionEvidenceLogs: session.currentState.decisionEvidenceLogs || [],
         integrityFlags: session.currentState.integrityFlags || [],
+        indicatorAccumulation: session.currentState.indicatorAccumulation,
         scenario: {
           title: session.scenario?.title || "Business Simulation",
           domain: session.scenario?.domain || "General",

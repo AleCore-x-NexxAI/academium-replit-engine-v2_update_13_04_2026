@@ -1,8 +1,90 @@
 import { generateChatCompletion, SupportedModel } from "../openai";
-import type { AgentContext, NarratorOutput, DomainExpertOutput, EvaluatorOutput } from "./types";
+import type { AgentContext, NarratorOutput, DomainExpertOutput, EvaluatorOutput, TurnPosition, DisplayKPI } from "./types";
+import { RDSBand } from "./types";
 import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING, getLanguageDirective } from "./guardrails";
 
-export const DEFAULT_NARRATOR_PROMPT = `Eres el NARRADOR DE CONSECUENCIAS para Academium, una plataforma de entrenamiento en toma de decisiones experiencial.
+const PROHIBITED_PATTERNS = [
+  /\bcorrect[oa]?\b/i,
+  /\bincorrect[oa]?\b/i,
+  /\bmejor opci[oó]n\b/i,
+  /\b[oó]ptim[oa]\b/i,
+  /\bideal\b/i,
+  /\bbuena decisi[oó]n\b/i,
+  /\bmala decisi[oó]n\b/i,
+  /\bbien hecho\b/i,
+  /\bbuen trabajo\b/i,
+  /\bwell done\b/i,
+  /\bgood job\b/i,
+  /\bgood decision\b/i,
+  /\bpoor decision\b/i,
+  /\bbest\b/i,
+  /\bdeberías haber\b/i,
+  /\byou should have\b/i,
+  /\bdesafortunadamente\b/i,
+  /\bafortunadamente\b/i,
+  /\bunfortunately\b/i,
+  /\bfortunately\b/i,
+  /\bsadly\b/i,
+  /\bsurprisingly\b/i,
+  /\bsorprendentemente\b/i,
+  /!/,
+];
+
+function scanProhibitedLanguage(text: string): string[] {
+  const violations: string[] = [];
+  for (const pattern of PROHIBITED_PATTERNS) {
+    if (pattern.test(text)) {
+      violations.push(pattern.source);
+    }
+  }
+  return violations;
+}
+
+function determineTurnPosition(context: AgentContext): TurnPosition {
+  const current = context.currentDecision || context.turnCount + 1;
+  const total = context.totalDecisions || 0;
+  if (current <= 1) return "FIRST";
+  if (total > 0 && current >= total) return "FINAL";
+  return "INTERMEDIATE";
+}
+
+function getRDSWordRange(rdsBand: RDSBand | undefined): { min: number; max: number } {
+  switch (rdsBand) {
+    case RDSBand.INTEGRATED: return { min: 130, max: 160 };
+    case RDSBand.ENGAGED: return { min: 100, max: 130 };
+    default: return { min: 80, max: 100 };
+  }
+}
+
+function getRDSComplexity(rdsBand: RDSBand | undefined): string {
+  switch (rdsBand) {
+    case RDSBand.INTEGRATED:
+      return "3+ resultados observables, 2+ reacciones de stakeholders, 2+ datos nuevos, compounding completo con historia previa";
+    case RDSBand.ENGAGED:
+      return "2-3 resultados observables, 1-2 reacciones de stakeholders, 1-2 datos nuevos, compounding moderado";
+    default:
+      return "1-2 resultados observables, 1 reacción de stakeholder, 1 dato nuevo, compounding mínimo";
+  }
+}
+
+function buildTradeoffDirective(context: AgentContext): string {
+  const decisionPoint = context.decisionPoints?.find(
+    dp => dp.number === (context.currentDecision || context.turnCount + 1)
+  );
+
+  if (!decisionPoint?.tradeoffSignature) {
+    return "TRADEOFF: No configurado. No fuerces intercambios artificiales, pero NO produzcas resultados artificialmente positivos.";
+  }
+
+  const sig = decisionPoint.tradeoffSignature;
+  if (sig.dimension && sig.cost && sig.benefit) {
+    return `TRADEOFF PRE-ESCRITO: Ancla la consecuencia al intercambio definido: "${sig.dimension}" — costo: "${sig.cost}", beneficio: "${sig.benefit}". La narrativa DEBE reflejar este intercambio.`;
+  }
+
+  return "TRADEOFF: Habilitado sin texto específico. Genera intercambios realistas basados en señales y dinámica de indicadores.";
+}
+
+export const DEFAULT_NARRATOR_PROMPT = `Eres el NARRADOR DE CONSECUENCIAS para Academium.
 
 ${HARD_PROHIBITIONS}
 
@@ -10,129 +92,111 @@ ${MENTOR_TONE}
 
 ${MISUSE_HANDLING}
 
-TU ROL: Presentar los resultados realistas de las decisiones de manera profesional y educativa.
+TU ROL: Narrar los resultados realistas de las decisiones del estudiante.
 
-REGLAS CRÍTICAS (NO NEGOCIABLES):
-- NO eres un evaluador, maestro, juez o dador de soluciones
-- NUNCA reveles decisiones "óptimas" o respuestas correctas
-- NUNCA moralices o sermonees - presenta hechos y consecuencias
-- Mantén un tono calmado, profesional y académicamente apropiado
-- Presenta intercambios, no juicios de "correcto/incorrecto"
+REGLAS:
+- NO eres evaluador, maestro ni dador de soluciones
+- NUNCA reveles decisiones "óptimas"
+- NUNCA moralices — presenta hechos y consecuencias
+- Tono calmado, profesional, académico
+- Presenta intercambios, no juicios
 
-ESTRUCTURA DE RESPUESTA:
-1. DECLARACIÓN DE CONSECUENCIA (1-2 oraciones): Qué sucedió como resultado directo de la decisión
-2. REACCIÓN DE STAKEHOLDERS (1 oración): Cómo respondieron las partes afectadas
-3. PRESIÓN HACIA ADELANTE (1 oración): Qué nueva tensión o situación crea esto
+ESTRUCTURA DE 4 ELEMENTOS (OBLIGATORIA):
+1. RESULTADO OBSERVABLE: Concreto, específico, causal, NO evaluativo
+2. REACCIÓN DE STAKEHOLDERS: Al menos un stakeholder nombrado/implícito responde
+3. INFORMACIÓN NUEVA: Genuinamente nueva, relevante, profundiza complejidad
+4. IMPLICACIÓN FUTURA: Conecta con la siguiente decisión (NO en turno final)
 
-EFECTOS COMPUESTOS (OBLIGATORIO para Decisión 2+):
-- Las consecuencias de decisiones anteriores DEBEN influir en los resultados actuales
-- Si el estudiante tomó una decisión arriesgada antes, las consecuencias actuales reflejan ese riesgo acumulado
-- Muestra cómo las decisiones pasadas limitan o amplían las opciones presentes
-- Ejemplo: "La decisión anterior de recortar personal ahora dificulta la capacidad de respuesta del equipo ante esta crisis"
-
-REGLA DE ÉTICA IMPLÍCITA (NO NEGOCIABLE):
-- La ética NUNCA se presenta como pregunta directa ("¿Es esto ético?")
+ÉTICA IMPLÍCITA:
+- La ética NUNCA como pregunta directa
 - Las implicaciones éticas surgen IMPLÍCITAMENTE a través de las consecuencias
-- Muestra efectos en personas, confianza, reputación - deja que el estudiante infiera
-- Ejemplo CORRECTO: "Tres empleados veteranos presentaron su renuncia tras el anuncio"
-- Ejemplo PROHIBIDO: "¿Consideraste las implicaciones éticas de despedir al equipo?"
 
-REQUISITOS DE TONO:
-- Calmado y alentador
-- Constructivo y realista
-- Académicamente profesional
-- Nunca emocional, sarcástico o sentencioso
+LENGUAJE PROHIBIDO:
+"Correcto/Incorrecto", "Mejor/Óptimo/Ideal", "Buena/Mala decisión", "Bien hecho",
+"Deberías haber", "Desafortunadamente/Afortunadamente", "Sorprendentemente",
+signos de exclamación (!), cualquier frase que sugiera una respuesta correcta
 
-MANEJO DE RESPUESTAS DÉBILES:
-Si una decisión es incompleta o débil, NO la corrijas. En cambio:
-- Reconoce que se tomó la decisión
-- Muestra consecuencias realistas de ese enfoque incompleto
-- Crea presión hacia adelante que naturalmente provoque un pensamiento más profundo
-
-FORMATO DE SALIDA (solo JSON estricto):
+FORMATO DE SALIDA (solo JSON):
 {
-  "text": "<respuesta de 60-100 palabras siguiendo la estructura anterior>",
-  "mood": "neutral" | "positive" | "negative" | "crisis",
-  "forwardPrompt": "<Opcional: Una breve configuración de lo que necesita atención a continuación>"
-}
-
-EJEMPLO DE BUENA RESPUESTA:
-{
-  "text": "El anuncio del retraso llegó a los stakeholders clave antes que a la prensa. Servicio al cliente recibió 15% menos llamadas de quejas de lo proyectado para un retraso no anunciado. Sin embargo, la junta directiva ahora solicita una explicación detallada de la causa raíz y medidas de prevención. El equipo de ingeniería espera dirección sobre si priorizar la corrección o continuar con las funciones planificadas.",
-  "mood": "neutral",
-  "forwardPrompt": "La reunión de la junta está programada para mañana por la mañana."
-}
-
-EJEMPLO DE MALA RESPUESTA (muy dramática, enfocada en NPCs):
-"Los ojos de Sara se abren mientras procesa tu audaz decisión. La sala queda en silencio..."
-
-Recuerda: Muestras CONSECUENCIAS, no drama. El valor educativo viene de ver causa y efecto claramente.`;
+  "text": "<narrativa de consecuencias>",
+  "mood": "neutral" | "positive" | "negative" | "crisis"
+}`;
 
 export async function generateNarrative(
   context: AgentContext,
   kpiImpact: DomainExpertOutput,
   evaluation: EvaluatorOutput
 ): Promise<NarratorOutput> {
+  const turnPosition = determineTurnPosition(context);
+  const rdsBand = context.rdsBand;
+  const wordRange = getRDSWordRange(rdsBand);
+  const complexity = getRDSComplexity(rdsBand);
+  const tradeoffDirective = buildTradeoffDirective(context);
+
   const indicatorSummary = kpiImpact.indicatorDeltas
     ? Object.entries(kpiImpact.indicatorDeltas)
         .filter(([_, v]) => v !== 0)
         .map(([k, v]) => {
-          const direction = v > 0 ? "increased" : "decreased";
-          const intensity = Math.abs(v) >= 10 ? "significantly" : "slightly";
-          return `${k} ${intensity} ${direction}`;
+          const direction = v > 0 ? "subió" : "bajó";
+          return `${k} ${direction} ${Math.abs(v)}`;
         })
         .join(", ")
-    : Object.entries(kpiImpact.kpiDeltas)
-        .filter(([_, v]) => v !== 0)
-        .map(([k, v]) => {
-          const direction = v > 0 ? "increased" : "decreased";
-          const intensity = Math.abs(v) >= 10 ? "significantly" : "moderately";
-          return `${k} ${intensity} ${direction}`;
-        })
-        .join(", ");
+    : "";
+
+  const displayKPISummary = kpiImpact.displayKPIs?.map(d =>
+    `${d.label} ${d.direction === "up" ? "↑" : "↓"} ${d.magnitude} — ${d.shortReason}`
+  ).join("\n") || "";
 
   const scenarioContext = [];
-  if (context.scenario.companyName) scenarioContext.push(`Company: ${context.scenario.companyName}`);
-  if (context.scenario.industry) scenarioContext.push(`Industry: ${context.scenario.industry}`);
-  if (context.scenario.companySize) scenarioContext.push(`Company Size: ${context.scenario.companySize}`);
+  if (context.scenario.companyName) scenarioContext.push(`Empresa: ${context.scenario.companyName}`);
+  if (context.scenario.industry) scenarioContext.push(`Industria: ${context.scenario.industry}`);
   if (context.scenario.timelineContext) scenarioContext.push(`Timeline: ${context.scenario.timelineContext}`);
-  
-  const constraintsInfo = context.scenario.keyConstraints?.length
-    ? `CONSTRAINTS: ${context.scenario.keyConstraints.join("; ")}`
-    : "";
 
-  const decisionInfo = context.totalDecisions
-    ? `DECISION: ${context.turnCount + 1} of ${context.totalDecisions}`
-    : `TURN: ${context.turnCount + 1}`;
+  const stakeholderNames = context.scenario.stakeholders?.map(s => `${s.name} (${s.role})`).join(", ") || "";
 
-  const expertInsight = kpiImpact.expertInsight
-    ? `EXPERT INSIGHT: ${kpiImpact.expertInsight}`
-    : "";
+  const previousDecisions = (context.history as any[])
+    .filter(h => h.role === "user")
+    .map((h, i) => `Decisión ${i + 1}: "${h.content}"`)
+    .join("\n");
+
+  const positionDirective = turnPosition === "FIRST"
+    ? "POSICIÓN: PRIMERA decisión. Sin compounding. Incluir implicación futura."
+    : turnPosition === "FINAL"
+    ? "POSICIÓN: ÚLTIMA decisión. Referir trayectoria acumulada de TODAS las decisiones. NO incluir implicación futura. Mostrar coherencia/tensión de las decisiones."
+    : "POSICIÓN: INTERMEDIA. Referir ≥1 elemento de consecuencias previas. Incluir implicación futura. Compounding activo.";
 
   const userPrompt = `
-SCENARIO: "${context.scenario.title}"
-DOMAIN: ${context.scenario.domain}
+ESCENARIO: "${context.scenario.title}"
+DOMINIO: ${context.scenario.domain}
 ${scenarioContext.length > 0 ? scenarioContext.join(" | ") : ""}
-STUDENT ROLE: ${context.scenario.role}
-OBJECTIVE: ${context.scenario.objective}
-${decisionInfo}
+ROL: ${context.scenario.role}
+OBJETIVO: ${context.scenario.objective}
+DECISIÓN: ${context.turnCount + 1}${context.totalDecisions ? ` de ${context.totalDecisions}` : ""}
 
-${constraintsInfo}
+${positionDirective}
 
-STUDENT'S DECISION:
+${tradeoffDirective}
+
+RIQUEZA NARRATIVA (${rdsBand || "SURFACE"}): ${wordRange.min}-${wordRange.max} palabras.
+${complexity}
+
+${stakeholderNames ? `STAKEHOLDERS DISPONIBLES: ${stakeholderNames}` : ""}
+
+${previousDecisions ? `DECISIONES ANTERIORES:\n${previousDecisions}\n` : ""}
+
+DECISIÓN ACTUAL:
 "${context.studentInput}"
 
-IMPACT ANALYSIS:
+IMPACTO EN INDICADORES:
+${indicatorSummary || "Sin cambios significativos"}
+
+INDICADORES MOSTRADOS:
+${displayKPISummary || "Ninguno"}
+
 ${kpiImpact.reasoning}
-Indicator changes: ${indicatorSummary || "No significant changes"}
-${expertInsight}
+${kpiImpact.expertInsight ? `Insight experto: ${kpiImpact.expertInsight}` : ""}
 
-EVALUATION NOTES:
-${evaluation.feedback.message}
-Observed patterns: ${evaluation.flags.join(", ") || "None specific"}
-
-Generate a consequence-focused narrative response. Show what happened, how stakeholders reacted, and what tension exists going forward.
-Return ONLY valid JSON matching the specified format.`;
+Genera una narrativa de consecuencias con los 4 elementos. Devuelve SOLO JSON válido.`;
 
   const basePrompt = context.agentPrompts?.narrator || DEFAULT_NARRATOR_PROMPT;
   const systemPrompt = basePrompt + getLanguageDirective(context.language);
@@ -142,19 +206,26 @@ Return ONLY valid JSON matching the specified format.`;
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    { responseFormat: "json", maxTokens: 512, model: context.llmModel, agentName: "narrator", sessionId: parseInt(context.sessionId) || undefined }
+    { responseFormat: "json", maxTokens: 768, model: context.llmModel, agentName: "narrator", sessionId: parseInt(context.sessionId) || undefined }
   );
 
   try {
     const parsed = JSON.parse(response);
+    let text = parsed.text || "La decisión ha sido registrada. La situación continúa evolucionando.";
+
+    const violations = scanProhibitedLanguage(text);
+    if (violations.length > 0) {
+      text = text.replace(/!/g, ".");
+    }
+
     return {
-      text: parsed.text || "Your decision has been recorded. The situation continues to evolve.",
+      text,
       mood: parsed.mood || "neutral",
-      suggestedOptions: parsed.suggestedOptions || [],
+      suggestedOptions: [],
     };
   } catch {
     return {
-      text: "Your decision has been recorded. The organization adjusts to your approach.",
+      text: "La decisión ha sido registrada. La organización se ajusta al enfoque adoptado.",
       mood: "neutral",
       suggestedOptions: [],
     };

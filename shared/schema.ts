@@ -377,6 +377,33 @@ export interface DecisionEvidenceLogEntry {
   isMcq?: boolean;
 }
 
+export interface IndicatorAccumulationEntry {
+  trajectory: "positive" | "negative" | "mixed" | "neutral";
+  consecutiveNegativeTurns: number;
+  consecutivePositiveTurns: number;
+  lastTier: 1 | 2 | 3 | null;
+  totalMovements: number;
+  firstAppearanceTurn: number | null;
+}
+
+export interface DisplayKPIEntry {
+  indicatorId: string;
+  label: string;
+  direction: "up" | "down";
+  magnitude: "Ligero" | "Moderado" | "Significativo";
+  magnitudeEn: "Slight" | "Moderate" | "Significant";
+  tier: 1 | 2 | 3;
+  delta: number;
+  shortReason: string;
+}
+
+export interface CausalExplanationEntry {
+  indicatorId: string;
+  decisionReference: string;
+  causalMechanism: string;
+  directionalConnection: string;
+}
+
 export interface SimulationState {
   turnCount: number;
   kpis: KPIs;
@@ -394,6 +421,7 @@ export interface SimulationState {
   decisionEvidenceLogs?: DecisionEvidenceLogEntry[];
   nudgeCounters?: Record<number, number>;
   integrityFlags?: boolean[];
+  indicatorAccumulation?: Record<string, IndicatorAccumulationEntry>;
 }
 
 export interface NarrativeResponse {
@@ -429,14 +457,14 @@ export interface TurnResponse {
   isGameOver: boolean;
   competencyScores?: Record<string, number>;
   turnStatus?: "pass" | "nudge" | "block";
-  // Weak answer handling (kept for backward compat)
   requiresRevision?: boolean;
   revisionPrompt?: string;
   revisionAttempt?: number;
   maxRevisions?: number;
-  // POC "Why?" Explainability
   metricExplanations?: Record<string, MetricExplanation>;
-  // S9.1: Server state for reflection step tracking
+  displayKPIs?: DisplayKPIEntry[];
+  causalExplanations?: CausalExplanationEntry[];
+  decisionAcknowledgment?: string;
   updatedState?: SimulationState;
 }
 

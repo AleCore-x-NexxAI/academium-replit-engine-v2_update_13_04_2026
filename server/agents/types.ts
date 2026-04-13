@@ -115,6 +115,7 @@ export interface AgentContext {
   nudgeCounters?: Record<number, number>;
   decisionEvidenceLogs?: DecisionEvidenceLogEntry[];
   integrityFlags?: boolean[];
+  indicatorAccumulation?: Record<string, IndicatorAccumulation>;
   scenario: {
     title: string;
     domain: string;
@@ -159,13 +160,46 @@ export interface MetricExplanation {
   tier: MetricTier;
 }
 
+export type TurnPosition = "FIRST" | "INTERMEDIATE" | "FINAL";
+
+export type KPITrajectory = "positive" | "negative" | "mixed" | "neutral";
+
+export interface IndicatorAccumulation {
+  trajectory: KPITrajectory;
+  consecutiveNegativeTurns: number;
+  consecutivePositiveTurns: number;
+  lastTier: MetricTier | null;
+  totalMovements: number;
+  firstAppearanceTurn: number | null;
+}
+
+export interface DisplayKPI {
+  indicatorId: string;
+  label: string;
+  direction: "up" | "down";
+  magnitude: "Ligero" | "Moderado" | "Significativo";
+  magnitudeEn: "Slight" | "Moderate" | "Significant";
+  tier: MetricTier;
+  delta: number;
+  shortReason: string;
+}
+
+export interface CausalExplanation {
+  indicatorId: string;
+  decisionReference: string;
+  causalMechanism: string;
+  directionalConnection: string;
+}
+
 export interface DomainExpertOutput {
   kpiDeltas: Record<string, number>;
-  indicatorDeltas?: Record<string, number>; // POC-style indicator changes
+  indicatorDeltas?: Record<string, number>;
   reasoning: string;
-  expertInsight?: string; // Subject matter expert context
-  // POC "Why?" Explainability
+  expertInsight?: string;
   metricExplanations?: Record<string, MetricExplanation>;
+  displayKPIs?: DisplayKPI[];
+  indicatorAccumulation?: Record<string, IndicatorAccumulation>;
+  antiPatternCorrections?: string[];
 }
 
 export interface NarratorOutput {

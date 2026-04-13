@@ -1,9 +1,10 @@
-import type { AgentContext, DirectorOutput, DecisionEvidenceLog, SignalExtractionResult } from "./types";
+import type { AgentContext, DirectorOutput, DecisionEvidenceLog, SignalExtractionResult, TurnPosition, CausalExplanation, DisplayKPI } from "./types";
 import { RDSBand, SignalQuality, computeRDS, classifyRDSBand, mapCompetencyEvidence } from "./types";
-import type { KPIs, SimulationState, TurnResponse, HistoryEntry, DecisionPoint } from "@shared/schema";
+import type { KPIs, SimulationState, TurnResponse, HistoryEntry, DecisionPoint, CausalExplanationEntry, DisplayKPIEntry } from "@shared/schema";
 import { evaluateDecision } from "./evaluator";
 import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative } from "./narrator";
+import { generateCausalExplanations } from "./causalExplainer";
 import { classifyInput, type ClassificationContext } from "./inputValidator";
 import { extractSignals } from "./signalExtractor";
 import { generateChatCompletion, SupportedModel } from "../openai";
@@ -310,6 +311,66 @@ function buildMcqSignals(studentInput: string, decisionPoint?: DecisionPoint): S
   };
 }
 
+function determineTurnPosition(context: AgentContext): TurnPosition {
+  const current = context.currentDecision || context.turnCount + 1;
+  const total = context.totalDecisions || 0;
+  if (current <= 1) return "FIRST";
+  if (total > 0 && current >= total) return "FINAL";
+  return "INTERMEDIATE";
+}
+
+function buildDecisionAcknowledgment(
+  context: AgentContext,
+  isMcq: boolean,
+  signals?: SignalExtractionResult,
+): string | undefined {
+  const isEn = context.language === "en";
+
+  if (isMcq) {
+    return isEn
+      ? `Selected option: ${context.studentInput}`
+      : `Opción seleccionada: ${context.studentInput}`;
+  }
+
+  if (!signals) return undefined;
+  const intentQuality = signals.intent.quality;
+  if (intentQuality < SignalQuality.PRESENT) return undefined;
+
+  const intentText = signals.intent.extracted_text || context.studentInput.substring(0, 80);
+  return isEn
+    ? `Direction taken: ${intentText}`
+    : `Dirección tomada: ${intentText}`;
+}
+
+function buildGracefulDegradation(
+  narrativeFailed: boolean,
+  kpiFailed: boolean,
+  explanationsFailed: boolean,
+  isEn: boolean,
+): { fallbackNarrative?: string; fallbackKPI?: string; fallbackExplanation?: string } {
+  const result: any = {};
+  if (narrativeFailed && kpiFailed) {
+    result.fallbackNarrative = isEn
+      ? "There was a problem processing your response. Your decision and progress have been saved."
+      : "Hubo un problema al procesar tu respuesta. Tu decisión y progreso han sido guardados.";
+  } else if (narrativeFailed) {
+    result.fallbackNarrative = isEn
+      ? "The narrative summary is not available at this time."
+      : "El resumen narrativo no está disponible en este momento.";
+  }
+  if (kpiFailed) {
+    result.fallbackKPI = isEn
+      ? "Impact indicators are not available at this time."
+      : "Los indicadores de impacto no están disponibles en este momento.";
+  }
+  if (explanationsFailed) {
+    result.fallbackExplanation = isEn
+      ? "This explanation is not available at this time."
+      : "Esta explicación no está disponible en este momento.";
+  }
+  return result;
+}
+
 export async function processStudentTurn(
   context: AgentContext,
   revisionAttempts: number = 0
@@ -564,11 +625,33 @@ export async function processStudentTurn(
     signalExtractionResult: evidenceLog.signals_detected,
   };
 
+  const turnPosition = determineTurnPosition(context);
+
+  let evaluation: import("./types").EvaluatorOutput;
+  let kpiImpact: import("./types").DomainExpertOutput;
+  let narrativeFailed = false;
+  let kpiFailed = false;
+
   const agentsStart = Date.now();
-  const [evaluation, kpiImpact] = await Promise.all([
-    evaluateDecision(contextWithRDS),
-    calculateKPIImpact(contextWithRDS),
-  ]);
+  try {
+    const [evalResult, kpiResult] = await Promise.all([
+      evaluateDecision(contextWithRDS),
+      calculateKPIImpact(contextWithRDS),
+    ]);
+    evaluation = evalResult;
+    kpiImpact = kpiResult;
+  } catch (err) {
+    console.error("[Director] Parallel agents failed:", err);
+    evaluation = { competencyScores: {}, feedback: { score: 0, message: "" }, flags: [] };
+    kpiImpact = {
+      kpiDeltas: { revenue: 0, morale: 0, reputation: 0, efficiency: 0, trust: 0 },
+      indicatorDeltas: {},
+      reasoning: "",
+      displayKPIs: [],
+      indicatorAccumulation: {},
+    };
+    kpiFailed = true;
+  }
   const agentsDuration = Date.now() - agentsStart;
 
   storage.createTurnEvent({
@@ -581,7 +664,6 @@ export async function processStudentTurn(
       durationMs: agentsDuration,
       feedbackScore: evaluation.feedback?.score,
       feedbackMessage: evaluation.feedback?.message,
-      feedbackHint: evaluation.feedback?.hint,
       competencyScores: evaluation.competencyScores,
       flags: evaluation.flags,
     },
@@ -597,7 +679,8 @@ export async function processStudentTurn(
       durationMs: agentsDuration,
       kpiDeltas: kpiImpact.kpiDeltas,
       indicatorDeltas: kpiImpact.indicatorDeltas,
-      metricExplanations: kpiImpact.metricExplanations,
+      displayKPIs: kpiImpact.displayKPIs,
+      antiPatternCorrections: kpiImpact.antiPatternCorrections,
     },
   }).catch(err => console.error("[TurnEvent] Failed to log domainExpert agent_call:", err));
 
@@ -607,8 +690,23 @@ export async function processStudentTurn(
     ...contextWithRDS,
     currentKpis: newKpis,
   };
+
+  let narrative: import("./types").NarratorOutput;
   const narrativeStart = Date.now();
-  const narrative = await generateNarrative(narrativeContext, kpiImpact, evaluation);
+  try {
+    narrative = await generateNarrative(narrativeContext, kpiImpact, evaluation);
+  } catch (err) {
+    console.error("[Director] Narrative generation failed:", err);
+    narrativeFailed = true;
+    const degradation = buildGracefulDegradation(true, kpiFailed, false, isEn);
+    narrative = {
+      text: degradation.fallbackNarrative || (isEn
+        ? "The narrative summary is not available at this time."
+        : "El resumen narrativo no está disponible en este momento."),
+      mood: "neutral",
+      suggestedOptions: [],
+    };
+  }
   storage.createTurnEvent({
     sessionId: context.sessionId,
     eventType: "agent_call",
@@ -618,17 +716,46 @@ export async function processStudentTurn(
       agentName: "narrator",
       durationMs: Date.now() - narrativeStart,
       mood: narrative.mood,
-      speaker: narrative.speaker,
       narrativeLength: narrative.text?.length,
-      suggestedOptions: narrative.suggestedOptions,
+      failed: narrativeFailed,
     },
   }).catch(err => console.error("[TurnEvent] Failed to log narrator agent_call:", err));
+
+  let causalExplanations: CausalExplanation[] = [];
+  let explanationsFailed = false;
+  if (!kpiFailed && (kpiImpact.displayKPIs?.length || 0) > 0) {
+    const explainStart = Date.now();
+    try {
+      causalExplanations = await generateCausalExplanations(
+        contextWithRDS, kpiImpact, narrative.text
+      );
+    } catch (err) {
+      console.error("[Director] Causal explanations failed:", err);
+      explanationsFailed = true;
+    }
+    storage.createTurnEvent({
+      sessionId: context.sessionId,
+      eventType: "agent_call",
+      turnNumber: currentDecisionNum,
+      rawStudentInput: context.studentInput,
+      eventData: {
+        agentName: "causalExplainer",
+        durationMs: Date.now() - explainStart,
+        explanationCount: causalExplanations.length,
+        failed: explanationsFailed,
+      },
+    }).catch(err => console.error("[TurnEvent] Failed to log causalExplainer:", err));
+  }
+
+  const decisionAcknowledgment = buildDecisionAcknowledgment(
+    context, isMcq, evidenceLog.signals_detected
+  );
 
   const isGameOver = checkGameOver(newKpis, contextWithRDS);
 
   const kpiUpdates: Record<string, { value: number; delta: number }> = {};
   const kpiKeys: (keyof KPIs)[] = ["revenue", "morale", "reputation", "efficiency", "trust"];
-  
+
   for (const key of kpiKeys) {
     const delta = kpiImpact.kpiDeltas[key] || 0;
     kpiUpdates[key] = {
@@ -654,7 +781,7 @@ export async function processStudentTurn(
 
   const nextDecision = currentDecisionNum + 1;
   const decisionsComplete = totalDecisions > 0 && nextDecision > totalDecisions;
-  
+
   const updatedIndicators = (context.indicators || []).map((indicator: any) => {
     const delta = kpiImpact.indicatorDeltas?.[indicator.id] || 0;
     return {
@@ -688,8 +815,41 @@ export async function processStudentTurn(
       classification: "PASS",
       rds_score: evidenceLog.rds_score,
       rds_band: evidenceLog.rds_band,
+      turnPosition,
     },
   }).catch(err => console.error("[TurnEvent] Failed to log input_accepted:", err));
+
+  const displayKPIEntries: DisplayKPIEntry[] = (kpiImpact.displayKPIs || []).map(d => ({
+    indicatorId: d.indicatorId,
+    label: d.label,
+    direction: d.direction,
+    magnitude: d.magnitude,
+    magnitudeEn: d.magnitudeEn,
+    tier: d.tier,
+    delta: d.delta,
+    shortReason: d.shortReason,
+  }));
+
+  const causalExplanationEntries: CausalExplanationEntry[] = causalExplanations.map(e => ({
+    indicatorId: e.indicatorId,
+    decisionReference: e.decisionReference,
+    causalMechanism: e.causalMechanism,
+    directionalConnection: e.directionalConnection,
+  }));
+
+  const accumulationEntries: Record<string, import("@shared/schema").IndicatorAccumulationEntry> = {};
+  if (kpiImpact.indicatorAccumulation) {
+    for (const [k, v] of Object.entries(kpiImpact.indicatorAccumulation)) {
+      accumulationEntries[k] = {
+        trajectory: v.trajectory,
+        consecutiveNegativeTurns: v.consecutiveNegativeTurns,
+        consecutivePositiveTurns: v.consecutivePositiveTurns,
+        lastTier: v.lastTier,
+        totalMovements: v.totalMovements,
+        firstAppearanceTurn: v.firstAppearanceTurn,
+      };
+    }
+  }
 
   const updatedState: SimulationState = {
     turnCount: context.turnCount + 1,
@@ -707,6 +867,7 @@ export async function processStudentTurn(
     decisionEvidenceLogs: [...existingEvidenceLogs, evidenceEntry],
     nudgeCounters: nudgeCounters,
     integrityFlags: context.integrityFlags,
+    indicatorAccumulation: Object.keys(accumulationEntries).length > 0 ? accumulationEntries : undefined,
   };
 
   return {
@@ -724,6 +885,9 @@ export async function processStudentTurn(
     competencyScores: evaluation.competencyScores,
     requiresRevision: false,
     metricExplanations: kpiImpact.metricExplanations,
+    displayKPIs: displayKPIEntries.length > 0 ? displayKPIEntries : undefined,
+    causalExplanations: causalExplanationEntries.length > 0 ? causalExplanationEntries : undefined,
+    decisionAcknowledgment,
     updatedState,
   };
 }
