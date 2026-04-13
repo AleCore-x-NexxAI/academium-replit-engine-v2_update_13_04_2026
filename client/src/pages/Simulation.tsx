@@ -50,6 +50,12 @@ export default function Simulation() {
   const [isBriefingCollapsed, setIsBriefingCollapsed] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [lastTurnStatus, setLastTurnStatus] = useState<"pass" | "nudge" | "block" | null>(null);
+  const [hintText, setHintText] = useState<string | null>(null);
+  const [hintMaxReached, setHintMaxReached] = useState(false);
+  const [hintsRemaining, setHintsRemaining] = useState(2);
+  const [isHintLoading, setIsHintLoading] = useState(false);
+  const [regenerationUsed, setRegenerationUsed] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const {
     history,
@@ -79,6 +85,7 @@ export default function Simulation() {
     updateThinkingStep,
     addTurn,
     handleRevisionRequest,
+    replaceLastNarrative,
     initializeSession,
     resetStore,
   } = useSimulationStore();
@@ -137,6 +144,14 @@ export default function Simulation() {
         initialState?.totalDecisions || initialState?.decisionPoints?.length || 0,
         initialState?.decisionPoints || []
       );
+      const cd = session.currentState.currentDecision || 1;
+      const serverHintCounters = session.currentState.hintCounters || {};
+      const serverRegenUsed = session.currentState.regenerationUsed || {};
+      const usedHints = serverHintCounters[cd] || 0;
+      setHintsRemaining(Math.max(0, 2 - usedHints));
+      setHintMaxReached(usedHints >= 2);
+      const prevDec = cd - 1;
+      setRegenerationUsed(prevDec >= 1 && !!serverRegenUsed[prevDec]);
     }
     return () => {
       initializedRef.current = false;
@@ -376,8 +391,56 @@ export default function Simulation() {
   const handleSubmit = async (input: string) => {
     setValidationError(null);
     setLastTurnStatus(null);
+    setHintText(null);
+    setHintMaxReached(false);
+    setHintsRemaining(2);
+    setRegenerationUsed(false);
     return submitMutation.mutateAsync(input);
   };
+
+  const handleHint = useCallback(async () => {
+    if (!sessionId || isHintLoading || hintMaxReached) return;
+    setIsHintLoading(true);
+    try {
+      const res = await apiRequest("POST", `/api/simulations/${sessionId}/hint`);
+      const data = await res.json();
+      if (data.maxReached) {
+        setHintMaxReached(true);
+        setHintsRemaining(0);
+      } else if (data.hint) {
+        setHintText(data.hint);
+        setHintsRemaining(data.hintsRemaining ?? 0);
+        if (data.hintsRemaining === 0) setHintMaxReached(true);
+      }
+    } catch {
+      toast({ title: lang === "en" ? "Could not load hint" : "No se pudo cargar la pista", variant: "destructive" });
+    } finally {
+      setIsHintLoading(false);
+    }
+  }, [sessionId, isHintLoading, hintMaxReached, toast, lang]);
+
+  const handleRegenerate = useCallback(async () => {
+    if (!sessionId || isRegenerating || regenerationUsed) return;
+    setIsRegenerating(true);
+    try {
+      const res = await apiRequest("POST", `/api/simulations/${sessionId}/regenerate`);
+      const data = await res.json();
+      if (data.regenerated && data.narrative) {
+        setRegenerationUsed(true);
+        replaceLastNarrative(data.narrative.text);
+        toast({ title: lang === "en" ? "Consequence regenerated" : "Consecuencia regenerada" });
+      }
+    } catch (error: any) {
+      const errMsg = error?.message || "";
+      if (errMsg.includes("alreadyUsed") || errMsg.includes("already used")) {
+        setRegenerationUsed(true);
+      } else {
+        toast({ title: lang === "en" ? "Could not regenerate" : "No se pudo regenerar", variant: "destructive" });
+      }
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [sessionId, isRegenerating, regenerationUsed, toast, lang, replaceLastNarrative]);
 
   if (authLoading || sessionLoading) {
     return (
@@ -529,7 +592,51 @@ export default function Simulation() {
             />
           </div>
 
-          {/* POC: Simplified InputConsole - no rubric, hints, or suggested actions */}
+          {!isGameOver && !isReflectionStep && !isProcessing && lastTurnStatus !== "block" && (
+            <div className="flex items-center gap-2 px-4 py-2 border-t">
+              {!hintMaxReached && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleHint}
+                  disabled={isHintLoading}
+                  data-testid="button-hint"
+                >
+                  {isHintLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : (
+                    <Brain className="w-3 h-3 mr-1" />
+                  )}
+                  {lang === "en" ? `Hint (${hintsRemaining})` : `Pista (${hintsRemaining})`}
+                </Button>
+              )}
+              {history.length > 1 && !regenerationUsed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={isRegenerating}
+                  data-testid="button-regenerate-consequence"
+                >
+                  {isRegenerating ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : null}
+                  {lang === "en" ? "Regenerate consequence" : "Regenerar consecuencia"}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {hintText && (
+            <div className="mx-4 mb-2 p-3 rounded-md bg-muted border text-sm text-muted-foreground" data-testid="text-hint">
+              <div className="flex items-center gap-1 mb-1 font-medium text-foreground">
+                <Brain className="w-3 h-3" />
+                {lang === "en" ? "Hint" : "Pista"}
+              </div>
+              {hintText}
+            </div>
+          )}
+
           <InputConsole
             onSubmit={handleSubmit}
             mode={mode}

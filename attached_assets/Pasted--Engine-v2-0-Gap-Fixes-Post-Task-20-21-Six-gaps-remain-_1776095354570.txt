@@ -1,0 +1,201 @@
+# Engine v2.0 — Gap Fixes (Post Task #20/#21)
+
+Six gaps remain between the current implementation and the Engine Packet v2.0 spec. Fix all six.
+
+Reference: `docs/ENGINE_PACKET_V2.md` is the governing spec. Read the relevant sections before implementing each fix.
+
+---
+
+## Fix 1: Run Narrator (S3) in parallel with DomainExpert (S4)
+
+**The problem:** The spec (Part 2.2) says Sections 3 and 4 run in parallel from the same inputs — neither determines the other. Currently, `director.ts` runs DomainExpert first, then feeds its KPI output INTO the Narrator. This violates the parallel architecture principle.
+
+**Why it was done this way:** The narrator prompt currently receives `kpiImpact.indicatorDeltas` and `kpiImpact.displayKPIs` so it can reference the right organizational domains. Without this data, the narrative might mention "team morale" while the KPIs moved "budget" and "efficiency" — creating misalignment.
+
+**The spec's intended solution:** The narrator generates the narrative from the SAME inputs as the domain expert (student signals, case context, session state, prior history) WITHOUT seeing KPI results. Then Section 6 (Assembly) catches any misalignment via cross-section consistency Check 1. This is how the spec is designed — the assembly step exists precisely to handle this.
+
+**How to fix it in `server/agents/director.ts`:**
+
+1. Change the parallel block to run Evaluator + DomainExpert + Narrator all in `Promise.allSettled`:
+```
+const [evalSettled, kpiSettled, narrativeSettled] = await Promise.allSettled([
+  evaluateDecision(contextWithRDS),
+  calculateKPIImpact(contextWithRDS),
+  generateNarrative(contextWithRDS, defaultKPI, defaultEvaluation),
+]);
+```
+
+2. The narrator receives `contextWithRDS` (which has signals, RDS band, case context, full history) but NOT the actual KPI impact. Pass empty/default KPI and evaluation objects so the function signature works, but the narrator prompt must NOT reference specific KPI deltas. Instead, the narrator generates the consequence purely from the student's decision signals and case dynamics.
+
+3. Update the narrator prompt in `narrator.ts`: Remove the `indicatorSummary` and `displayKPISummary` variables from the user prompt. The narrator should NOT see which KPIs moved — it generates organizational consequences from the student's decision and case logic only.
+
+4. Strengthen the Assembly cross-section consistency Check 1 (narrative-KPI domain alignment): After both Narrator and DomainExpert complete, check that every displayed KPI's domain is referenced in the narrative. If NOT:
+   - Option A: Append a targeted 1-sentence narrative extension that mentions the missing domain (current behavior, keep it)
+   - Option B: If no natural extension works, remove the KPI from the display set
+   
+5. This change will produce slightly different narratives than before (less KPI-aware), but the assembly consistency check ensures the student always sees an aligned package.
+
+**Files:** `server/agents/director.ts`, `server/agents/narrator.ts`
+
+---
+
+## Fix 2: Implement Final Outcome Narrative
+
+**The problem:** The spec (Section 6.5, PASS → Final Turn) requires a distinct "Final Outcome Narrative" of 120–200 words as a separate element after the consequence narrative and KPI panel. This is a trajectory summary with: (1) narrative of the path taken — not a bullet list, (2) sense of accomplishment, (3) open-ended future, (4) NEVER graded. Currently, the code just appends a trajectory panel with arrows and a generic 1-sentence reflection prompt.
+
+**How to fix it:**
+
+1. Create a new function `generateFinalOutcome(context: AgentContext): Promise<string>` — either in `narrator.ts` or a new file `finalOutcome.ts`. This makes a separate LLM call specifically for the final outcome.
+
+2. The prompt should:
+   - Receive the FULL session history (all decisions + all consequences)
+   - Receive the cumulative KPI trajectory data
+   - Generate a 120–200 word narrative paragraph (NOT bullets) summarizing the journey
+   - Include a sense of accomplishment — "the student navigated complexity; choices were defensible"
+   - Leave the story open-ended — "the story is not fully resolved"
+   - NEVER grade, score, evaluate, rank, or compare to other students
+   - Apply the same prohibited language rules as consequence narratives
+   - Use the same mentorship posture (calm senior colleague)
+
+3. In the `director.ts` PASS_FINAL assembly path, call this function and include its output as element [4] between the KPI Panel and the Reflection Prompt.
+
+4. The existing `buildFinalTrajectoryPanel` (the arrows/numbers view) can stay as supplementary data inside the KPI panel, but the Final Outcome Narrative is the primary closing element the student reads.
+
+5. The Reflection Prompt (element [5]) remains after the Final Outcome — optional, skippable, one prompt, never evaluated.
+
+**Files:** `server/agents/director.ts`, `server/agents/narrator.ts` (or new `server/agents/finalOutcome.ts`)
+
+---
+
+## Fix 3: Quality Gates as Reject-and-Regenerate (not regex repair)
+
+**The problem:** The spec says quality gate failures trigger regeneration — "If any gate fails, the narrative is regenerated — not delivered in partial or flagged form." (Section 3.11). The current code uses regex pattern replacement to strip prohibited language in-place. This is faster but misses subtle violations (evaluative framing that doesn't match a pattern, hint-giving through implication, etc.).
+
+**How to fix it:**
+
+1. After the narrator generates a consequence, run a formal validation pass:
+   - G1: Scan for ALL prohibited terms from the spec's list (current PROHIBITED_PATTERNS regex array — this part already exists)
+   - G2: Check for answer-giving patterns (does the narrative make one next-decision seem clearly better?)
+   - G3: Causal traceability (every element traces to the student's decision — hard to automate, skip for now)
+   - G4: Tradeoff config compliance (State A text present if configured, State B has substantive tradeoff, State C not artificially rosy)
+   - G5: Stakeholder continuity (stakeholders behave consistently with prior turns — hard to automate, skip for now)
+   - G6: Four elements present (check that the narrative contains observable outcome, stakeholder reaction, new information, and forward implication for non-final turns)
+   - G7: Tone tests — run a quick LLM check: "Does this narrative evaluate the student's decision positively or negatively? Does it hint at a correct next response? Answer JSON: {passes: true/false, reason: ''}"
+
+2. If any automatable gate fails (G1, G2, G4, G6, G7):
+   - Retry the narrator LLM call ONCE with the violation appended to the prompt: "Your previous generation contained: [violation]. Regenerate avoiding this."
+   - If the retry also fails, THEN fall back to the regex repair approach as a last resort
+   - Max 2 total attempts (original + 1 retry) before falling back
+
+3. Apply the same pattern to causal explanations in `causalExplainer.ts`:
+   - After generation, run the 6 quality gates (G1-G6 from Section 5.10)
+   - The Hint Test (G4) is the critical one — check for forward-looking prescriptions
+   - If fail: retry once, then fall back to regex repair
+
+4. This will add ~1-2 seconds to turn processing when violations are caught (which should be rare if prompts are well-written). Log all retries in turn_events for monitoring.
+
+**Files:** `server/agents/narrator.ts`, `server/agents/causalExplainer.ts`, `server/agents/director.ts`
+
+**Note:** Gates G3 and G5 (causal traceability, stakeholder continuity) are hard to automate without another LLM call. Skip these for now — they're "nice to have" validation. The high-impact gates are G1 (prohibited language), G7 (tone/evaluation detection), and the Hint Test.
+
+---
+
+## Fix 4: Map Indicators to 5 Canonical KPIs
+
+**The problem:** The spec defines exactly 5 canonical KPIs: K1 Budget/Financial Impact, K2 Team Morale, K3 Brand Reputation, K4 Operational Efficiency, K5 Stakeholder Trust. The codebase uses a flexible indicator system where professors can define any indicators they want.
+
+**The practical fix — don't break existing scenarios:**
+
+This is NOT an engine enforcement change. It's a case design standard. The flexible indicator system is fine — it actually gives professors MORE control than the spec's rigid 5. The fix is to ensure the 5 canonical KPIs are available as defaults and that new cases use them:
+
+1. In `shared/schema.ts`, add a `CANONICAL_KPIS` constant:
+```typescript
+export const CANONICAL_KPIS: Indicator[] = [
+  { id: "K1", label: "Presupuesto / Impacto Financiero", value: 50, direction: "up_better" },
+  { id: "K2", label: "Moral del Equipo", value: 50, direction: "up_better" },
+  { id: "K3", label: "Reputación de Marca", value: 50, direction: "up_better" },
+  { id: "K4", label: "Eficiencia Operativa", value: 50, direction: "up_better" },
+  { id: "K5", label: "Confianza de Stakeholders", value: 50, direction: "up_better" },
+];
+```
+
+2. In the canonical case generator (`canonicalCaseGenerator.ts`), use these 5 as the default indicator set when creating new cases. Professors can still customize labels per case (the spec allows "contextual KPI labels" per Section 4.9.1).
+
+3. In the authoring studio UI, pre-populate new scenarios with these 5 canonical indicators and let professors select 3–5 of them and customize labels.
+
+4. Existing scenarios with custom indicators continue to work unchanged.
+
+**Files:** `shared/schema.ts`, `server/agents/canonicalCaseGenerator.ts`
+
+---
+
+## Fix 5: Implement Consequence Regeneration
+
+**The problem:** Spec Section 3.10 and 7.4 say students can regenerate a consequence once per turn. Regeneration changes the narrative scene but NOT the KPIs or tradeoff direction. No endpoint or UI for this exists.
+
+**How to fix it:**
+
+1. Add a `regenerationUsed` map to `SimulationState`:
+```typescript
+regenerationUsed?: Record<number, boolean>; // keyed by decision point number
+```
+
+2. Add a new API endpoint in `server/routes.ts`:
+```
+POST /api/simulations/:sessionId/regenerate
+```
+
+3. Endpoint logic:
+   - Check the scenario has regeneration enabled (need a `regenerationEnabled` field on scenario config — add if missing)
+   - Check `regenerationUsed[currentDecision]` is not true
+   - Re-run ONLY the Narrator (Section 3) with an instruction appended: "Generate a DIFFERENT narrative scene for the same decision outcome. Different stakeholder interaction, different day, different vantage point. Same directional outcome, same tradeoff, same KPI directions."
+   - Do NOT re-run DomainExpert (Section 4) — KPI movements are locked from the original turn
+   - Re-run CausalExplainer (Section 5) to align with the new narrative
+   - Re-run Assembly (Section 6) with the new narrative + locked KPIs + new explanations
+   - Set `regenerationUsed[currentDecision] = true`
+   - Return the new assembled response
+   - Store the original narrative in session state for audit; display only the regenerated version
+
+4. Frontend: Add a "Regenerar consecuencia" / "Regenerate consequence" button that appears after consequences are delivered, calls this endpoint, and replaces the displayed consequence. Button disappears after use (once per turn).
+
+**Files:** `server/routes.ts`, `shared/schema.ts` (SimulationState extension), `server/agents/director.ts` (or extract a reusable assembly function)
+
+---
+
+## Fix 6: Hint Button Per-Turn Counter
+
+**The problem:** Spec Section 7.4 says the hint button allows max 2 hints per turn, tracked with a separate counter from the nudge counter. The current hint endpoint has no per-turn counter.
+
+**How to fix it:**
+
+1. Add a `hintCounters` map to `SimulationState`:
+```typescript
+hintCounters?: Record<number, number>; // keyed by decision point number
+```
+
+2. In the hint endpoint (`POST /api/simulations/:sessionId/hint`):
+   - Read `currentState.hintCounters[currentDecision]` (default 0)
+   - If count >= 2: return `{ hint: null, maxReached: true }` — frontend shows "No more hints available for this decision"
+   - Otherwise: generate hint, increment counter, persist to session state
+
+3. The hint button should be hidden after the student submits their decision (frontend change — when turn advances, hide the hint button for the previous turn).
+
+4. Hint content rules (update the hint prompt):
+   - Scaffolding questions or case information restatement ONLY
+   - NEVER a recommendation, preference, or implied answer
+   - Reference the current decision context specifically
+
+**Files:** `server/routes.ts`, `shared/schema.ts` (SimulationState extension), client-side hint button component
+
+---
+
+## Implementation Order
+
+Do them in this order — each builds on the previous:
+
+1. **Fix 4** (canonical KPIs) — schema change, no pipeline impact
+2. **Fix 6** (hint counter) — small, isolated change
+3. **Fix 1** (parallel S3+S4) — biggest architectural change, affects narrator + director
+4. **Fix 2** (Final Outcome Narrative) — new generation, adds to assembly
+5. **Fix 3** (quality gate regeneration) — adds validation layer to narrator + explainer
+6. **Fix 5** (consequence regeneration) — new endpoint, uses existing pipeline pieces

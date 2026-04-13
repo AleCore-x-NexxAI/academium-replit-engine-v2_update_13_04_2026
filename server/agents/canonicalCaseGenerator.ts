@@ -18,6 +18,7 @@ import type {
   DecisionPoint,
   Indicator
 } from "@shared/schema";
+import { CANONICAL_KPIS } from "@shared/schema";
 import { generateChatCompletion } from "../openai";
 import { POC_VERSION, STRUCTURE_LOCK_NOTICE, DEFAULT_DECISIONS, MIN_DECISIONS, MAX_DECISIONS } from "./constants";
 
@@ -241,13 +242,7 @@ export async function generateCanonicalCase(
 
   const parsed = JSON.parse(response);
   
-  // S8.1: Default indicators with directionality
-  const defaultIndicators: Indicator[] = [
-    { id: "teamMorale", label: "Moral del Equipo", value: 65, description: "Nivel de motivación y compromiso del equipo", direction: "up_better" },
-    { id: "budgetHealth", label: "Salud Presupuestaria", value: 70, description: "Salud financiera y disponibilidad de recursos del presupuesto", direction: "up_better" },
-    { id: "operationalRisk", label: "Riesgo Operacional", value: 50, description: "Nivel de riesgo en operaciones", direction: "down_better" },
-    { id: "strategicFlexibility", label: "Flexibilidad Estratégica", value: 60, description: "Capacidad de adaptación estratégica", direction: "up_better" },
-  ];
+  const defaultIndicators: Indicator[] = CANONICAL_KPIS.map(k => ({ ...k }));
 
   // S7.1: Default focus cues for each decision
   const defaultFocusCues = [

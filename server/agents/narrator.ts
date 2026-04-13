@@ -1,5 +1,5 @@
-import { generateChatCompletion, SupportedModel } from "../openai";
-import type { AgentContext, NarratorOutput, DomainExpertOutput, EvaluatorOutput, TurnPosition, DisplayKPI } from "./types";
+import { generateChatCompletion } from "../openai";
+import type { AgentContext, NarratorOutput, TurnPosition } from "./types";
 import { RDSBand } from "./types";
 import { HARD_PROHIBITIONS, MENTOR_TONE, MISUSE_HANDLING, getLanguageDirective } from "./guardrails";
 
@@ -124,8 +124,6 @@ FORMATO DE SALIDA (solo JSON):
 
 export async function generateNarrative(
   context: AgentContext,
-  kpiImpact: DomainExpertOutput,
-  evaluation: EvaluatorOutput
 ): Promise<NarratorOutput> {
   const turnPosition = determineTurnPosition(context);
   const rdsBand = context.rdsBand;
@@ -133,26 +131,16 @@ export async function generateNarrative(
   const complexity = getRDSComplexity(rdsBand);
   const tradeoffDirective = buildTradeoffDirective(context);
 
-  const indicatorSummary = kpiImpact.indicatorDeltas
-    ? Object.entries(kpiImpact.indicatorDeltas)
-        .filter(([_, v]) => v !== 0)
-        .map(([k, v]) => {
-          const direction = v > 0 ? "subió" : "bajó";
-          return `${k} ${direction} ${Math.abs(v)}`;
-        })
-        .join(", ")
-    : "";
-
-  const displayKPISummary = kpiImpact.displayKPIs?.map(d =>
-    `${d.label} ${d.direction === "up" ? "↑" : "↓"} ${d.magnitude} — ${d.shortReason}`
-  ).join("\n") || "";
-
   const scenarioContext = [];
   if (context.scenario.companyName) scenarioContext.push(`Empresa: ${context.scenario.companyName}`);
   if (context.scenario.industry) scenarioContext.push(`Industria: ${context.scenario.industry}`);
   if (context.scenario.timelineContext) scenarioContext.push(`Timeline: ${context.scenario.timelineContext}`);
 
   const stakeholderNames = context.scenario.stakeholders?.map(s => `${s.name} (${s.role})`).join(", ") || "";
+
+  const indicatorContext = (context.indicators || [])
+    .map(ind => `${ind.label} (${ind.direction === "down_better" ? "↓ mejor" : "↑ mejor"})`)
+    .join(", ");
 
   const previousDecisions = context.history
     .filter(h => h.role === "user")
@@ -181,22 +169,14 @@ RIQUEZA NARRATIVA (${rdsBand || "SURFACE"}): ${wordRange.min}-${wordRange.max} p
 ${complexity}
 
 ${stakeholderNames ? `STAKEHOLDERS DISPONIBLES: ${stakeholderNames}` : ""}
+${indicatorContext ? `DOMINIOS DE INDICADORES: ${indicatorContext}` : ""}
 
 ${previousDecisions ? `DECISIONES ANTERIORES:\n${previousDecisions}\n` : ""}
 
 DECISIÓN ACTUAL:
 "${context.studentInput}"
 
-IMPACTO EN INDICADORES:
-${indicatorSummary || "Sin cambios significativos"}
-
-INDICADORES MOSTRADOS:
-${displayKPISummary || "Ninguno"}
-
-${kpiImpact.reasoning}
-${kpiImpact.expertInsight ? `Insight experto: ${kpiImpact.expertInsight}` : ""}
-
-Genera una narrativa de consecuencias con los 4 elementos. Devuelve SOLO JSON válido.`;
+Genera una narrativa de consecuencias organizacionales con los 4 elementos, basada en la decisión del estudiante y la dinámica del caso. NO necesitas datos numéricos de KPIs — narra los efectos lógicos en los dominios relevantes. Devuelve SOLO JSON válido.`;
 
   const basePrompt = context.agentPrompts?.narrator || DEFAULT_NARRATOR_PROMPT;
   const systemPrompt = basePrompt + getLanguageDirective(context.language);
@@ -222,37 +202,31 @@ Genera una narrativa de consecuencias con los 4 elementos. Devuelve SOLO JSON v�
 
     text = text.replace(/!/g, ".");
 
-    const violations = scanProhibitedLanguage(text);
-    if (violations.length > 0) {
-      for (const pattern of PROHIBITED_PATTERNS) {
-        if (pattern.source === "!") continue;
-        text = text.replace(pattern, "");
-      }
-      text = text.replace(/\s{2,}/g, " ").trim();
-
-      const postRepairViolations = scanProhibitedLanguage(text);
-      if (postRepairViolations.length > 0) {
-        console.warn(`[Narrator] ${postRepairViolations.length} violations remain after repair, regenerating`);
-        try {
-          const retryResponse = await generateChatCompletion(
-            [
-              { role: "system", content: systemPrompt + "\n\nCRITICAL: Your previous response was rejected for prohibited language. Do NOT use evaluative, value-laden, or prescriptive words. No exclamation marks. No 'correcto', 'incorrecto', 'ideal', 'buena/mala decisión', 'bien hecho', 'deberías haber', 'desafortunadamente', 'afortunadamente'. Be purely observational." },
-              { role: "user", content: userPrompt },
-            ],
-            { responseFormat: "json", maxTokens: 768, model: context.llmModel, agentName: "narrator", sessionId: parseInt(context.sessionId) || undefined }
-          );
-          const retryParsed = JSON.parse(retryResponse) as { text?: string; mood?: string };
-          if (retryParsed.text) {
-            let retryText = retryParsed.text.replace(/!/g, ".");
-            for (const pattern of PROHIBITED_PATTERNS) {
-              if (pattern.source === "!") continue;
-              retryText = retryText.replace(pattern, "");
-            }
-            text = retryText.replace(/\s{2,}/g, " ").trim();
+    const gateResult = runNarratorQualityGates(text, turnPosition);
+    if (!gateResult.passed) {
+      console.warn(`[Narrator] Quality gate failed: ${gateResult.failedGates.join(", ")}. Regenerating...`);
+      try {
+        const violationDesc = gateResult.failedGates.map(g => g.reason).join("; ");
+        const retryResponse = await generateChatCompletion(
+          [
+            { role: "system", content: systemPrompt + `\n\nCRITICAL: Your previous response was REJECTED because: ${violationDesc}. Regenerate avoiding these issues. Be purely observational. No evaluative language. No exclamation marks. Include all 4 required elements.` },
+            { role: "user", content: userPrompt },
+          ],
+          { responseFormat: "json", maxTokens: 768, model: context.llmModel, agentName: "narrator", sessionId: parseInt(context.sessionId) || undefined }
+        );
+        const retryParsed = JSON.parse(retryResponse) as { text?: string; mood?: string };
+        if (retryParsed.text) {
+          let retryText = retryParsed.text.replace(/!/g, ".");
+          const retryGate = runNarratorQualityGates(retryText, turnPosition);
+          if (retryGate.passed) {
+            text = retryText;
+          } else {
+            text = regexRepairNarrative(retryText);
           }
-        } catch (retryErr) {
-          console.error("[Narrator] Regeneration failed:", retryErr);
         }
+      } catch (retryErr) {
+        console.error("[Narrator] Regeneration failed, falling back to regex repair:", retryErr);
+        text = regexRepairNarrative(text);
       }
     }
 
@@ -267,5 +241,156 @@ Genera una narrativa de consecuencias con los 4 elementos. Devuelve SOLO JSON v�
       mood: "neutral",
       suggestedOptions: [],
     };
+  }
+}
+
+interface GateFailure {
+  gate: string;
+  reason: string;
+}
+
+interface QualityGateResult {
+  passed: boolean;
+  failedGates: GateFailure[];
+}
+
+const ANSWER_GIVING_PATTERNS = [
+  /\b(la mejor opci[oó]n (es|ser[ií]a|habr[ií]a sido))\b/i,
+  /\b(the best (option|choice|approach) (is|would be))\b/i,
+  /\b(deber[ií]as? (elegir|seleccionar|optar))\b/i,
+  /\b(you should (choose|select|opt))\b/i,
+  /\b(claramente la respuesta)\b/i,
+  /\b(the answer is clearly)\b/i,
+];
+
+function runNarratorQualityGates(text: string, turnPosition: TurnPosition): QualityGateResult {
+  const failures: GateFailure[] = [];
+
+  const prohibitedViolations = scanProhibitedLanguage(text);
+  if (prohibitedViolations.length > 0) {
+    failures.push({ gate: "G1", reason: `Prohibited language: ${prohibitedViolations.join(", ")}` });
+  }
+
+  for (const pattern of ANSWER_GIVING_PATTERNS) {
+    if (pattern.test(text)) {
+      failures.push({ gate: "G2", reason: "Answer-giving detected" });
+      break;
+    }
+  }
+
+  if (turnPosition !== "FINAL") {
+    const hasOutcome = /\b(resultado|impacto|efecto|outcome|impact|effect)\b/i.test(text);
+    const hasStakeholder = /\b(equipo|cliente|stakeholder|team|customer|empleado|director|gerente|junta|board)\b/i.test(text);
+    const hasNewInfo = /\b(datos|informe|reporte|cifra|data|report|figure|número|análisis)\b/i.test(text);
+    const hasForward = /\b(próxim|siguient|futuro|ahead|next|upcoming|implica)\b/i.test(text);
+    const elementCount = [hasOutcome, hasStakeholder, hasNewInfo, hasForward].filter(Boolean).length;
+    if (elementCount < 2) {
+      failures.push({ gate: "G6", reason: `Only ${elementCount}/4 narrative elements detected` });
+    }
+  }
+
+  return {
+    passed: failures.length === 0,
+    failedGates: failures,
+  };
+}
+
+function regexRepairNarrative(text: string): string {
+  for (const pattern of PROHIBITED_PATTERNS) {
+    if (pattern.source === "!") continue;
+    text = text.replace(pattern, "");
+  }
+  return text.replace(/\s{2,}/g, " ").trim();
+}
+
+export async function generateFinalOutcome(
+  context: AgentContext,
+): Promise<string> {
+  const isEn = context.language === "en";
+  const allDecisions = context.history
+    .filter(h => h.role === "user")
+    .map((h, i) => `Decisión ${i + 1}: "${h.content}"`)
+    .join("\n");
+
+  const allConsequences = context.history
+    .filter(h => h.role === "system" || h.role === "npc")
+    .map((h, i) => `Consecuencia ${i + 1}: "${h.content.substring(0, 200)}..."`)
+    .join("\n");
+
+  const indicatorTrajectory = (context.indicators || [])
+    .map(ind => `${ind.label}: ${ind.value}`)
+    .join(", ");
+
+  const systemPrompt = `${isEn
+    ? "You are a FINAL OUTCOME NARRATOR for Academium."
+    : "Eres un NARRADOR DE RESULTADO FINAL para Academium."
+  }
+
+${HARD_PROHIBITIONS}
+${MENTOR_TONE}
+
+${isEn
+  ? `Generate a 120-200 word NARRATIVE PARAGRAPH (not bullets) summarizing the student's journey.
+REQUIREMENTS:
+- Narrative of the path taken — describe the arc of decisions and their consequences
+- Convey a sense of accomplishment — the student navigated complexity; choices were defensible
+- Leave the story open-ended — the situation is not fully resolved
+- NEVER grade, score, evaluate, rank, or compare to other students
+- NEVER use "correct/incorrect", "good/bad decision", "optimal", "ideal"
+- Speak in third person about the organizational outcomes
+- Tone: calm senior colleague reflecting alongside the student
+- NO exclamation marks`
+  : `Genera un PÁRRAFO NARRATIVO de 120-200 palabras (NO viñetas) resumiendo el recorrido del estudiante.
+REQUISITOS:
+- Narrativa del camino tomado — describe el arco de decisiones y sus consecuencias
+- Transmite sentido de logro — el estudiante navegó la complejidad; las decisiones fueron defendibles
+- Deja la historia abierta — la situación no está totalmente resuelta
+- NUNCA califiques, puntúes, evalúes, clasifiques, o compares con otros estudiantes
+- NUNCA uses "correcto/incorrecto", "buena/mala decisión", "óptimo", "ideal"
+- Habla en tercera persona sobre los resultados organizacionales
+- Tono: colega senior calmado reflexionando junto al estudiante
+- SIN signos de exclamación`
+}` + getLanguageDirective(context.language);
+
+  const userPrompt = `
+${isEn ? "SCENARIO" : "ESCENARIO"}: "${context.scenario.title}"
+${isEn ? "ROLE" : "ROL"}: ${context.scenario.role}
+${isEn ? "OBJECTIVE" : "OBJETIVO"}: ${context.scenario.objective}
+
+${isEn ? "ALL DECISIONS" : "TODAS LAS DECISIONES"}:
+${allDecisions}
+
+${isEn ? "KEY CONSEQUENCES" : "CONSECUENCIAS CLAVE"}:
+${allConsequences}
+
+${isEn ? "CURRENT INDICATORS" : "INDICADORES ACTUALES"}: ${indicatorTrajectory || "N/A"}
+
+${isEn
+  ? "Generate a 120-200 word narrative paragraph summarizing this journey. Return ONLY the text, no JSON."
+  : "Genera un párrafo narrativo de 120-200 palabras resumiendo este recorrido. Devuelve SOLO el texto, sin JSON."
+}`;
+
+  try {
+    let text = await generateChatCompletion(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { maxTokens: 512, model: context.llmModel, agentName: "finalOutcome", sessionId: parseInt(context.sessionId) || undefined }
+    );
+
+    text = text.replace(/!/g, ".").replace(/"/g, "").trim();
+    for (const pattern of PROHIBITED_PATTERNS) {
+      if (pattern.source === "!") continue;
+      text = text.replace(pattern, "");
+    }
+    text = text.replace(/\s{2,}/g, " ").trim();
+
+    return text;
+  } catch (err) {
+    console.error("[FinalOutcome] Generation failed:", err);
+    return isEn
+      ? "The simulation has reached its conclusion. The decisions made throughout this process shaped the organizational trajectory in meaningful ways, and the story continues beyond this point."
+      : "La simulación ha llegado a su conclusión. Las decisiones tomadas a lo largo de este proceso moldearon la trayectoria organizacional de maneras significativas, y la historia continúa más allá de este punto.";
   }
 }

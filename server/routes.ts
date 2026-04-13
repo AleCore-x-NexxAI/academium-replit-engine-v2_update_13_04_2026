@@ -566,6 +566,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         decisionEvidenceLogs: session.currentState.decisionEvidenceLogs || [],
         integrityFlags: session.currentState.integrityFlags || [],
         indicatorAccumulation: session.currentState.indicatorAccumulation,
+        hintCounters: session.currentState.hintCounters || {},
+        regenerationUsed: session.currentState.regenerationUsed || {},
         scenario: {
           title: session.scenario?.title || "Business Simulation",
           domain: session.scenario?.domain || "General",
@@ -834,41 +836,60 @@ IMPORTANTE: Todo en ESPAÑOL de Latinoamérica. Sé específico al escenario, no
         return res.status(403).json({ message: "Not authorized" });
       }
 
+      const currentDecision = session.currentState.currentDecision || 1;
+      const hintCounters = session.currentState.hintCounters || {};
+      const currentHintCount = hintCounters[currentDecision] || 0;
+
+      if (currentHintCount >= 2) {
+        return res.json({ hint: null, maxReached: true });
+      }
+
       const { generateChatCompletion } = await import("./openai");
+      const language = (session.scenario?.language as "es" | "en") || "es";
+      const isEn = language === "en";
+
+      const decisionPoints = session.scenario?.initialState?.decisionPoints || [];
+      const currentDP = decisionPoints.find((dp: any) => dp.number === currentDecision);
       
       const recentHistory = session.currentState.history.slice(-4)
         .map((h: HistoryEntry) => `${h.role}: ${h.content}`)
         .join("\n");
       
-      const hintPrompt = `You are a helpful business mentor in a simulation game.
+      const hintPrompt = isEn
+        ? `You are a helpful business mentor. Provide scaffolding questions or restate relevant case information. NEVER recommend, suggest a preference, or imply a correct answer. 2-3 sentences max.
 
 SCENARIO: ${session.scenario?.title || "Business Simulation"}
-OBJECTIVE: ${session.scenario?.initialState?.objective || "Navigate the challenge successfully"}
-ROLE: ${session.scenario?.initialState?.role || "Business Leader"}
+OBJECTIVE: ${session.scenario?.initialState?.objective || "Navigate the challenge"}
+${currentDP ? `CURRENT DECISION: ${currentDP.prompt}` : ""}
 
-CURRENT SITUATION:
+RECENT CONTEXT:
 ${recentHistory}
 
-CURRENT KPIs:
-- Revenue: $${session.currentState.kpis.revenue.toLocaleString()}
-- Team Morale: ${session.currentState.kpis.morale}%
-- Reputation: ${session.currentState.kpis.reputation}%
-- Efficiency: ${session.currentState.kpis.efficiency}%
-- Trust: ${session.currentState.kpis.trust}%
+Provide a scaffolding hint that helps the student think through this specific decision. Focus on stakeholders, trade-offs, or case details they might consider. NEVER hint at which option is "better".`
+        : `Eres un mentor de negocios. Proporciona preguntas de andamiaje o reformula información relevante del caso. NUNCA recomiendes, sugiera una preferencia, ni impliques una respuesta correcta. 2-3 oraciones máximo.
 
-Provide a helpful, encouraging hint (2-3 sentences) that guides the student toward good decision-making without giving away the "answer." Focus on:
-- Key stakeholders they should consider
-- Trade-offs they might be missing
-- Questions they should ask themselves
+ESCENARIO: ${session.scenario?.title || "Simulación de Negocios"}
+OBJETIVO: ${session.scenario?.initialState?.objective || "Navegar el desafío"}
+${currentDP ? `DECISIÓN ACTUAL: ${currentDP.prompt}` : ""}
 
-Be constructive and educational, not judgmental.`;
+CONTEXTO RECIENTE:
+${recentHistory}
+
+Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre esta decisión específica. Enfócate en stakeholders, trade-offs, o detalles del caso que podrían considerar. NUNCA insinúes cuál opción es "mejor".`;
 
       const hint = await generateChatCompletion([
         { role: "user", content: hintPrompt },
       ], { maxTokens: 256 });
 
-      res.json({ hint });
-    } catch (error: any) {
+      const updatedHintCounters = { ...hintCounters, [currentDecision]: currentHintCount + 1 };
+      const updatedState = {
+        ...session.currentState,
+        hintCounters: updatedHintCounters,
+      };
+      await storage.updateSimulationSession(sessionId, { currentState: updatedState });
+
+      res.json({ hint, hintsRemaining: 2 - (currentHintCount + 1) });
+    } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`[Hint Error] Session ${req.params.sessionId} | ${errorMsg}`);
       
@@ -884,6 +905,130 @@ Be constructive and educational, not judgmental.`;
           ? "El servicio de IA está temporalmente ocupado. Intenta de nuevo."
           : "No se pudo generar la pista.",
       });
+    }
+  });
+
+  app.post("/api/simulations/:sessionId/regenerate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { sessionId } = req.params;
+
+      const session = await storage.getSimulationSessionWithScenario(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const currentDecision = session.currentState.currentDecision || 1;
+      const regenerationUsed = session.currentState.regenerationUsed || {};
+
+      const prevDecision = currentDecision - 1;
+      if (prevDecision < 1) {
+        return res.status(400).json({ message: "No previous turn to regenerate" });
+      }
+      if (regenerationUsed[prevDecision]) {
+        return res.status(400).json({ message: "Regeneration already used for this turn", alreadyUsed: true });
+      }
+
+      const language = (session.scenario?.language as "es" | "en") || "es";
+      const initialState = session.scenario?.initialState;
+      const scenarioLlmModel = session.scenario?.llmModel || undefined;
+
+      const { generateNarrative } = await import("./agents/narrator");
+      const { generateCausalExplanations } = await import("./agents/causalExplainer");
+
+      const lastUserEntry = [...session.currentState.history].reverse().find(h => h.role === "user");
+      if (!lastUserEntry) {
+        return res.status(400).json({ message: "No previous student input found" });
+      }
+
+      const narrativeContext = {
+        sessionId,
+        turnCount: session.currentState.turnCount - 1,
+        currentKpis: session.currentState.kpis,
+        indicators: session.currentState.indicators,
+        history: session.currentState.history.slice(0, -2),
+        studentInput: lastUserEntry.content,
+        llmModel: scenarioLlmModel as any,
+        language: language as "es" | "en",
+        totalDecisions: initialState?.totalDecisions,
+        currentDecision: prevDecision,
+        decisionPoints: initialState?.decisionPoints,
+        scenario: {
+          title: session.scenario?.title || "Business Simulation",
+          domain: session.scenario?.domain || "General",
+          role: initialState?.role || "Business Leader",
+          objective: initialState?.objective || "Navigate the challenge",
+          companyName: initialState?.companyName,
+          industry: initialState?.industry,
+          stakeholders: initialState?.stakeholders,
+          timelineContext: initialState?.timelineContext,
+        },
+      };
+
+      const newNarrative = await generateNarrative(narrativeContext as any);
+
+      const allTurns = await storage.getTurnsBySession(sessionId);
+      const lastTurn = allTurns.length > 0 ? allTurns[allTurns.length - 1] : null;
+      const existingResponse = lastTurn?.agentResponse;
+      const existingDisplayKPIs = existingResponse?.displayKPIs || [];
+
+      let newExplanations: any[] = [];
+      if (existingDisplayKPIs.length > 0 && existingResponse?.indicatorDeltas) {
+        try {
+          newExplanations = await generateCausalExplanations(
+            narrativeContext as any,
+            {
+              kpiDeltas: {},
+              indicatorDeltas: existingResponse.indicatorDeltas,
+              reasoning: "",
+              displayKPIs: existingDisplayKPIs.map((d: any) => ({
+                indicatorId: d.indicatorId,
+                label: d.label,
+                direction: d.direction,
+                magnitude: d.magnitude,
+                magnitudeEn: d.magnitudeEn || d.magnitude,
+                tier: d.tier || 1,
+                delta: d.delta || 0,
+                shortReason: d.shortReason || "",
+              })),
+            },
+            newNarrative.text,
+          );
+        } catch (err) {
+          console.error("[Regenerate] Causal explanation regeneration failed:", err);
+        }
+      }
+
+      const updatedHistory = [...session.currentState.history];
+      if (updatedHistory.length >= 2) {
+        const lastEntry = updatedHistory[updatedHistory.length - 1];
+        if (lastEntry.role === "system" || lastEntry.role === "npc") {
+          lastEntry.content = newNarrative.text;
+        }
+      }
+
+      const updatedRegenerationUsed = { ...regenerationUsed, [prevDecision]: true };
+      const updatedState = {
+        ...session.currentState,
+        history: updatedHistory,
+        regenerationUsed: updatedRegenerationUsed,
+        lastTurnNarrative: session.currentState.lastTurnNarrative,
+      };
+      await storage.updateSimulationSession(sessionId, { currentState: updatedState });
+
+      res.json({
+        narrative: { text: newNarrative.text, mood: newNarrative.mood },
+        causalExplanations: newExplanations.length > 0 ? newExplanations : undefined,
+        displayKPIs: existingDisplayKPIs,
+        regenerated: true,
+      });
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Regenerate Error] Session ${req.params.sessionId} | ${errorMsg}`);
+      res.status(500).json({ message: "Error regenerating consequence" });
     }
   });
 

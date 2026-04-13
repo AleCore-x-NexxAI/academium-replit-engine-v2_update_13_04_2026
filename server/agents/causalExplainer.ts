@@ -143,49 +143,31 @@ Genera una explicación causal para CADA indicador mostrado. Devuelve JSON:
       { responseFormat: "json", maxTokens: 768, model: "gpt-4o-mini", agentName: "causalExplainer", sessionId: parseInt(context.sessionId) || undefined }
     );
 
-    const parsed = JSON.parse(response) as {
-      explanations?: Array<{
-        indicatorId?: string;
-        decisionReference?: string;
-        causalMechanism?: string;
-        directionalConnection?: string;
-      }>;
-    };
-    const explanations: CausalExplanation[] = (parsed.explanations || []).map(e => ({
-      indicatorId: e.indicatorId || "",
-      decisionReference: e.decisionReference || "",
-      causalMechanism: e.causalMechanism || "",
-      directionalConnection: e.directionalConnection || "",
-    }));
+    let filtered = parseAndFilterExplanations(response, displayKPIs);
 
-    const validIds = new Set(displayKPIs.map(d => d.indicatorId));
-    const filtered = explanations.filter(e => validIds.has(e.indicatorId));
-
-    const prescriptivePatterns = [
-      /\b(deberías|should|must|need to|hay que|es necesario|conviene)\b/i,
-      /\b(te recomiendo|se recomienda|would be better|you should)\b/i,
-      /\b(la próxima vez|next time|en el futuro|going forward)\b/i,
-    ];
-    const secondPersonPatterns = [
-      /\b(tu |tus |usted |your |you )\b/i,
-    ];
-
-    for (const exp of filtered) {
-      const fullText = `${exp.decisionReference} ${exp.causalMechanism} ${exp.directionalConnection}`;
-
-      for (const pattern of prescriptivePatterns) {
-        exp.decisionReference = exp.decisionReference.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
-        exp.causalMechanism = exp.causalMechanism.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
-        exp.directionalConnection = exp.directionalConnection.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
+    const gateResult = runExplainerQualityGates(filtered);
+    if (!gateResult.passed) {
+      console.warn(`[CausalExplainer] Quality gate failed: ${gateResult.failures.map(f => f.reason).join("; ")}. Regenerating...`);
+      try {
+        const violationDesc = gateResult.failures.map(f => f.reason).join("; ");
+        const retryResponse = await generateChatCompletion(
+          [
+            { role: "system", content: systemPrompt + `\n\nCRITICAL: Your previous response was REJECTED because: ${violationDesc}. Regenerate avoiding these issues. NEVER use second person. NEVER prescribe future actions. NEVER use "deberías/should/must/need to/hay que". Be purely observational about organizational mechanisms.` },
+            { role: "user", content: userPrompt },
+          ],
+          { responseFormat: "json", maxTokens: 768, model: "gpt-4o-mini", agentName: "causalExplainer", sessionId: parseInt(context.sessionId) || undefined }
+        );
+        const retryFiltered = parseAndFilterExplanations(retryResponse, displayKPIs);
+        const retryGate = runExplainerQualityGates(retryFiltered);
+        if (retryGate.passed) {
+          filtered = retryFiltered;
+        } else {
+          filtered = regexRepairExplanations(retryFiltered);
+        }
+      } catch (retryErr) {
+        console.error("[CausalExplainer] Regeneration failed, falling back to regex repair:", retryErr);
+        filtered = regexRepairExplanations(filtered);
       }
-
-      for (const pattern of secondPersonPatterns) {
-        exp.decisionReference = exp.decisionReference.replace(pattern, "la ").replace(/\s{2,}/g, " ").trim();
-      }
-
-      exp.decisionReference = exp.decisionReference.replace(/!/g, ".");
-      exp.causalMechanism = exp.causalMechanism.replace(/!/g, ".");
-      exp.directionalConnection = exp.directionalConnection.replace(/!/g, ".");
     }
 
     return filtered;
@@ -201,4 +183,84 @@ Genera una explicación causal para CADA indicador mostrado. Devuelve JSON:
         : "El impacto refleja la dinámica organizacional de este dominio."),
     }));
   }
+}
+
+const PRESCRIPTIVE_PATTERNS = [
+  /\b(deberías|should|must|need to|hay que|es necesario|conviene)\b/i,
+  /\b(te recomiendo|se recomienda|would be better|you should)\b/i,
+  /\b(la próxima vez|next time|en el futuro|going forward)\b/i,
+];
+
+const SECOND_PERSON_PATTERNS = [
+  /\b(tu |tus |usted |your |you )\b/i,
+];
+
+function parseAndFilterExplanations(response: string, displayKPIs: DisplayKPI[]): CausalExplanation[] {
+  const parsed = JSON.parse(response) as {
+    explanations?: Array<{
+      indicatorId?: string;
+      decisionReference?: string;
+      causalMechanism?: string;
+      directionalConnection?: string;
+    }>;
+  };
+  const explanations: CausalExplanation[] = (parsed.explanations || []).map(e => ({
+    indicatorId: e.indicatorId || "",
+    decisionReference: e.decisionReference || "",
+    causalMechanism: e.causalMechanism || "",
+    directionalConnection: e.directionalConnection || "",
+  }));
+
+  const validIds = new Set(displayKPIs.map(d => d.indicatorId));
+  return explanations.filter(e => validIds.has(e.indicatorId));
+}
+
+interface ExplainerGateResult {
+  passed: boolean;
+  failures: Array<{ gate: string; reason: string }>;
+}
+
+function runExplainerQualityGates(explanations: CausalExplanation[]): ExplainerGateResult {
+  const failures: Array<{ gate: string; reason: string }> = [];
+
+  for (const exp of explanations) {
+    const fullText = `${exp.decisionReference} ${exp.causalMechanism} ${exp.directionalConnection}`;
+
+    for (const pattern of PRESCRIPTIVE_PATTERNS) {
+      if (pattern.test(fullText)) {
+        failures.push({ gate: "HintTest", reason: `Prescriptive language in ${exp.indicatorId}: ${pattern.source}` });
+        break;
+      }
+    }
+
+    for (const pattern of SECOND_PERSON_PATTERNS) {
+      if (pattern.test(exp.decisionReference)) {
+        failures.push({ gate: "PersonVoice", reason: `Second person in decisionReference for ${exp.indicatorId}` });
+        break;
+      }
+    }
+
+    if (/!/.test(fullText)) {
+      failures.push({ gate: "Exclamation", reason: `Exclamation mark in ${exp.indicatorId}` });
+    }
+  }
+
+  return { passed: failures.length === 0, failures };
+}
+
+function regexRepairExplanations(explanations: CausalExplanation[]): CausalExplanation[] {
+  for (const exp of explanations) {
+    for (const pattern of PRESCRIPTIVE_PATTERNS) {
+      exp.decisionReference = exp.decisionReference.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
+      exp.causalMechanism = exp.causalMechanism.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
+      exp.directionalConnection = exp.directionalConnection.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
+    }
+    for (const pattern of SECOND_PERSON_PATTERNS) {
+      exp.decisionReference = exp.decisionReference.replace(pattern, "la ").replace(/\s{2,}/g, " ").trim();
+    }
+    exp.decisionReference = exp.decisionReference.replace(/!/g, ".");
+    exp.causalMechanism = exp.causalMechanism.replace(/!/g, ".");
+    exp.directionalConnection = exp.directionalConnection.replace(/!/g, ".");
+  }
+  return explanations;
 }

@@ -258,6 +258,14 @@ export interface Indicator {
   direction?: "up_better" | "down_better"; // ↑ mejor or ↓ mejor
 }
 
+export const CANONICAL_KPIS: Indicator[] = [
+  { id: "K1", label: "Presupuesto / Impacto Financiero", value: 50, direction: "up_better" },
+  { id: "K2", label: "Moral del Equipo", value: 50, direction: "up_better" },
+  { id: "K3", label: "Reputación de Marca", value: 50, direction: "up_better" },
+  { id: "K4", label: "Eficiencia Operativa", value: 50, direction: "up_better" },
+  { id: "K5", label: "Confianza de Stakeholders", value: 50, direction: "up_better" },
+];
+
 export interface InitialState {
   // POC KPI Configuration - use indicators instead of legacy KPIs
   indicators?: Indicator[]; // New POC-style indicators (team morale, budget impact, etc.)
@@ -422,6 +430,9 @@ export interface SimulationState {
   nudgeCounters?: Record<number, number>;
   integrityFlags?: boolean[];
   indicatorAccumulation?: Record<string, IndicatorAccumulationEntry>;
+  hintCounters?: Record<number, number>;
+  regenerationUsed?: Record<number, boolean>;
+  lastTurnNarrative?: string;
 }
 
 export interface NarrativeResponse {

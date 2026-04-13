@@ -116,6 +116,8 @@ export interface AgentContext {
   decisionEvidenceLogs?: DecisionEvidenceLogEntry[];
   integrityFlags?: boolean[];
   indicatorAccumulation?: Record<string, IndicatorAccumulation>;
+  hintCounters?: Record<number, number>;
+  regenerationUsed?: Record<number, boolean>;
   scenario: {
     title: string;
     domain: string;

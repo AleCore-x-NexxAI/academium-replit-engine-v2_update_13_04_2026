@@ -3,7 +3,7 @@ import { RDSBand, SignalQuality, computeRDS, classifyRDSBand, mapCompetencyEvide
 import type { KPIs, SimulationState, TurnResponse, HistoryEntry, DecisionPoint, CausalExplanationEntry, DisplayKPIEntry } from "@shared/schema";
 import { evaluateDecision } from "./evaluator";
 import { calculateKPIImpact } from "./domainExpert";
-import { generateNarrative } from "./narrator";
+import { generateNarrative, generateFinalOutcome } from "./narrator";
 import { generateCausalExplanations } from "./causalExplainer";
 import { classifyInput, type ClassificationContext } from "./inputValidator";
 import { extractSignals } from "./signalExtractor";
@@ -769,9 +769,10 @@ export async function processStudentTurn(
   };
 
   const agentsStart = Date.now();
-  const [evalSettled, kpiSettled] = await Promise.allSettled([
+  const [evalSettled, kpiSettled, narrativeSettled] = await Promise.allSettled([
     evaluateDecision(contextWithRDS),
     calculateKPIImpact(contextWithRDS),
+    generateNarrative(contextWithRDS),
   ]);
 
   let evaluation: import("./types").EvaluatorOutput;
@@ -790,6 +791,21 @@ export async function processStudentTurn(
     console.error("[Director] Domain expert failed:", kpiSettled.reason);
     kpiImpact = defaultKPI;
     kpiFailed = true;
+  }
+
+  let narrative: import("./types").NarratorOutput;
+  if (narrativeSettled.status === "fulfilled") {
+    narrative = narrativeSettled.value;
+  } else {
+    console.error("[Director] Narrative generation failed:", narrativeSettled.reason);
+    narrativeFailed = true;
+    narrative = {
+      text: isEn
+        ? "The narrative summary is not available at this time."
+        : "El resumen narrativo no está disponible en este momento.",
+      mood: "neutral",
+      suggestedOptions: [],
+    };
   }
 
   const parallelDuration = Date.now() - agentsStart;
@@ -824,28 +840,6 @@ export async function processStudentTurn(
     },
   }).catch(err => console.error("[TurnEvent] Failed to log domainExpert agent_call:", err));
 
-  const newKpis = applyKPIDeltas(context.currentKpis, kpiImpact.kpiDeltas);
-
-  const narrativeContext: AgentContext = {
-    ...contextWithRDS,
-    currentKpis: newKpis,
-  };
-
-  let narrative: import("./types").NarratorOutput;
-  const narrativeStart = Date.now();
-  try {
-    narrative = await generateNarrative(narrativeContext, kpiImpact, evaluation);
-  } catch (err) {
-    console.error("[Director] Narrative generation failed:", err);
-    narrativeFailed = true;
-    narrative = {
-      text: isEn
-        ? "The narrative summary is not available at this time."
-        : "El resumen narrativo no está disponible en este momento.",
-      mood: "neutral",
-      suggestedOptions: [],
-    };
-  }
   storage.createTurnEvent({
     sessionId: context.sessionId,
     eventType: "agent_call",
@@ -853,12 +847,14 @@ export async function processStudentTurn(
     rawStudentInput: context.studentInput,
     eventData: {
       agentName: "narrator",
-      durationMs: Date.now() - narrativeStart,
+      durationMs: parallelDuration,
       mood: narrative.mood,
       narrativeLength: narrative.text?.length,
       failed: narrativeFailed,
     },
   }).catch(err => console.error("[TurnEvent] Failed to log narrator agent_call:", err));
+
+  const newKpis = applyKPIDeltas(context.currentKpis, kpiImpact.kpiDeltas);
 
   let causalExplanations: CausalExplanation[] = [];
   let explanationsFailed = false;
@@ -1095,6 +1091,20 @@ export async function processStudentTurn(
     if (trajectoryPanel) {
       assembledNarrative += "\n\n" + trajectoryPanel;
     }
+
+    try {
+      const finalOutcomeContext: AgentContext = {
+        ...contextWithRDS,
+        indicators: updatedIndicators,
+      };
+      const finalOutcome = await generateFinalOutcome(finalOutcomeContext);
+      if (finalOutcome) {
+        assembledNarrative += "\n\n" + finalOutcome;
+      }
+    } catch (err) {
+      console.error("[Director] Final outcome generation failed:", err);
+    }
+
     const reflectionPrompt = isEn
       ? "\n\nYou have completed all decisions. Take a moment to reflect on the journey and the choices you made throughout this simulation."
       : "\n\nHas completado todas las decisiones. Tómate un momento para reflexionar sobre el recorrido y las elecciones que tomaste a lo largo de esta simulación.";
@@ -1140,6 +1150,9 @@ export async function processStudentTurn(
     nudgeCounters: nudgeCounters,
     integrityFlags: context.integrityFlags,
     indicatorAccumulation: Object.keys(accumulationEntries).length > 0 ? accumulationEntries : undefined,
+    hintCounters: context.hintCounters,
+    regenerationUsed: context.regenerationUsed,
+    lastTurnNarrative: narrative.text,
   };
 
   storage.createTurnEvent({
