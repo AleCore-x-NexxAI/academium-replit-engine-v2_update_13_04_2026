@@ -12,7 +12,7 @@ import { getCapacityStatus, getJobStatus as getLLMJobStatus } from "./llm";
 import { turnQueue, type TurnJob } from "./llm/turnQueue";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
-import type { AgentContext } from "./agents/types";
+import type { AgentContext, DomainExpertOutput, CausalExplanation, DisplayKPI } from "./agents/types";
 import { DEFAULT_DECISIONS } from "./agents/constants";
 import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage, GeneratedScenarioData, AgentPrompts } from "@shared/schema";
 import { llmUsageLogs } from "@shared/schema";
@@ -932,27 +932,27 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
         return res.status(400).json({ message: "Regeneration already used for this turn", alreadyUsed: true });
       }
 
-      const language = (session.scenario?.language as "es" | "en") || "es";
+      const language: "es" | "en" = (session.scenario?.language as "es" | "en") || "es";
       const initialState = session.scenario?.initialState;
       const scenarioLlmModel = session.scenario?.llmModel || undefined;
 
       const { generateNarrative } = await import("./agents/narrator");
       const { generateCausalExplanations } = await import("./agents/causalExplainer");
 
-      const lastUserEntry = [...session.currentState.history].reverse().find(h => h.role === "user");
+      const lastUserEntry = [...session.currentState.history].reverse().find((h: HistoryEntry) => h.role === "user");
       if (!lastUserEntry) {
         return res.status(400).json({ message: "No previous student input found" });
       }
 
-      const narrativeContext = {
+      const regenContext: AgentContext = {
         sessionId,
         turnCount: session.currentState.turnCount - 1,
         currentKpis: session.currentState.kpis,
         indicators: session.currentState.indicators,
         history: session.currentState.history.slice(0, -2),
         studentInput: lastUserEntry.content,
-        llmModel: scenarioLlmModel as any,
-        language: language as "es" | "en",
+        llmModel: scenarioLlmModel as AgentContext["llmModel"],
+        language,
         totalDecisions: initialState?.totalDecisions,
         currentDecision: prevDecision,
         decisionPoints: initialState?.decisionPoints,
@@ -968,33 +968,34 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
         },
       };
 
-      const newNarrative = await generateNarrative(narrativeContext as any);
+      const newNarrative = await generateNarrative(regenContext);
 
       const allTurns = await storage.getTurnsBySession(sessionId);
       const lastTurn = allTurns.length > 0 ? allTurns[allTurns.length - 1] : null;
       const existingResponse = lastTurn?.agentResponse;
-      const existingDisplayKPIs = existingResponse?.displayKPIs || [];
+      const existingDisplayKPIs: DisplayKPI[] = (existingResponse?.displayKPIs || []) as DisplayKPI[];
 
-      let newExplanations: any[] = [];
+      let newExplanations: CausalExplanation[] = [];
       if (existingDisplayKPIs.length > 0 && existingResponse?.indicatorDeltas) {
         try {
+          const kpiImpact: DomainExpertOutput = {
+            kpiDeltas: {},
+            indicatorDeltas: existingResponse.indicatorDeltas as Record<string, number>,
+            reasoning: "",
+            displayKPIs: existingDisplayKPIs.map((d: DisplayKPI) => ({
+              indicatorId: d.indicatorId,
+              label: d.label,
+              direction: d.direction,
+              magnitude: d.magnitude,
+              magnitudeEn: d.magnitudeEn || d.magnitude,
+              tier: d.tier || 1,
+              delta: d.delta || 0,
+              shortReason: d.shortReason || "",
+            })),
+          };
           newExplanations = await generateCausalExplanations(
-            narrativeContext as any,
-            {
-              kpiDeltas: {},
-              indicatorDeltas: existingResponse.indicatorDeltas,
-              reasoning: "",
-              displayKPIs: existingDisplayKPIs.map((d: any) => ({
-                indicatorId: d.indicatorId,
-                label: d.label,
-                direction: d.direction,
-                magnitude: d.magnitude,
-                magnitudeEn: d.magnitudeEn || d.magnitude,
-                tier: d.tier || 1,
-                delta: d.delta || 0,
-                shortReason: d.shortReason || "",
-              })),
-            },
+            regenContext,
+            kpiImpact,
             newNarrative.text,
           );
         } catch (err) {

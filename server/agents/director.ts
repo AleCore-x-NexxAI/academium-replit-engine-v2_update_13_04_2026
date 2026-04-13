@@ -1084,7 +1084,7 @@ export async function processStudentTurn(
     assembledNarrative = degradation.fallbackNarrative;
   }
 
-  if (assemblyPath === "PASS_FINAL" && !isGameOver) {
+  if (assemblyPath === "PASS_FINAL") {
     const trajectoryPanel = buildFinalTrajectoryPanel(
       context.indicators || [], kpiImpact.indicatorDeltas || {}, updatedIndicators, isEn
     );
@@ -1141,7 +1141,7 @@ export async function processStudentTurn(
     flags: [...evaluation.flags],
     rubricScores: evaluation.competencyScores,
     currentDecision: decisionsComplete ? totalDecisions : nextDecision,
-    isComplete: isGameOver,
+    isComplete: isGameOver || decisionsComplete,
     isReflectionStep: decisionsComplete && !isGameOver,
     reflectionCompleted: false,
     pendingRevision: false,
