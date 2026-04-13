@@ -55,6 +55,18 @@ export async function generateCausalExplanations(
   const language = context.language || "es";
   const isEn = language === "en";
 
+  const currentDecisionNum = context.currentDecision || (context.turnCount + 1);
+  const currentDP = context.decisionPoints?.find(dp => dp.number === currentDecisionNum);
+  const isMcq = currentDP?.format === "multiple_choice";
+  const tradeoffSignature = currentDP?.tradeoffSignature ||
+    (isMcq && currentDP?.optionSignatures
+      ? Object.values(currentDP.optionSignatures)[0]
+      : undefined);
+
+  const tradeoffContext = tradeoffSignature
+    ? `\nTRADEOFF DEL CASO: Dimensión="${tradeoffSignature.dimension}", Beneficio="${tradeoffSignature.benefit}", Costo="${tradeoffSignature.cost}". Las explicaciones deben reflejar esta dinámica de tradeoff en los mecanismos causales.`
+    : "";
+
   const kpiDescriptions = displayKPIs.map(d =>
     `- ${d.indicatorId} (${d.label}): ${d.direction === "up" ? "↑" : "↓"} ${d.magnitude}, delta=${d.delta}, razón="${d.shortReason}"`
   ).join("\n");
@@ -81,6 +93,7 @@ ${signalAnchoring}` + getLanguageDirective(language);
 
   const userPrompt = `
 DECISIÓN DEL ESTUDIANTE: "${context.studentInput}"
+${tradeoffContext}
 
 INDICADORES QUE CAMBIARON:
 ${kpiDescriptions}

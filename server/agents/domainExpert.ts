@@ -19,6 +19,36 @@ function resolveOptionSignature(
   return undefined;
 }
 
+function enforceTradeoffSignatureDirection(
+  deltas: Record<string, number>,
+  signature: TradeoffSignature,
+  indicators: Indicator[],
+): Record<string, number> {
+  const result = { ...deltas };
+  const benefitLower = signature.benefit.toLowerCase();
+  const costLower = signature.cost.toLowerCase();
+
+  for (const ind of indicators) {
+    const delta = result[ind.id];
+    if (delta === undefined || delta === 0) continue;
+
+    const labelLower = ind.label.toLowerCase();
+    const idLower = ind.id.toLowerCase();
+
+    const isBenefitIndicator = labelLower.includes(benefitLower) || idLower.includes(benefitLower) ||
+      benefitLower.includes(labelLower) || benefitLower.includes(idLower);
+    const isCostIndicator = labelLower.includes(costLower) || idLower.includes(costLower) ||
+      costLower.includes(labelLower) || costLower.includes(idLower);
+
+    if (isBenefitIndicator && delta < 0) {
+      result[ind.id] = Math.abs(delta);
+    } else if (isCostIndicator && delta > 0) {
+      result[ind.id] = -Math.abs(delta);
+    }
+  }
+  return result;
+}
+
 function determineTurnPosition(context: AgentContext): TurnPosition {
   const current = context.currentDecision || context.turnCount + 1;
   const total = context.totalDecisions || 0;
@@ -400,6 +430,12 @@ Calcula impactos específicos a esta decisión. Devuelve SOLO JSON válido.`;
 
     for (const key of Object.keys(indicatorDeltas)) {
       indicatorDeltas[key] = Math.max(-16, Math.min(16, indicatorDeltas[key] as number));
+    }
+
+    if (isMcq && resolvedSignature) {
+      indicatorDeltas = enforceTradeoffSignatureDirection(
+        indicatorDeltas, resolvedSignature, indicators
+      );
     }
 
     const rawExplanations = parsed.metricExplanations || {};

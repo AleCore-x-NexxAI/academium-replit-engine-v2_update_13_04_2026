@@ -420,6 +420,16 @@ function checkNarrativeKPIAlignment(
   return misaligned;
 }
 
+function checkHintTest(explanation: CausalExplanation): boolean {
+  const prescriptivePatterns = [
+    /\b(deberías|should|must|need to|hay que|es necesario|conviene)\b/i,
+    /\b(te recomiendo|se recomienda|would be better|you should)\b/i,
+    /\b(la próxima vez|next time|en el futuro|going forward)\b/i,
+  ];
+  const text = `${explanation.decisionReference} ${explanation.causalMechanism} ${explanation.directionalConnection}`;
+  return prescriptivePatterns.some(p => p.test(text));
+}
+
 function checkExplanationKPIAlignment(
   explanations: CausalExplanation[],
   displayKPIs: DisplayKPI[],
@@ -829,6 +839,14 @@ export async function processStudentTurn(
   if (hasDisplayKPIs && !narrativeFailed) {
     const misaligned = checkNarrativeKPIAlignment(narrative.text, kpiImpact.displayKPIs || []);
     if (misaligned.length > 0) {
+      const displayKPIs = kpiImpact.displayKPIs || [];
+      const kpiSuffix = displayKPIs
+        .filter(d => misaligned.includes(d.indicatorId))
+        .map(d => `${d.label}: ${d.direction === "up" ? "↑" : "↓"} ${d.magnitude}`)
+        .join(". ");
+      if (kpiSuffix) {
+        narrative.text += (isEn ? "\n\nNotable impacts: " : "\n\nImpactos notables: ") + kpiSuffix + ".";
+      }
       storage.createTurnEvent({
         sessionId: context.sessionId,
         eventType: "agent_call",
@@ -837,6 +855,7 @@ export async function processStudentTurn(
           agentName: "assembly_check",
           check: "narrative_kpi_alignment",
           misalignedKPIs: misaligned,
+          correctionApplied: "appended_kpi_summary",
         },
       }).catch(() => {});
     }
@@ -847,6 +866,9 @@ export async function processStudentTurn(
       causalExplanations, kpiImpact.displayKPIs || []
     );
     if (!explanationsAligned) {
+      causalExplanations = ensureExplanationCompleteness(
+        causalExplanations, kpiImpact.displayKPIs || [], isEn
+      );
       storage.createTurnEvent({
         sessionId: context.sessionId,
         eventType: "agent_call",
@@ -855,6 +877,28 @@ export async function processStudentTurn(
           agentName: "assembly_check",
           check: "explanation_kpi_alignment",
           aligned: false,
+          correctionApplied: "backfilled_missing_explanations",
+        },
+      }).catch(() => {});
+    }
+  }
+
+  for (const explanation of causalExplanations) {
+    const hintViolation = checkHintTest(explanation);
+    if (hintViolation) {
+      explanation.directionalConnection = explanation.directionalConnection
+        .replace(/\b(deberías|should|must|need to|hay que|es necesario|conviene)\b/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      storage.createTurnEvent({
+        sessionId: context.sessionId,
+        eventType: "agent_call",
+        turnNumber: currentDecisionNum,
+        eventData: {
+          agentName: "assembly_check",
+          check: "hint_test",
+          indicatorId: explanation.indicatorId,
+          correctionApplied: "removed_prescriptive_language",
         },
       }).catch(() => {});
     }
