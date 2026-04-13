@@ -8,6 +8,9 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
+## Engine Specification (MUST READ)
+The Engine Packet v2.0 at `docs/ENGINE_PACKET_V2.md` is the governing specification for the simulation engine. All engine work MUST conform to this document. When implementing any engine section (signal extraction, consequence generation, KPI computation, causal explanations, response assembly), read the relevant section of this document first and follow it exactly. In any conflict between this file and prior code, this document governs.
+
 ### Frontend
 The frontend uses React, TypeScript, and Vite, with `shadcn/ui` on Radix UI primitives and Tailwind CSS for a Fluent Design-inspired "Design System Approach." Zustand manages client-side state, and TanStack Query handles server state for real-time updates and optimistic UI. The student cockpit features a three-column layout for context, narrative, and feedback.
 

@@ -1,0 +1,306 @@
+# ENGINE v2.0 — CORRECTED REPLIT PLANNER TASKS
+
+These two tasks replace the originals. Corrections are based on cross-referencing Engine Packet v2.0 (the governing spec) against the actual codebase in this Replit project.
+
+---
+
+## #20 — Engine v2.0: Input Classification & Signal Extraction (Sections 7 + 2)
+
+### What & Why
+
+Replace the current `inputValidator.ts`, `evaluator.ts`, and `depthEvaluator.ts` with the Engine Packet v2.0 Sections 7 (Input Reception/Classification) and 2 (Signal Extraction). The current system has no tri-classification (PASS/NUDGE/BLOCK), no 5-signal extraction, no RDS bands, no competency mapping, and no nudge counter. This is the foundation — every downstream section (consequence generation, KPI computation, causal explanations, response assembly) depends on the RDS band and signal data produced here.
+
+### Done looks like
+
+**Input Classification (Section 7):**
+
+- MCQ inputs are always classified as PASS — no classification runs. The pre-authored tradeoff signature is retrieved from the selected option and passed downstream. MCQ is always Turn 1.
+- FR inputs go through pre-classification processing BEFORE the gate tree: (1) format validation, (2) session/turn confirmation, (3) ISO 8601 timestamp, (4) nudge counter check — if `nudge_count >= 2` for this decision point, force PASS immediately and skip all gates.
+- FR classification runs a 6-gate decision tree in strict order:
+  - Gate 1: Empty/whitespace → BLOCK (Empty)
+  - Gate 2: Profane/hostile → BLOCK (Safety)
+  - Gate 3: Prompt injection → BLOCK (Integrity) + `integrity_flag: true` logged in session state
+  - Gate 4: Completely off-topic / random characters / spam → BLOCK (Off-topic)
+  - Gate 5: Does the input meet ANY PASS criterion? (a) States a clear priority, (b) References a specific case element, (c) Mentions a trade-off, (d) Identifies a stakeholder impact, (e) Articulates a reasoning chain ("X because Y") → if ANY one criterion met → PASS
+  - Gate 6: Shows case engagement despite no PASS criterion? → YES = NUDGE, NO = BLOCK (Insufficient engagement)
+- CRITICAL PASS RULES: Word count is NEVER a disqualifier. Grammar/spelling are NEVER criteria. Language mismatch (English in Spanish case) is NEVER a criterion. "Priorizaría clientes." = PASS. The threshold is intentionally low.
+- NUDGE behavior: student text is preserved in input field (NEVER deleted/cleared), nudge_count incremented, 1–2 clarifying questions displayed as a callout ADJACENT to the input field (not in main response area), turn does NOT advance, submit button stays active. Nudge questions must never hint at answers or evaluate the response.
+- BLOCK behavior: student text preserved (even profane text), redirect message displayed above input, turn does NOT advance. Messages are 1–2 sentences, calm, reference current decision context. Never lecture, scold, count redirects, or use "inappropriate"/"wrong"/"unacceptable".
+- A decision becomes irreversible ONLY when all three are true: (1) classified PASS, (2) full pipeline ran, (3) response delivered. NUDGE/BLOCK cycles lock nothing.
+
+**Signal Extraction (Section 2):**
+
+- Five signals extracted from every FR PASS input. Each scored on a 4-level scale:
+  - STRONG = 3, PRESENT = 2, WEAK = 1, ABSENT = 0
+- The five signals:
+  1. **Intent** — Student commits to a clear direction/priority/action. STRONG: specific, directional, case-anchored. PRESENT: directional but generic. WEAK: hedged ("maybe," "perhaps"). ABSENT: no commitment.
+  2. **Justification** — Student provides reasoning. STRONG: case-specific causal chain. PRESENT: general causal reasoning. WEAK: circular/asserted. ABSENT: no reasoning.
+  3. **Tradeoff Awareness** — Student acknowledges cost/sacrifice. STRONG: specific named tradeoff with consequence. PRESENT: acknowledged but vague. WEAK: generic ("pros and cons"). ABSENT: no downside mentioned. NOTE: Always detected regardless of professor's tradeoff configuration — tradeoff config governs consequence generation, NOT signal detection.
+  4. **Stakeholder Awareness** — Student considers impact on specific groups. STRONG: named stakeholder + specific impact + why it matters. PRESENT: named stakeholder, general impact. WEAK: implied/generic ("the team"). ABSENT: no stakeholder consideration. "Everyone" or "the company" does NOT qualify.
+  5. **Ethical Awareness** — Student surfaces a principle/obligation/fairness concern. STRONG: applied ethical principle with case connection. PRESENT: acknowledged but generic. WEAK: abstract moral language. ABSENT: no ethical dimension. Recognizing ethical TENSION counts as strong ethical awareness.
+- RDS (Reasoning Depth Score) = sum of 5 signal scores. Range: 0–15.
+  - Surface band: 1–4
+  - Engaged band: 5–9
+  - Integrated band: 10–15
+- RDS NEVER triggers NUDGE or BLOCK. A 2-word PASS with RDS=2 proceeds with Surface-band consequences. Grammar/spelling/length are never scoring criteria.
+- For MCQ (Turn 1): No signal extraction from text. Signals read from the pre-authored tradeoff signature. No RDS computed.
+
+**Competency Mapping (must match spec exactly):**
+
+| ID | Competency Name | Primary Signal | Secondary Signal |
+|----|----------------|---------------|-----------------|
+| C1 | Analytical Reasoning | Justification | — |
+| C2 | Strategic Decision-Making | Intent | Justification |
+| C3 | Stakeholder Consideration | Stakeholder Awareness | Ethical Awareness |
+| C4 | Ethical Reasoning | Ethical Awareness | — |
+| C5 | Systems Awareness | Tradeoff Awareness | Stakeholder Awareness |
+
+Evidence levels per competency: **Demonstrated** (signal PRESENT or STRONG), **Emerging** (signal WEAK), **Not Evidenced** (signal ABSENT — does NOT mean student lacks competency, means this turn produced no evidence).
+
+**Decision Evidence Log** written to session state per turn: `signals_detected` (all 5 with quality level), `rds_score`, `rds_band`, `competency_evidence` (C1–C5 evidence levels), `raw_signal_scores`.
+
+### Out of scope
+
+- Consequence generation changes (Sec 3) — Task #21
+- KPI computation tier/accumulation changes (Sec 4) — Task #21
+- Causal explanation generation (Sec 5) — Task #21
+- Response assembly cross-section checks (Sec 6) — Task #21
+- Frontend UI changes for new signal data
+- Changes to the authoring studio or scenario creation flow
+
+### Tasks
+
+1. **Define new types and interfaces** — Add to `server/agents/types.ts` and `shared/schema.ts`:
+   - `SignalQuality` enum: `STRONG=3, PRESENT=2, WEAK=1, ABSENT=0`
+   - `SignalExtractionResult` interface: 5 signal fields, each with `{ quality: SignalQuality, extracted_text: string }`
+   - `RDSBand` enum: `SURFACE, ENGAGED, INTEGRATED`
+   - `InputClassification` type: `"PASS" | "NUDGE" | "BLOCK"` with `block_reason?: "empty" | "safety" | "integrity" | "off_topic" | "insufficient_engagement"` and `classification_rationale: string`
+   - `CompetencyEvidence` interface: `{ C1–C5: "demonstrated" | "emerging" | "not_evidenced" }`
+   - `DecisionEvidenceLog` interface: `{ signals_detected, rds_score, rds_band, competency_evidence, raw_signal_scores }`
+   - Extend `SimulationState` with `decisionEvidenceLogs: DecisionEvidenceLog[]` and `nudgeCounters: Record<number, number>` (keyed by decision point number)
+   - Extend `TurnResponse.turnStatus` to use the new `InputClassification`
+
+2. **Rewrite input classification (Sec 7)** — Replace `server/agents/inputValidator.ts` with a new classifier implementing:
+   - Pre-classification: format validation, session/turn confirmation, timestamp, nudge counter check (force PASS if `>=2`)
+   - 6-gate decision tree exactly as specified above (Gates 1–6 in strict order)
+   - MCQ path: always PASS, retrieve tradeoff signature, no gates
+   - NUDGE path: preserve text, increment counter, generate 1–2 clarifying questions from approved patterns, halt pipeline
+   - BLOCK path: preserve text, generate localized redirect message by trigger type (profanity/injection/off-topic/empty), log event, halt pipeline
+   - Prompt injection detection: BLOCK + `integrity_flag: true` in session state, standard redirect displayed, injection never acknowledged
+   - Localized messages in both Spanish and English based on case language config
+
+3. **Implement 5-signal extraction (Sec 2)** — Create `server/agents/signalExtractor.ts` (or refactor `evaluator.ts`):
+   - Extract all 5 signals independently with quality scoring (STRONG/PRESENT/WEAK/ABSENT)
+   - Compute RDS as sum, classify into Surface/Engaged/Integrated bands
+   - Map signals to C1–C5 competencies using the exact mapping table above
+   - Assign evidence levels per competency
+   - Handle false positives listed in the spec (question mistaken for intent, case fact restatement mistaken for justification, tautology, student-as-stakeholder, keyword presence ≠ signal presence)
+   - For MCQ: read signals from tradeoff signature, no text extraction
+
+4. **Write Decision Evidence Log to session state** — After signal extraction, persist `DecisionEvidenceLog` to `SimulationState` for the current turn. Include all fields. This data feeds the dashboard and AACSB reporting downstream.
+
+5. **Update director pipeline integration** — Modify `server/agents/director.ts`:
+   - Replace old `inputValidator` + `depthEvaluator` calls with new classifier + signal extractor
+   - Route PASS to full pipeline, NUDGE to assembly (nudge callout), BLOCK to assembly (redirect)
+   - Pass RDS band as context to narrator (Sec 3), domainExpert (Sec 4), and future explainer (Sec 5)
+   - Persist nudge counter state across submissions within same decision point
+   - Ensure existing end-to-end turn processing still works with the new components
+
+### Relevant files
+
+- `server/agents/types.ts` — new types
+- `server/agents/inputValidator.ts` — rewrite entirely
+- `server/agents/evaluator.ts` — replace with signal extractor or refactor
+- `server/agents/depthEvaluator.ts` — functionality absorbed into signal extractor (can be removed)
+- `server/agents/director.ts` — pipeline integration
+- `server/agents/guardrails.ts` — prohibited language lists (shared with Sec 3/5/6)
+- `shared/schema.ts` — SimulationState extension, new interfaces
+- `server/routes.ts` — may need updates for new turn processing flow
+
+---
+
+## #21 — Engine v2.0: Output Pipeline — KPI, Consequences, Explanations, Assembly (Sections 3 + 4 + 5 + 6)
+
+### What & Why
+
+Implement Engine Packet v2.0 Sections 3 (Consequence Generation), 4 (KPI Computation), 5 (Causal Explanations), and 6 (Response Assembly). These consume the RDS band and 5-signal data from Task #20 to produce richer, spec-compliant simulation responses. Sections 3 and 4 run in PARALLEL from the same inputs — neither determines the other. Section 5 runs after both. Section 6 assembles, validates consistency, and delivers.
+
+### Done looks like
+
+**KPI Computation (Section 4):**
+
+- 5 canonical KPIs only: K1 Budget/Financial Impact, K2 Team Morale, K3 Brand Reputation, K4 Operational Efficiency, K5 Stakeholder Trust. Professor configures 3–5 active per case.
+- Turn 1 (MCQ): direction entirely from pre-authored tradeoff signature. Applied directly, no inference.
+- FR turns: two-layer direction logic:
+  - Layer 1 (hard constraints): case directional architecture defines which directions are possible. Cannot be overridden by student signals.
+  - Layer 2 (signal-based, within constraints): Intent toward a KPI domain → positive. Tradeoff Awareness names domain as cost → negative. Stakeholder Awareness names stakeholder linked to KPI → direction depends on served/strained. Ethical Awareness → K3 and K5 flagged. No signal for domain → not affected.
+  - Direction conflict: case architecture WINS. But Integrated band + strong signal in constrained-negative domain MAY attenuate tier by one level (Tier 2→Tier 1). Direction never reverses.
+- Three-tier magnitude model:
+  - Tier 1 (Ligero/Slight): default, 60–70% of movements
+  - Tier 2 (Moderado/Moderate): requires PRESENT/STRONG signal + case permits + prior context in domain, 25–35%
+  - Tier 3 (Significativo/Significant): ONLY from pre-authored case triggers, NEVER engine-generated. Any autonomous Tier 3 → auto-downgrade to Tier 2. 5–10%.
+  - Surface band → Tier 1 only. Always.
+- Max 3 KPIs displayed per turn. Selection priority: (1) highest tier, (2) first-appearance KPIs, (3) highest signal-quality alignment, (4) narrative alignment.
+- Never-display rule: a KPI that did not move is NEVER displayed.
+- KPI accumulation state per active KPI: trajectory (positive/negative/mixed/neutral), consecutive_negative_turns, consecutive_positive_turns, last_tier.
+  - 3+ consecutive negative turns → next movement carries elevated narrative weight
+  - 4+ negative trajectory turns + PRESENT/STRONG signal → Tier 2 available even without standard conditions
+  - Recovery attenuation: positive after negative trajectory = always Tier 1. One good decision doesn't reverse accumulated damage.
+- Anti-pattern detection and correction:
+  - All KPIs same direction (when tradeoffs configured) → flip weakest-signal KPI to Tier 1 opposite, consistent with case architecture
+  - Zero movement → select KPI most aligned with intent, apply Tier 1 case-consistent direction
+  - Movement without narrative support → flag for Section 6 cross-check
+  - Tier 3 without pre-authored trigger → auto-downgrade to Tier 2
+  - Active KPI never moves across full case → check at final turn for valid Tier 1 connection
+- Display: direction arrows (↑/↓), magnitude labels only (Ligero/Moderado/Significativo), contextual KPI labels per case (not generic canonical names), "¿Por qué cambió esto?" affordance mandatory on every movement. First-appearance rule: KPI not shown until it has moved at least once.
+
+**Consequence Generation (Section 3):**
+
+- Runs in PARALLEL with Section 4. Same inputs, independent execution. Neither determines the other.
+- Every consequence narrative has 4 required elements:
+  1. Observable Outcome: concrete, specific, causal, NOT evaluative
+  2. Stakeholder Reaction: at least one named/implied stakeholder responds, consistent with prior turns, does NOT resolve tension entirely
+  3. New Information: genuinely new, relevant, deepens complexity (Half-Story Rule)
+  4. Forward Implication: connects to next decision (First + Intermediate turns only, NOT Final turn). Must NOT direct toward a specific choice.
+- RDS-governed narrative richness:
+  - Surface (1–4): 80–100 words, 1–2 outcomes, 1 stakeholder, 1 new info, minimal compounding
+  - Engaged (5–9): 100–130 words, 2–3 outcomes, 1–2 stakeholders, 1–2 new info, moderate compounding
+  - Integrated (10–15): 130–160 words, 3+ outcomes, 2+ stakeholders, 2+ new info, full compounding
+- Compounding logic (positional, not absolute turn number):
+  - FIRST: from tradeoff signature only, no compounding, include forward implication
+  - INTERMEDIATE: current signals + full prior history, reference ≥1 element from prior consequence, check stakeholder continuity, compound metrics if prior KPI stress, include forward implication. In 7+ turn cases: reference patterns across earlier turns.
+  - FINAL: current signals + full session history, reference cumulative trajectory across ALL turns, surface tension/coherence of choices, NO forward implication
+- Scaffolding progression: First 25% clear/direct, Middle 50% compounding begins, Final 25% full complexity
+- Tradeoff configuration (CRITICAL — the original plan had this WRONG):
+  - State A: Professor provided specific tradeoff text → engine anchors consequence to professor-defined tradeoff
+  - State B: Enabled, no specific text → engine generates realistic tradeoffs from signals and KPI dynamics
+  - State C: Not configured → engine does not force tradeoff, but must NOT produce artificially rosy outcomes
+- 4 tone tests before delivery: Lecture Test, Praise Test, Hint Test, Reality Test
+- 7 quality gates: G1 prohibited language, G2 answer-giving, G3 causal traceability, G4 tradeoff config compliance, G5 stakeholder continuity, G6 four elements present, G7 tone tests pass
+- PROHIBITED LANGUAGE (enforced via post-generation scan): "Correct"/"Incorrect", "Best"/"Optimal"/"Ideal", "Good decision"/"Poor decision", "Well done"/"Good job", "You should have", "Unfortunately"/"Fortunately"/"Sadly", "Surprisingly", exclamation points (!), any phrasing that makes one next response seem clearly correct
+- Regeneration: once per turn, Section 3 regenerates (different scene, same trajectory), Section 4 does NOT re-run (KPIs locked), Section 5 regenerates for new narrative alignment
+
+**Causal Explanations (Section 5) — CURRENTLY MISSING, NEW:**
+
+- One explanation per displayed KPI movement, generated AFTER Sections 3+4 complete
+- Three-part structure (CRITICAL — the original plan had this WRONG):
+  1. **Decision Reference**: what the student decided, in organizational terms. Third-person ("La decisión de..."). NEVER second-person. NEVER evaluative.
+  2. **Causal Mechanism**: HOW the decision produced the effect in this KPI domain. The organizational pathway. Must be causally defensible. NEVER evaluative.
+  3. **Directional Connection**: WHY the mechanism moved the metric in this direction. One sentence. No judgment.
+- NOTE: There is NO "what it means going forward" component. Forward-looking prescriptions are EXPLICITLY PROHIBITED. The original plan was wrong on this.
+- RDS-governed depth:
+  - Surface: 2 sentences, Components 1+3 (mechanism implied), no signal anchoring
+  - Engaged: 2–3 sentences, all 3 components, light signal anchoring (references signal domain)
+  - Integrated: 3–4 sentences, all 3 components case-specific, direct signal anchoring (paraphrases STRONG signals)
+- Signal anchoring by type: Intent STRONG → Decision Reference echoes priority. Justification STRONG → Mechanism references student's causal reasoning. Tradeoff STRONG → Directional connection validates anticipated cost. Stakeholder STRONG → Mechanism references specific named stakeholder. Ethical STRONG → Mechanism references ethical dimension surfaced.
+- Anti-pattern correction explanations: when Section 4 forced a movement, find the legitimate indirect causal connection. Never reveal correction logic. Use indirect pathway language.
+- Hint Test (CRITICAL): Does the explanation prescribe a specific corrective action for the next decision? If yes → prohibited. Describe the organizational mechanism, never name the specific gap or corrective action.
+- 6 quality gates: G1 decision reference present, G2 causal mechanism present, G3 no prohibited language, G4 Hint Test passes, G5 length compliance, G6 narrative consistency
+
+**Response Assembly (Section 6):**
+
+- Three distinct assembly pathways:
+  - PASS → Intermediate Turn: [1] Decision Acknowledgment (optional), [2] Consequence Narrative, [3] KPI Panel (max 3, each with label+direction+magnitude+"Why?" button), [4] Next Decision Prompt
+  - PASS → Final Turn: [1] Decision Acknowledgment, [2] Consequence Narrative (no forward implication), [3] KPI Panel with cumulative trajectory indicators, [4] Final Outcome Narrative (120–200 words, trajectory summary, sense of accomplishment, open-ended future, NEVER graded), [5] Reflection Prompt (optional, skippable, never evaluated)
+  - NUDGE: student text preserved in input field, nudge callout adjacent (not in main response area), submit button active with standard label
+  - BLOCK: student text preserved, redirect message above input, submit button active
+- Decision Acknowledgment rules: include when Intent PRESENT or STRONG (FR) or MCQ. Omit when Intent WEAK or ABSENT. MCQ: "Opción seleccionada: [text]". FR: "Dirección tomada: [paraphrase]". NEVER evaluative, NEVER second-person.
+- 3 cross-section consistency checks:
+  1. Narrative-KPI Domain Alignment: every displayed KPI must correspond to a domain in the narrative. Fix: targeted 1-sentence narrative extension, or remove KPI from display.
+  2. Narrative-Explanation Contradiction: no explanation contradicts narrative facts. Fix: KPI data = source of truth, targeted narrative regeneration.
+  3. Explanation-KPI Data Alignment: each explanation correctly reflects direction and tier. Fix: targeted Section 5 regeneration.
+- Graceful degradation hierarchy:
+  - Section 3 fails → KPIs + explanations only + "El resumen narrativo no está disponible en este momento."
+  - Section 4 fails → Narrative only + "Los indicadores de impacto no están disponibles en este momento."
+  - Section 5 fails → Narrative + KPIs, "Why?" shows "Esta explicación no está disponible en este momento."
+  - All fail → "Hubo un problema al procesar tu respuesta. Tu decisión y progreso han sido guardados."
+- Rules: student input ALWAYS preserved, session progress ALWAYS preserved, turn counter does NOT advance during error, no technical language visible, never implies student fault
+- Session state update after delivery: turn data, signals, RDS band, KPI movements, competency evidence, narrative delivered, nudge count
+
+### Out of scope
+
+- Frontend UI redesign for new response structure
+- Changes to authoring studio or scenario creation flow
+- Professor analytics/dashboard updates for new signal/competency data
+- Performance optimization or caching
+
+### Tasks
+
+1. **Upgrade KPI computation with accumulation state and tier model (Sec 4)** — Refactor `server/agents/domainExpert.ts`:
+   - Add per-indicator accumulation state to `SimulationState`: trajectory, consecutive_negative/positive_turns, last_tier
+   - Implement two-layer direction logic: Layer 1 (case architecture) → Layer 2 (signal-based within constraints)
+   - Implement 3-tier magnitude model: Tier 1 default, Tier 2 conditional, Tier 3 pre-authored only (auto-downgrade any autonomous Tier 3)
+   - Surface band → Tier 1 only, always
+   - Tier attenuation: strong Tradeoff Awareness for constrained-negative → reduce tier by 1
+   - Max 3 KPIs displayed per turn with 4-level selection priority
+   - Anti-pattern detection and correction (uniform direction, zero movement, Tier 3 without trigger, movement without narrative support)
+   - Accumulation rules: consecutive stress escalation (3+), tier escalation (4+), recovery attenuation
+   - Display: contextual labels, direction arrows, magnitude labels only (no numbers/percentages), first-appearance rule
+
+2. **Restructure consequence generation with 4 elements and quality gates (Sec 3)** — Refactor `server/agents/narrator.ts`:
+   - Restructure prompt to produce 4 required elements (Observable Outcome, Stakeholder Reaction, New Information, Forward Implication)
+   - Scale richness by RDS band (Surface/Engaged/Integrated word counts and complexity)
+   - Implement compounding logic by position (First/Intermediate/Final) — full prior history required
+   - Handle tradeoff configuration states A/B/C correctly (professor text / enabled-no-text / not configured)
+   - Scaffolding progression by position in case
+   - Post-generation: prohibited language scan, 4 tone tests, 7 quality gates
+   - Regeneration support: different scene, same trajectory, same tradeoff, KPIs locked
+
+3. **Implement structured causal explanations — NEW (Sec 5)** — Create `server/agents/causalExplainer.ts`:
+   - 3-part structure per KPI movement: Decision Reference + Causal Mechanism + Directional Connection
+   - Scale by RDS band (2 sentences Surface, 2–3 Engaged, 3–4 Integrated)
+   - Signal anchoring at Engaged/Integrated bands by signal type
+   - Anti-pattern correction explanations: find indirect causal pathway, never reveal correction logic
+   - Hint Test on every explanation: no forward-looking prescriptions, no corrective action suggestions
+   - MCQ explanations from tradeoff signature (no signal anchoring)
+   - 6 quality gates
+
+4. **Build response assembly with consistency checks and routing (Sec 6)** — Refactor `server/agents/director.ts` (assembly portion):
+   - Input validation: all required inputs present before assembly
+   - 3 cross-section consistency checks (narrative-KPI alignment, narrative-explanation contradiction, explanation-KPI data alignment)
+   - Routing: PASS Intermediate, PASS Final, NUDGE, BLOCK — four distinct response structures
+   - Decision acknowledgment rules (include/omit based on Intent signal quality)
+   - Graceful degradation hierarchy for partial failures
+   - Session state update after delivery (all turn data for compounding)
+   - 7 quality gates on assembled response
+
+5. **Integration, pipeline wiring, and verification** — Wire all components through director:
+   - Full pipeline: Input → Classification (S7) → Signal Extraction (S2) → [KPI (S4) + Narrative (S3) in PARALLEL] → Causal Explanations (S5) → Assembly (S6) → Delivery + State Update
+   - NUDGE path: S7 → Classification → S6 (nudge assembly)
+   - BLOCK path: S7 → Classification → S6 (redirect assembly)
+   - Verify state persistence across multi-turn sessions (4–10 turns)
+   - Test compounding across turns (stakeholder memory, KPI accumulation, posture consistency)
+   - Test graceful degradation by simulating individual agent failures
+   - Test regeneration flow (S3 regenerates, S4 locked, S5 regenerates)
+
+### Relevant files
+
+- `server/agents/domainExpert.ts` — KPI computation refactor
+- `server/agents/narrator.ts` — consequence generation refactor
+- `server/agents/causalExplainer.ts` — NEW file for causal explanations
+- `server/agents/director.ts` — pipeline orchestration + assembly refactor
+- `server/agents/types.ts` — extended types from Task #20
+- `server/agents/guardrails.ts` — prohibited language lists shared across S3/S5/S6
+- `shared/schema.ts` — SimulationState extensions (accumulation state, KPI display config)
+- `server/routes.ts` — turn processing flow updates
+
+---
+
+## KEY CORRECTIONS FROM ORIGINAL PLANS
+
+### Task #20 corrections:
+1. **Competency mapping was WRONG.** Original had C1=Strategic Decision-Making, C2=Stakeholder Management, etc. Corrected to spec: C1=Analytical Reasoning (←Justification), C2=Strategic Decision-Making (←Intent), C3=Stakeholder Consideration (←StakeholderAwareness), C4=Ethical Reasoning (←EthicalAwareness), C5=Systems Awareness (←TradeoffAwareness).
+2. **Gate tree was wrong.** Original added a "Gibberish" gate not in spec and missed the NUDGE path (Gate 6). Corrected to spec's 6 gates.
+3. **MCQ handling was missing.** MCQ is always PASS, always Turn 1, reads tradeoff signature — no classification.
+4. **Pre-classification processing was missing.** Format validation, session confirmation, timestamp, nudge counter check must happen BEFORE the gate tree.
+5. **NUDGE details were thin.** Added full NUDGE behavior: text preservation, approved nudge patterns, prohibited nudge content, nudge counter rules.
+
+### Task #21 corrections:
+1. **Tradeoff states were COMPLETELY WRONG.** Original said A=acknowledged by student, B=missed by student, C=no tradeoff exists. CORRECTED to spec: A=professor provided specific text, B=enabled without text, C=not configured. This is a professor configuration, not a student behavior.
+2. **Causal explanation structure was WRONG.** Original said "what it means going forward." The spec EXPLICITLY PROHIBITS forward-looking content in explanations. Corrected to spec's 3-part structure: Decision Reference, Causal Mechanism, Directional Connection.
+3. **Tier 3 rule was missing.** Tier 3 is ONLY from pre-authored case triggers, NEVER engine-generated. Any autonomous Tier 3 must auto-downgrade to Tier 2.
+4. **Parallel execution was missing.** Sections 3 and 4 MUST run in parallel. Neither determines the other.
+5. **KPI accumulation rules were incomplete.** Added consecutive stress escalation (3+), tier escalation (4+), recovery attenuation (positive after negative = always Tier 1).
+6. **Response assembly routing structures were missing.** Four distinct pathways: PASS Intermediate, PASS Final, NUDGE, BLOCK.
+7. **Display rules were incomplete.** Added contextual KPI labels, first-appearance rule, no numbers/percentages, "Why?" affordance mandatory.
+8. **Signal anchoring rules by signal type were missing.** Each signal type has a specific anchoring approach in causal explanations.
