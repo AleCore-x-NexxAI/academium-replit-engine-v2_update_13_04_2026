@@ -49,6 +49,7 @@ export interface DecisionEvidenceLog {
     stakeholderAwareness: number;
     ethicalAwareness: number;
   };
+  isMcq?: boolean;
 }
 
 export type InputClassificationType = "PASS" | "NUDGE" | "BLOCK";

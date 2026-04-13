@@ -264,7 +264,7 @@ export async function processReflection(
 }
 
 function buildMcqSignals(decisionPoint?: DecisionPoint): SignalExtractionResult {
-  const tradeoffSignature = (decisionPoint as any)?.tradeoffSignature;
+  const tradeoffSignature = decisionPoint?.tradeoffSignature;
   const hasTradeoff = tradeoffSignature && typeof tradeoffSignature === "object";
 
   return {
@@ -272,7 +272,9 @@ function buildMcqSignals(decisionPoint?: DecisionPoint): SignalExtractionResult 
     justification: { quality: SignalQuality.ABSENT, extracted_text: "" },
     tradeoffAwareness: {
       quality: hasTradeoff ? SignalQuality.PRESENT : SignalQuality.ABSENT,
-      extracted_text: hasTradeoff ? JSON.stringify(tradeoffSignature) : "",
+      extracted_text: hasTradeoff
+        ? `${tradeoffSignature.dimension}: ${tradeoffSignature.cost} vs ${tradeoffSignature.benefit}`
+        : "",
     },
     stakeholderAwareness: { quality: SignalQuality.ABSENT, extracted_text: "" },
     ethicalAwareness: { quality: SignalQuality.ABSENT, extracted_text: "" },
@@ -476,11 +478,10 @@ export async function processStudentTurn(
 
   if (isMcq) {
     const mcqSignals = buildMcqSignals(decisionPoint);
-    const rds = computeRDS(mcqSignals);
     evidenceLog = {
       signals_detected: mcqSignals,
-      rds_score: rds,
-      rds_band: classifyRDSBand(rds),
+      rds_score: -1,
+      rds_band: RDSBand.SURFACE,
       competency_evidence: mapCompetencyEvidence(mcqSignals),
       raw_signal_scores: {
         intent: mcqSignals.intent.quality,
@@ -489,6 +490,7 @@ export async function processStudentTurn(
         stakeholderAwareness: mcqSignals.stakeholderAwareness.quality,
         ethicalAwareness: mcqSignals.ethicalAwareness.quality,
       },
+      isMcq: true,
     };
     storage.createTurnEvent({
       sessionId: context.sessionId,
@@ -499,8 +501,7 @@ export async function processStudentTurn(
         agentName: "signalExtractor",
         durationMs: 0,
         source: "mcq_signature",
-        rds_score: evidenceLog.rds_score,
-        rds_band: evidenceLog.rds_band,
+        isMcq: true,
         signals: evidenceLog.raw_signal_scores,
       },
     }).catch(err => console.error("[TurnEvent] Failed to log signalExtractor (MCQ):", err));

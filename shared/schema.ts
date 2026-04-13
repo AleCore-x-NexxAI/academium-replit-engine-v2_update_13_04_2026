@@ -228,19 +228,23 @@ export interface KPIs {
 }
 
 // Decision point configuration for structured simulations
+export interface TradeoffSignature {
+  dimension: string;
+  cost: string;
+  benefit: string;
+}
+
 export interface DecisionPoint {
-  number: number; // 1, 2, 3, etc.
-  format: "multiple_choice" | "written"; // Input format
-  prompt: string; // The decision prompt/question
-  options?: string[]; // For multiple_choice format
-  requiresJustification: boolean; // Whether student must explain their reasoning
-  includesReflection: boolean; // Whether to prompt for reflection after consequences
-  // S7.1: Focus cue to help students orient their thinking (2-3 key dimensions)
-  focusCue?: string; // e.g., "Considera el impacto en el equipo, los plazos y el riesgo."
-  // S5.1: Thinking scaffold - 2-3 bullets to guide reasoning (NO answers, NO best practices)
-  thinkingScaffold?: string[]; // e.g., ["Impacto en el equipo", "Riesgo vs velocidad", "Consecuencias a corto vs largo plazo"]
-  // S5/S6.2: Professor-configured depth strictness per decision
+  number: number;
+  format: "multiple_choice" | "written";
+  prompt: string;
+  options?: string[];
+  requiresJustification: boolean;
+  includesReflection: boolean;
+  focusCue?: string;
+  thinkingScaffold?: string[];
   depthStrictness?: "lenient" | "standard" | "strict";
+  tradeoffSignature?: TradeoffSignature;
 }
 
 // POC Indicator - Constitution Section 9: each indicator has name, definition, directionality, and tooltip
@@ -369,6 +373,7 @@ export interface DecisionEvidenceLogEntry {
     stakeholderAwareness: number;
     ethicalAwareness: number;
   };
+  isMcq?: boolean;
 }
 
 export interface SimulationState {
