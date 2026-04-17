@@ -1179,7 +1179,7 @@ export async function processStudentTurn(
     ],
   };
 
-  if (decisionsComplete) {
+  if (decisionsComplete || isGameOver) {
     try {
       const allEvidenceLogs = [...existingEvidenceLogs, evidenceEntry];
       const allFrameworkDetections = [...(context.framework_detections || []), frameworkDetections];
