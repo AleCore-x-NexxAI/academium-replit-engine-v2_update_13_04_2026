@@ -268,8 +268,8 @@ export default function SimulationManagement() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => navigate(`/scenarios/${scenarioId}/analytics`)}
-              data-testid="button-analytics"
+              onClick={() => navigate(`/scenarios/${scenarioId}/dashboard`)}
+              data-testid="button-dashboard"
             >
               <BarChart3 className="w-4 h-4 mr-2" />
               {t("simulationManagement.analytics")}

@@ -30,7 +30,8 @@ function stripProfessorFields(turnResponse: TurnResponse): TurnResponse {
 }
 import { llmUsageLogs } from "@shared/schema";
 import { db } from "./db";
-import { gte, desc } from "drizzle-orm";
+import { gte, desc, eq } from "drizzle-orm";
+import { turns as turnsTable } from "@shared/schema";
 import { 
   extractInsights, 
   generateScenario, 
@@ -2991,6 +2992,634 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
     } catch (error) {
       console.error("Error getting queue status:", error);
       res.status(500).json({ message: "Failed to get queue status" });
+    }
+  });
+
+  const dashboardCache = new Map<string, { data: any; expiry: number }>();
+  function getCached(key: string) {
+    const entry = dashboardCache.get(key);
+    if (entry && entry.expiry > Date.now()) return entry.data;
+    return null;
+  }
+  function setCache(key: string, data: any) {
+    dashboardCache.set(key, { data, expiry: Date.now() + 5 * 60 * 1000 });
+  }
+
+  async function verifyScenarioOwner(req: any, res: any, scenarioId: string) {
+    const userId = req.user.claims.sub;
+    const user = await storage.getUser(userId);
+    if (!user || (user.role !== "professor" && user.role !== "admin")) {
+      res.status(403).json({ message: "Professor access required" });
+      return null;
+    }
+    const scenario = await storage.getScenario(scenarioId);
+    if (!scenario) {
+      res.status(404).json({ message: "Scenario not found" });
+      return null;
+    }
+    if (scenario.authorId !== userId && user.role !== "admin") {
+      res.status(403).json({ message: "Not authorized for this scenario" });
+      return null;
+    }
+    return { user, scenario };
+  }
+
+  function getSessionsWithTurns(scenarioId: string) {
+    return storage.getSessionsByScenario(scenarioId).then(async (sessions) => {
+      const sessionsData = [];
+      for (const session of sessions) {
+        const turnsList = await db
+          .select()
+          .from(turnsTable)
+          .where(eq(turnsTable.sessionId, session.id))
+          .orderBy(turnsTable.turnNumber);
+        sessionsData.push({ session, turns: turnsList });
+      }
+      return sessionsData;
+    });
+  }
+
+  app.post("/api/scenarios/:scenarioId/class-stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const { scenarioId } = req.params;
+      const cached = getCached(`class-stats-${scenarioId}`);
+      if (cached) return res.json(cached);
+
+      const auth = await verifyScenarioOwner(req, res, scenarioId);
+      if (!auth) return;
+
+      const sessionsData = await getSessionsWithTurns(scenarioId);
+      const completed = sessionsData.filter(s => s.session.status === "completed");
+      const inProgress = sessionsData.filter(s => s.session.status === "active");
+
+      let biggestDropPoint: { turn: number; delta: number } | null = null;
+      if (completed.length > 0) {
+        const maxTurns = Math.max(...completed.map(s => s.turns.length));
+        const avgByTurn: number[] = [];
+        for (let t = 0; t < maxTurns; t++) {
+          let sum = 0, count = 0;
+          for (const s of completed) {
+            if (s.turns[t]) {
+              const resp = s.turns[t].agentResponse as any;
+              const band = resp?.updatedState?.decisionEvidenceLogs?.[t]?.rds_band;
+              const val = band === "INTEGRATED" ? 3 : band === "ENGAGED" ? 2 : 1;
+              sum += val;
+              count++;
+            }
+          }
+          avgByTurn.push(count > 0 ? sum / count : 0);
+        }
+        let maxDrop = 0;
+        for (let t = 1; t < avgByTurn.length; t++) {
+          const delta = avgByTurn[t] - avgByTurn[t - 1];
+          if (delta < maxDrop) {
+            maxDrop = delta;
+            biggestDropPoint = { turn: t + 1, delta: Math.round(delta * 10) / 10 };
+          }
+        }
+      }
+
+      let appliedCourseTheory: { n: number; m: number } | null = null;
+      const scenario = auth.scenario;
+      const initialState = scenario.initialState as any;
+      const frameworks = initialState?.frameworks;
+      if (frameworks && frameworks.length > 0 && completed.length > 0) {
+        let n = 0;
+        for (const s of completed) {
+          const state = s.session.currentState as any;
+          const fwDetections = state?.framework_detections || [];
+          const hasApplied = fwDetections.some((turnDetections: any[]) =>
+            turnDetections?.some((d: any) => d.level === "explicit" || d.level === "implicit")
+          );
+          if (hasApplied) n++;
+        }
+        appliedCourseTheory = { n, m: completed.length };
+      }
+
+      const result = {
+        completed: completed.length,
+        inProgress: inProgress.length,
+        biggestDropPoint,
+        appliedCourseTheory,
+      };
+      setCache(`class-stats-${scenarioId}`, result);
+      res.json(result);
+    } catch (error) {
+      console.error("Error computing class stats:", error);
+      res.status(500).json({ message: "Failed to compute class stats" });
+    }
+  });
+
+  app.post("/api/scenarios/:scenarioId/module-health", isAuthenticated, async (req: any, res) => {
+    try {
+      const { scenarioId } = req.params;
+      const cached = getCached(`module-health-${scenarioId}`);
+      if (cached) return res.json(cached);
+
+      const auth = await verifyScenarioOwner(req, res, scenarioId);
+      if (!auth) return;
+
+      const scenario = auth.scenario;
+      const initialState = scenario.initialState as any;
+      const frameworks: any[] = initialState?.frameworks || [];
+      const language = (scenario.initialState as any)?.language || scenario.language || "es";
+      const isEn = language === "en";
+
+      if (frameworks.length === 0) {
+        const result = { frameworks: [], classDebriefOpener: null };
+        setCache(`module-health-${scenarioId}`, result);
+        return res.json(result);
+      }
+
+      const sessionsData = await getSessionsWithTurns(scenarioId);
+      const completed = sessionsData.filter(s => s.session.status === "completed");
+
+      const frameworkResults = frameworks.map((fw: any) => {
+        let appliedCount = 0;
+        const evidenceTexts: string[] = [];
+        for (const s of completed) {
+          const state = s.session.currentState as any;
+          const fwDetections: any[][] = state?.framework_detections || [];
+          let applied = false;
+          for (const turnDets of fwDetections) {
+            const det = turnDets?.find((d: any) => d.framework_id === fw.id);
+            if (det && (det.level === "explicit" || det.level === "implicit")) {
+              applied = true;
+              if (det.evidence) evidenceTexts.push(det.evidence);
+            }
+          }
+          if (applied) appliedCount++;
+        }
+
+        const rate = completed.length > 0 ? appliedCount / completed.length : 0;
+        let status: string;
+        if (rate >= 0.60) status = "transferring";
+        else if (rate >= 0.20) status = "developing";
+        else if (rate > 0) status = "not_yet_evidenced";
+        else status = "absent";
+
+        const description = completed.length > 0
+          ? (isEn
+            ? `${appliedCount} of ${completed.length} students showed application of ${fw.name}. ${evidenceTexts.length > 0 ? evidenceTexts[0].substring(0, 100) : "No detailed evidence collected."}`
+            : `${appliedCount} de ${completed.length} estudiantes mostraron aplicación de ${fw.name}. ${evidenceTexts.length > 0 ? evidenceTexts[0].substring(0, 100) : "No se recopiló evidencia detallada."}`)
+          : (isEn ? "No completed sessions yet." : "No hay sesiones completadas aún.");
+
+        return {
+          id: fw.id,
+          name: fw.name,
+          status,
+          description,
+          deeperDescription: description,
+        };
+      });
+
+      const classDebriefOpener = isEn
+        ? "What framework were students working from when making their decisions, and what would it have looked like if they had named it explicitly?"
+        : "¿Desde qué marco estaban trabajando los estudiantes al tomar sus decisiones, y cómo se vería si lo nombraran explícitamente?";
+
+      const result = { frameworks: frameworkResults, classDebriefOpener };
+      setCache(`module-health-${scenarioId}`, result);
+      res.json(result);
+    } catch (error) {
+      console.error("Error computing module health:", error);
+      res.status(500).json({ message: "Failed to compute module health" });
+    }
+  });
+
+  app.post("/api/scenarios/:scenarioId/depth-trajectory", isAuthenticated, async (req: any, res) => {
+    try {
+      const { scenarioId } = req.params;
+      const cached = getCached(`depth-trajectory-${scenarioId}`);
+      if (cached) return res.json(cached);
+
+      const auth = await verifyScenarioOwner(req, res, scenarioId);
+      if (!auth) return;
+
+      const sessionsData = await getSessionsWithTurns(scenarioId);
+      const completed = sessionsData.filter(s => s.session.status === "completed");
+      const language = (auth.scenario.initialState as any)?.language || auth.scenario.language || "es";
+      const isEn = language === "en";
+
+      if (completed.length === 0) {
+        const result = { points: [], annotations: [] };
+        setCache(`depth-trajectory-${scenarioId}`, result);
+        return res.json(result);
+      }
+
+      const maxTurns = Math.max(...completed.map(s => s.turns.length));
+      const points: any[] = [];
+      const annotations: any[] = [];
+
+      for (let t = 0; t < maxTurns; t++) {
+        let sum = 0, count = 0;
+        for (const s of completed) {
+          const state = s.session.currentState as any;
+          const logs = state?.decisionEvidenceLogs || [];
+          if (logs[t]) {
+            const band = logs[t].rds_band;
+            sum += band === "INTEGRATED" ? 3 : band === "ENGAGED" ? 2 : 1;
+            count++;
+          }
+        }
+        const avg = count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
+        const color = avg >= 2.5 ? "green" : avg >= 1.5 ? "blue" : "amber";
+        points.push({ turn: t + 1, avg, color });
+
+        let label: string;
+        if (t === 0) {
+          label = avg >= 2.5 ? "Integrated" : avg >= 1.5 ? "Engaged" : "Surface";
+        } else {
+          const prev = points[t - 1].avg;
+          if (avg >= 2.5) label = "Peaked";
+          else if (avg >= 1.5) label = "Engaged";
+          else label = avg < prev ? "Dropped" : "Surface";
+        }
+
+        const descriptionEn = t === 0
+          ? "Initial turn established baseline reasoning depth across the class."
+          : avg > points[t - 1].avg
+            ? "Reasoning depth increased from the previous turn."
+            : avg < points[t - 1].avg
+              ? "Reasoning depth decreased compared to the previous turn."
+              : "Reasoning depth remained consistent with the previous turn.";
+        const descriptionEs = t === 0
+          ? "El turno inicial estableció la profundidad de razonamiento base de la clase."
+          : avg > points[t - 1].avg
+            ? "La profundidad de razonamiento aumentó respecto al turno anterior."
+            : avg < points[t - 1].avg
+              ? "La profundidad de razonamiento disminuyó respecto al turno anterior."
+              : "La profundidad de razonamiento se mantuvo consistente con el turno anterior.";
+
+        annotations.push({ turn: t + 1, label, description: isEn ? descriptionEn : descriptionEs });
+      }
+
+      const result = { points, annotations };
+      setCache(`depth-trajectory-${scenarioId}`, result);
+      res.json(result);
+    } catch (error) {
+      console.error("Error computing depth trajectory:", error);
+      res.status(500).json({ message: "Failed to compute depth trajectory" });
+    }
+  });
+
+  app.post("/api/scenarios/:scenarioId/class-patterns", isAuthenticated, async (req: any, res) => {
+    try {
+      const { scenarioId } = req.params;
+      const cached = getCached(`class-patterns-${scenarioId}`);
+      if (cached) return res.json(cached);
+
+      const auth = await verifyScenarioOwner(req, res, scenarioId);
+      if (!auth) return;
+
+      const sessionsData = await getSessionsWithTurns(scenarioId);
+      const completed = sessionsData.filter(s => s.session.status === "completed");
+      const language = (auth.scenario.initialState as any)?.language || auth.scenario.language || "es";
+      const isEn = language === "en";
+
+      const competencyMap: Record<string, { name: string; nameEs: string; count: number; total: number }> = {
+        C1: { name: "Analytical reasoning", nameEs: "Razonamiento analítico", count: 0, total: 0 },
+        C2: { name: "Strategic decision-making", nameEs: "Toma de decisiones estratégicas", count: 0, total: 0 },
+        C3: { name: "Stakeholder consideration", nameEs: "Consideración de stakeholders", count: 0, total: 0 },
+        C4: { name: "Ethical reasoning", nameEs: "Razonamiento ético", count: 0, total: 0 },
+        C5: { name: "Tradeoff awareness", nameEs: "Conciencia de tradeoffs", count: 0, total: 0 },
+      };
+
+      for (const s of completed) {
+        const state = s.session.currentState as any;
+        const logs = state?.decisionEvidenceLogs || [];
+        for (const log of logs) {
+          const evidence = log.competency_evidence || {};
+          for (const [key, info] of Object.entries(competencyMap)) {
+            info.total++;
+            const compEvidence = evidence[key];
+            if (compEvidence === "demonstrated" || compEvidence === "emerging") {
+              info.count++;
+            }
+          }
+        }
+      }
+
+      const patterns = Object.entries(competencyMap).map(([id, info]) => {
+        const rate = info.total > 0 ? info.count / info.total : 0;
+        let status: string;
+        if (rate >= 0.60) status = "transferring";
+        else if (rate >= 0.20) status = "developing";
+        else status = "not_yet_evidenced";
+
+        return {
+          id,
+          name: isEn ? info.name : info.nameEs,
+          rate: Math.round(rate * 100) / 100,
+          status,
+          description: isEn
+            ? `Observed in ${info.count} of ${info.total} turn-level assessments across the class.`
+            : `Observado en ${info.count} de ${info.total} evaluaciones a nivel de turno en toda la clase.`,
+        };
+      });
+
+      patterns.sort((a, b) => b.rate - a.rate);
+
+      const result = { patterns };
+      setCache(`class-patterns-${scenarioId}`, result);
+      res.json(result);
+    } catch (error) {
+      console.error("Error computing class patterns:", error);
+      res.status(500).json({ message: "Failed to compute class patterns" });
+    }
+  });
+
+  app.get("/api/scenarios/:scenarioId/students-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const { scenarioId } = req.params;
+      const auth = await verifyScenarioOwner(req, res, scenarioId);
+      if (!auth) return;
+
+      const language = (auth.scenario.initialState as any)?.language || auth.scenario.language || "es";
+      const isEn = language === "en";
+      const sessionsData = await getSessionsWithTurns(scenarioId);
+
+      const students = sessionsData.map(({ session, turns: turnsList }) => {
+        const state = session.currentState as any;
+        const logs = state?.decisionEvidenceLogs || [];
+        const isComplete = session.status === "completed";
+
+        const arc: any[] = [];
+        for (let i = 0; i < logs.length; i++) {
+          const band = logs[i]?.rds_band || "SURFACE";
+          const color = band === "INTEGRATED" ? "#1D9E75" : band === "ENGAGED" ? "#378ADD" : "#BA7517";
+          arc.push({ turn: i + 1, band: band.toLowerCase(), color });
+        }
+
+        let arcLabel = isEn ? "Available when completed" : "Disponible al completar";
+        if (isComplete && arc.length > 0) {
+          const bands = arc.map(a => a.band);
+          const allSame = bands.every(b => b === bands[0]);
+          if (allSame) arcLabel = isEn ? "Consistent throughout" : "Consistente";
+          else {
+            const peak = bands.indexOf("integrated");
+            const lastDrop = bands.lastIndexOf("surface");
+            if (peak >= 0 && lastDrop > peak) arcLabel = isEn ? `Peaked T${peak + 1} · dropped T${lastDrop + 1}` : `Pico T${peak + 1} · bajó T${lastDrop + 1}`;
+            else if (bands.every((b, i) => i === 0 || bands[i] >= bands[i - 1])) arcLabel = isEn ? `Late activator · improved T${bands.length}` : `Activación tardía · mejoró T${bands.length}`;
+            else if (bands.every((b, i) => i === 0 || bands[i] <= bands[i - 1])) arcLabel = isEn ? `Early peak · dropped T${bands.length}` : `Pico temprano · bajó T${bands.length}`;
+            else arcLabel = isEn ? "Mixed depth" : "Profundidad mixta";
+          }
+        }
+
+        const keyPattern = isComplete
+          ? (state?.dashboard_summary?.session_headline || "—")
+          : "—";
+
+        return {
+          sessionId: session.id,
+          name: (session as any).user?.firstName
+            ? `${(session as any).user.firstName} ${(session as any).user.lastName || ""}`.trim()
+            : (session as any).user?.email || "Student",
+          email: (session as any).user?.email || "",
+          status: session.status,
+          arc: isComplete ? arc : [],
+          arcLabel,
+          keyPattern,
+          canView: isComplete,
+        };
+      });
+
+      res.json({ students });
+    } catch (error) {
+      console.error("Error computing students summary:", error);
+      res.status(500).json({ message: "Failed to compute students summary" });
+    }
+  });
+
+  async function verifySessionAccess(req: any, res: any, sessionId: string) {
+    const userId = req.user.claims.sub;
+    const user = await storage.getUser(userId);
+    if (!user || (user.role !== "professor" && user.role !== "admin")) {
+      res.status(403).json({ message: "Professor access required" });
+      return null;
+    }
+    const sessionData = await storage.getSessionWithConversation(sessionId);
+    if (!sessionData) {
+      res.status(404).json({ message: "Session not found" });
+      return null;
+    }
+    const scenario = await storage.getScenario(sessionData.session.scenarioId);
+    if (!scenario) {
+      res.status(404).json({ message: "Scenario not found" });
+      return null;
+    }
+    if (scenario.authorId !== userId && user.role !== "admin") {
+      res.status(403).json({ message: "Not authorized for this session" });
+      return null;
+    }
+    return sessionData;
+  }
+
+  app.get("/api/sessions/:sessionId/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const sessionData = await verifySessionAccess(req, res, sessionId);
+      if (!sessionData) return;
+
+      const { session, turns: turnsList } = sessionData;
+      const state = session.currentState as any;
+      const logs = state?.decisionEvidenceLogs || [];
+
+      const arc = logs.map((log: any, i: number) => {
+        const band = log?.rds_band || "SURFACE";
+        const color = band === "INTEGRATED" ? "#1D9E75" : band === "ENGAGED" ? "#378ADD" : "#BA7517";
+        return { turn: i + 1, band: band.toLowerCase(), color };
+      });
+
+      res.json({
+        studentName: (session as any).user?.firstName
+          ? `${(session as any).user.firstName} ${(session as any).user.lastName || ""}`.trim()
+          : (session as any).user?.email || "Student",
+        scenarioTitle: (session as any).scenario?.title || "",
+        completedAt: session.updatedAt,
+        dashboardSummary: state?.dashboard_summary || null,
+        arc,
+      });
+    } catch (error) {
+      console.error("Error getting session summary:", error);
+      res.status(500).json({ message: "Failed to get session summary" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/chat-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const sessionData = await verifySessionAccess(req, res, sessionId);
+      if (!sessionData) return;
+
+      const scenario = await storage.getScenario(sessionData.session.scenarioId);
+      const decisionPoints = (scenario?.initialState as any)?.decisionPoints || [];
+
+      const chatTurns = sessionData.turns.map((turn) => {
+        const dp = decisionPoints.find((d: any) => d.number === turn.turnNumber);
+        return {
+          number: turn.turnNumber,
+          type: dp?.format === "multiple_choice" ? "mcq" : "free_response",
+          prompt: dp?.prompt || dp?.situation || "",
+          studentInput: turn.studentInput,
+        };
+      });
+
+      res.json({ turns: chatTurns });
+    } catch (error) {
+      console.error("Error getting chat history:", error);
+      res.status(500).json({ message: "Failed to get chat history" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/debrief-prep", isAuthenticated, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const sessionData = await verifySessionAccess(req, res, sessionId);
+      if (!sessionData) return;
+
+      const state = sessionData.session.currentState as any;
+      const logs = state?.decisionEvidenceLogs || [];
+      const scenario = await storage.getScenario(sessionData.session.scenarioId);
+      const decisionPoints = (scenario?.initialState as any)?.decisionPoints || [];
+
+      const debriefTurns = sessionData.turns.map((turn) => {
+        const resp = turn.agentResponse as any;
+        const dp = decisionPoints.find((d: any) => d.number === turn.turnNumber);
+        const logEntry = logs[turn.turnNumber - 1];
+        const band = logEntry?.rds_band || "SURFACE";
+
+        const kpiMovements = (resp?.displayKPIs || []).map((kpi: any) => ({
+          label: kpi.label,
+          direction: kpi.direction,
+          tier: kpi.magnitude?.toLowerCase() || kpi.magnitudeEn?.toLowerCase() || "slight",
+          reasoningLink: kpi.dashboard_reasoning_link || "",
+        }));
+
+        return {
+          number: turn.turnNumber,
+          type: dp?.format === "multiple_choice" ? "mcq" : "free_response",
+          depth: band.toLowerCase(),
+          studentInput: turn.studentInput,
+          kpiMovements,
+          debriefQuestion: resp?.dashboard_debrief_question || "",
+        };
+      });
+
+      res.json({ turns: debriefTurns });
+    } catch (error) {
+      console.error("Error getting debrief prep:", error);
+      res.status(500).json({ message: "Failed to get debrief prep" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/reasoning-signals", isAuthenticated, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const sessionData = await verifySessionAccess(req, res, sessionId);
+      if (!sessionData) return;
+
+      const state = sessionData.session.currentState as any;
+      const logs = state?.decisionEvidenceLogs || [];
+      const language = (state as any)?.language || "es";
+      const isEn = language === "en";
+
+      const signalNames = [
+        { key: "intent", name: "Strategic decision-making", nameEs: "Toma de decisiones estratégicas" },
+        { key: "justification", name: "Analytical reasoning", nameEs: "Razonamiento analítico" },
+        { key: "tradeoffAwareness", name: "Tradeoff awareness", nameEs: "Conciencia de tradeoffs" },
+        { key: "stakeholderAwareness", name: "Stakeholder consideration", nameEs: "Consideración de stakeholders" },
+        { key: "ethicalAwareness", name: "Ethical reasoning", nameEs: "Razonamiento ético" },
+      ];
+
+      const signalAverages: Record<string, number> = {};
+      const turnSignals: any[] = [];
+
+      const frLogs = logs.filter((l: any) => !l.isMcq);
+      for (const sig of signalNames) {
+        const sum = frLogs.reduce((acc: number, l: any) => acc + (l.signals_detected?.[sig.key]?.quality ?? 0), 0);
+        signalAverages[sig.key === "justification" ? "analytical" : sig.key === "intent" ? "strategic" : sig.key === "tradeoffAwareness" ? "tradeoff" : sig.key === "stakeholderAwareness" ? "stakeholder" : "ethical"] = frLogs.length > 0 ? Math.round((sum / frLogs.length) * 10) / 10 : 0;
+      }
+
+      for (let i = 0; i < logs.length; i++) {
+        const log = logs[i];
+        const signals = signalNames.map(sig => {
+          const quality = log.signals_detected?.[sig.key]?.quality ?? 0;
+          const extractedText = log.signals_detected?.[sig.key]?.extracted_text || "";
+          let level: string;
+          if (quality >= 2) level = "Demonstrated";
+          else if (quality >= 1) level = "Emerging";
+          else level = "Not evidenced";
+
+          return {
+            name: isEn ? sig.name : sig.nameEs,
+            level,
+            explanation: extractedText || (isEn ? "No specific evidence extracted." : "No se extrajo evidencia específica."),
+          };
+        });
+        turnSignals.push({ number: i + 1, signals });
+      }
+
+      res.json({ signalAverages, turns: turnSignals });
+    } catch (error) {
+      console.error("Error getting reasoning signals:", error);
+      res.status(500).json({ message: "Failed to get reasoning signals" });
+    }
+  });
+
+  app.get("/api/sessions/:sessionId/kpi-frameworks", isAuthenticated, async (req: any, res) => {
+    try {
+      const { sessionId } = req.params;
+      const sessionData = await verifySessionAccess(req, res, sessionId);
+      if (!sessionData) return;
+
+      const state = sessionData.session.currentState as any;
+      const logs = state?.decisionEvidenceLogs || [];
+      const fwDetections: any[][] = state?.framework_detections || [];
+      const scenario = await storage.getScenario(sessionData.session.scenarioId);
+      const decisionPoints = (scenario?.initialState as any)?.decisionPoints || [];
+
+      const kpiTurns = sessionData.turns.map((turn, idx) => {
+        const resp = turn.agentResponse as any;
+        const dp = decisionPoints.find((d: any) => d.number === turn.turnNumber);
+        const logEntry = logs[turn.turnNumber - 1];
+        const band = logEntry?.rds_band || "SURFACE";
+
+        const kpiMovements = (resp?.displayKPIs || []).map((kpi: any) => ({
+          kpiId: kpi.indicatorId,
+          label: kpi.label,
+          direction: kpi.direction,
+          tier: kpi.magnitude?.toLowerCase() || "slight",
+          reasoningLink: kpi.dashboard_reasoning_link || "",
+        }));
+
+        const turnFwDets = fwDetections[idx] || [];
+        const frameworkApplications = turnFwDets.map((d: any) => ({
+          frameworkId: d.framework_id,
+          name: d.framework_name,
+          level: d.level,
+          evidence: d.evidence || "",
+        }));
+
+        return {
+          number: turn.turnNumber,
+          type: dp?.format === "multiple_choice" ? "mcq" : "free_response",
+          depth: band.toLowerCase(),
+          kpiMovements,
+          frameworkApplications,
+        };
+      });
+
+      const activeKpis = new Set<string>();
+      for (const turn of kpiTurns) {
+        for (const kpi of turn.kpiMovements) {
+          activeKpis.add(kpi.kpiId);
+        }
+      }
+
+      res.json({ turns: kpiTurns, activeKpis: Array.from(activeKpis) });
+    } catch (error) {
+      console.error("Error getting KPI frameworks:", error);
+      res.status(500).json({ message: "Failed to get KPI frameworks" });
     }
   });
 }

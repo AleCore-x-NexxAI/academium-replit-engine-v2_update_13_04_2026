@@ -1,0 +1,872 @@
+import { useState, useMemo } from "react";
+import { useParams, Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Users,
+  CheckCircle,
+  Clock,
+  TrendingDown,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+  Settings,
+  X,
+  Loader2,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+} from "recharts";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "@/hooks/useAuth";
+import { useTranslation } from "@/contexts/LanguageContext";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { apiRequest } from "@/lib/queryClient";
+import type { Scenario } from "@shared/schema";
+
+const DEPTH_COLORS: Record<string, string> = {
+  integrated: "#1D9E75",
+  engaged: "#378ADD",
+  surface: "#BA7517",
+};
+
+const STATUS_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  transferring: { bg: "bg-[#EAF3DE]", text: "text-[#27500A]", border: "border-[#C0DD97]" },
+  developing: { bg: "bg-[#E6F1FB]", text: "text-[#0C447C]", border: "border-[#A3CCF0]" },
+  not_yet_evidenced: { bg: "bg-[#FAEEDA]", text: "text-[#633806]", border: "border-[#E8C888]" },
+  absent: { bg: "bg-[#FCEBEB]", text: "text-[#791F1F]", border: "border-[#F7C1C1]" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const style = STATUS_STYLES[status] || STATUS_STYLES.absent;
+  const label = status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return (
+    <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${style.bg} ${style.text} border ${style.border}`} data-testid={`badge-status-${status}`}>
+      {label}
+    </span>
+  );
+}
+
+function DepthDot({ band, size = 10 }: { band: string; size?: number }) {
+  const color = DEPTH_COLORS[band] || "#ddd";
+  return <div style={{ width: size, height: size, borderRadius: "50%", background: color, flexShrink: 0 }} />;
+}
+
+function ReasoningArc({ arc, label }: { arc: { turn: number; band: string; color: string }[]; label?: string }) {
+  if (!arc || arc.length === 0) return <span className="text-[11px] text-muted-foreground italic">--</span>;
+  return (
+    <div>
+      <div className="flex items-center gap-1">
+        {arc.map((a, i) => (
+          <span key={i} className="flex items-center gap-1">
+            <DepthDot band={a.band} />
+            {i < arc.length - 1 && <span className="text-[10px] text-muted-foreground">→</span>}
+          </span>
+        ))}
+      </div>
+      {label && <div className="text-[10px] text-muted-foreground mt-0.5 italic">{label}</div>}
+    </div>
+  );
+}
+
+export default function ScenarioDashboard() {
+  const { scenarioId } = useParams<{ scenarioId: string }>();
+  const { user } = useAuth();
+  const { t, language } = useTranslation();
+  const isEn = language === "en";
+
+  const [activeTab, setActiveTab] = useState<"analytics" | "students" | "control">("analytics");
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  const { data: scenario, isLoading: scenarioLoading } = useQuery<Scenario>({
+    queryKey: ["/api/scenarios", scenarioId],
+  });
+
+  const { data: classStats, isLoading: statsLoading } = useQuery({
+    queryKey: ["/api/scenarios", scenarioId, "class-stats"],
+    queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/class-stats`).then(r => r.json()),
+    enabled: activeTab === "analytics" && !!scenarioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: moduleHealth, isLoading: mhLoading } = useQuery({
+    queryKey: ["/api/scenarios", scenarioId, "module-health"],
+    queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/module-health`).then(r => r.json()),
+    enabled: activeTab === "analytics" && !!scenarioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: depthTrajectory, isLoading: dtLoading } = useQuery({
+    queryKey: ["/api/scenarios", scenarioId, "depth-trajectory"],
+    queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/depth-trajectory`).then(r => r.json()),
+    enabled: activeTab === "analytics" && !!scenarioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: classPatterns, isLoading: cpLoading } = useQuery({
+    queryKey: ["/api/scenarios", scenarioId, "class-patterns"],
+    queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/class-patterns`).then(r => r.json()),
+    enabled: activeTab === "analytics" && !!scenarioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: studentsSummary, isLoading: ssLoading } = useQuery({
+    queryKey: ["/api/scenarios", scenarioId, "students-summary"],
+    enabled: activeTab === "analytics" && !!scenarioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const scenarioTitle = scenario?.title || "...";
+  const initialState = scenario?.initialState as any;
+  const enrolledCount = (studentsSummary as any)?.students?.length || 0;
+
+  const tabs = [
+    { key: "analytics" as const, label: isEn ? "Analytics" : "Analíticas", icon: BarChart3 },
+    { key: "students" as const, label: isEn ? "Students" : "Estudiantes", icon: Users },
+    { key: "control" as const, label: isEn ? "Control" : "Control", icon: Settings },
+  ];
+
+  return (
+    <div className="min-h-screen bg-background">
+      <nav className="flex items-center justify-between px-5 py-3 border-b bg-card" data-testid="dashboard-nav">
+        <div className="flex items-center gap-3">
+          <Link href="/professor" data-testid="link-back-professor">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
+          <div>
+            <div className="text-[15px] font-medium text-muted-foreground italic" data-testid="text-scenario-title">{scenarioTitle}</div>
+            <div className="text-[12px] text-muted-foreground/70" data-testid="text-scenario-meta">
+              {enrolledCount} {isEn ? "students enrolled" : "estudiantes inscritos"}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3.5 py-1.5 rounded-lg text-[13px] border transition-colors ${
+                activeTab === tab.key
+                  ? "bg-muted border-border font-medium text-foreground"
+                  : "border-transparent text-muted-foreground"
+              }`}
+              data-testid={`tab-${tab.key}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+          <div className="ml-3">
+            <LanguageToggle />
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-[1100px] mx-auto px-5 py-5">
+        {activeTab === "analytics" && (
+          <AnalyticsTab
+            classStats={classStats}
+            statsLoading={statsLoading}
+            moduleHealth={moduleHealth}
+            mhLoading={mhLoading}
+            depthTrajectory={depthTrajectory}
+            dtLoading={dtLoading}
+            classPatterns={classPatterns}
+            cpLoading={cpLoading}
+            studentsSummary={studentsSummary}
+            ssLoading={ssLoading}
+            isEn={isEn}
+            onViewSession={setSelectedSessionId}
+          />
+        )}
+        {activeTab === "students" && (
+          <div className="text-center py-12 text-muted-foreground">
+            {isEn ? "Students management — existing view" : "Gestión de estudiantes — vista existente"}
+          </div>
+        )}
+        {activeTab === "control" && (
+          <div className="text-center py-12 text-muted-foreground">
+            {isEn ? "Scenario control panel — existing view" : "Panel de control del escenario — vista existente"}
+          </div>
+        )}
+      </div>
+
+      {selectedSessionId && (
+        <StudentSessionModal
+          sessionId={selectedSessionId}
+          isEn={isEn}
+          onClose={() => setSelectedSessionId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AnalyticsTab({
+  classStats,
+  statsLoading,
+  moduleHealth,
+  mhLoading,
+  depthTrajectory,
+  dtLoading,
+  classPatterns,
+  cpLoading,
+  studentsSummary,
+  ssLoading,
+  isEn,
+  onViewSession,
+}: any) {
+  const [showFullBreakdown, setShowFullBreakdown] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-2.5" data-testid="stats-row">
+        <StatCard
+          value={statsLoading ? "..." : classStats?.completed ?? "—"}
+          label={isEn ? "Completed" : "Completados"}
+          description={isEn ? "Students who finished all turns and submitted the reflection" : "Estudiantes que terminaron todos los turnos y enviaron la reflexión"}
+          loading={statsLoading}
+        />
+        <StatCard
+          value={statsLoading ? "..." : classStats?.inProgress ?? "—"}
+          label={isEn ? "In progress" : "En progreso"}
+          description={isEn ? "Students who started but have not yet completed" : "Estudiantes que comenzaron pero no han completado"}
+          loading={statsLoading}
+        />
+        <StatCard
+          value={statsLoading ? "..." : classStats?.biggestDropPoint ? `T${classStats.biggestDropPoint.turn}` : "—"}
+          label={isEn ? "Biggest drop point" : "Mayor punto de caída"}
+          description={isEn ? "Turn where average reasoning depth dropped most" : "Turno donde la profundidad de razonamiento cayó más"}
+          loading={statsLoading}
+        />
+        <StatCard
+          value={statsLoading ? "..." : classStats?.appliedCourseTheory ? `${classStats.appliedCourseTheory.n}/${classStats.appliedCourseTheory.m}` : "—"}
+          label={isEn ? "Applied course theory" : "Teoría del curso aplicada"}
+          description={isEn ? "Students showing evidence of applying at least one framework" : "Estudiantes que muestran evidencia de aplicar al menos un marco"}
+          loading={statsLoading}
+        />
+      </div>
+
+      <Card className="p-5" data-testid="module-health-card">
+        <div className="text-[13px] font-medium mb-0.5">{isEn ? "Module health" : "Salud del módulo"}</div>
+        <div className="text-[11px] text-muted-foreground mb-3.5 leading-relaxed italic">
+          {isEn
+            ? "How the frameworks and theories connected to this simulation are showing up in student decisions."
+            : "Cómo los marcos y teorías conectados a esta simulación aparecen en las decisiones de los estudiantes."}
+        </div>
+
+        {mhLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+        ) : moduleHealth?.frameworks?.length > 0 ? (
+          <>
+            <div className="grid grid-cols-4 gap-2 mb-4" data-testid="framework-grid">
+              {moduleHealth.frameworks.map((fw: any) => (
+                <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
+                  <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
+                  <StatusBadge status={fw.status} />
+                  <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
+                </div>
+              ))}
+            </div>
+            <div className="h-px bg-border my-3.5" />
+            <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "Class debrief opener" : "Apertura de debrief de clase"}</div>
+              <div className="text-[12px] text-muted-foreground/80 leading-relaxed italic" data-testid="text-debrief-opener">{moduleHealth.classDebriefOpener}</div>
+            </div>
+            <button
+              className="text-[12px] text-muted-foreground underline underline-offset-2 mt-2.5 block bg-transparent border-none p-0 cursor-pointer"
+              onClick={() => setShowFullBreakdown(!showFullBreakdown)}
+              data-testid="button-toggle-breakdown"
+            >
+              {showFullBreakdown
+                ? (isEn ? "Hide full framework breakdown" : "Ocultar desglose completo")
+                : (isEn ? "Show full framework breakdown" : "Mostrar desglose completo")}
+              {showFullBreakdown ? " ↑" : " ↓"}
+            </button>
+            {showFullBreakdown && (
+              <div className="grid grid-cols-3 gap-2.5 mt-3 pt-3 border-t">
+                {moduleHealth.frameworks.map((fw: any) => (
+                  <div key={fw.id} className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
+                    <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{fw.name} — {isEn ? "deeper view" : "vista detallada"}</div>
+                    <div className="text-[11px] text-muted-foreground/70 leading-snug italic">{fw.deeperDescription}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "No frameworks configured" : "No hay marcos configurados"}</div>
+            <div className="text-[11px] text-muted-foreground/80 italic">{isEn ? "Add frameworks in the scenario editor to see module health data." : "Agrega marcos en el editor de escenarios para ver datos de salud del módulo."}</div>
+          </div>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3.5">
+        <Card className="p-4" data-testid="depth-trajectory-card">
+          <div className="text-[13px] font-medium mb-0.5">{isEn ? "Reasoning depth across turns" : "Profundidad de razonamiento por turno"}</div>
+          <div className="text-[11px] text-muted-foreground mb-3 italic">
+            {isEn ? "Class average reasoning depth at each turn" : "Profundidad de razonamiento promedio de la clase en cada turno"}
+          </div>
+          {dtLoading ? (
+            <Skeleton className="h-[115px] mb-2.5" />
+          ) : depthTrajectory?.points?.length > 0 ? (
+            <>
+              <div className="h-[115px] mb-2.5">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={depthTrajectory.points}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                    <XAxis dataKey="turn" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `T${v}`} />
+                    <YAxis domain={[0, 3]} ticks={[1, 2, 3]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v === 1 ? "Surface" : v === 2 ? "Engaged" : "Integrated"} width={65} />
+                    <RechartsTooltip formatter={(v: number) => [v.toFixed(1), isEn ? "Avg depth" : "Prof. prom."]} />
+                    <Line type="monotone" dataKey="avg" stroke="#378ADD" strokeWidth={2} dot={{ r: 4, fill: "#378ADD" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex gap-1.5" data-testid="depth-annotations">
+                {depthTrajectory.annotations?.map((anno: any) => (
+                  <div key={anno.turn} className="flex-1 text-center p-2 bg-muted/30 rounded-lg border border-dashed border-border/50">
+                    <div className="text-[11px] font-medium text-muted-foreground mb-0.5">{isEn ? `Turn ${anno.turn}` : `Turno ${anno.turn}`}</div>
+                    <div className="text-[10px] text-muted-foreground/70 italic leading-snug">{anno.description}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-[115px] flex items-center justify-center bg-muted/30 rounded-lg border border-dashed border-border">
+              <span className="text-[11px] text-muted-foreground italic">{isEn ? "No completed sessions yet" : "No hay sesiones completadas aún"}</span>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-4" data-testid="class-patterns-card">
+          <div className="text-[13px] font-medium mb-0.5">{isEn ? "Where the class is and where it's heading" : "Dónde está la clase y hacia dónde va"}</div>
+          <div className="text-[11px] text-muted-foreground mb-3 italic">
+            {isEn ? "Most significant reasoning patterns detected across all sessions" : "Patrones de razonamiento más significativos detectados"}
+          </div>
+          {cpLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-16" />)}
+            </div>
+          ) : classPatterns?.patterns?.length > 0 ? (
+            <div>
+              {classPatterns.patterns.map((p: any, i: number) => (
+                <div key={p.id} className={`py-2.5 ${i < classPatterns.patterns.length - 1 ? "border-b" : ""}`}>
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="text-[12px] font-medium text-muted-foreground">{p.name}</span>
+                    <StatusBadge status={p.status} />
+                  </div>
+                  <div className="h-[5px] bg-muted rounded-full overflow-hidden mb-1 border border-dashed border-border/50">
+                    <div className="h-full rounded-full bg-muted-foreground/30" style={{ width: `${Math.round(p.rate * 100)}%` }} />
+                  </div>
+                  <div className="text-[11px] text-muted-foreground/70 italic leading-snug">{p.description}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-24 bg-muted/30 rounded-lg border border-dashed border-border">
+              <span className="text-[11px] text-muted-foreground italic">{isEn ? "No completed sessions yet" : "No hay sesiones completadas aún"}</span>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card className="p-4" data-testid="students-table-card">
+        <div className="text-[13px] font-medium mb-0.5">{isEn ? "Students" : "Estudiantes"}</div>
+        <div className="text-[11px] text-muted-foreground mb-3 italic">
+          {isEn ? "Each dot represents one turn — color shows reasoning depth. Click \"View session\" to open the analysis." : "Cada punto representa un turno — el color muestra la profundidad. Haz clic en \"Ver sesión\" para abrir el análisis."}
+        </div>
+        {ssLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-12" />)}
+          </div>
+        ) : (studentsSummary as any)?.students?.length > 0 ? (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-[11px]">{isEn ? "Student" : "Estudiante"}</TableHead>
+                  <TableHead className="text-[11px]">{isEn ? "Status" : "Estado"}</TableHead>
+                  <TableHead className="text-[11px]">{isEn ? "Reasoning arc" : "Arco de razonamiento"}</TableHead>
+                  <TableHead className="text-[11px]">{isEn ? "Key pattern" : "Patrón clave"}</TableHead>
+                  <TableHead className="text-[11px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(studentsSummary as any).students.map((s: any) => (
+                  <TableRow key={s.sessionId} data-testid={`row-student-${s.sessionId}`}>
+                    <TableCell>
+                      <div className="font-medium text-[13px]">{s.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{s.email}</div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] ${
+                        s.status === "completed"
+                          ? "bg-[#EAF3DE] text-[#27500A] border border-[#C0DD97]"
+                          : "bg-[#E6F1FB] text-[#0C447C] border border-[#A3CCF0]"
+                      }`}>
+                        {s.status === "completed" ? (isEn ? "Completed" : "Completado") : (isEn ? "In progress" : "En progreso")}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <ReasoningArc arc={s.arc} label={s.arcLabel} />
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[11px] text-muted-foreground italic">{s.keyPattern}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-[12px]"
+                        disabled={!s.canView}
+                        style={!s.canView ? { opacity: 0.35, cursor: "default" } : {}}
+                        onClick={() => s.canView && onViewSession(s.sessionId)}
+                        data-testid={`button-view-session-${s.sessionId}`}
+                      >
+                        {isEn ? "View session" : "Ver sesión"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t flex-wrap">
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <div className="w-[9px] h-[9px] rounded-full" style={{ background: "#1D9E75" }} />
+                {isEn ? "Integrated reasoning" : "Razonamiento integrado"}
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <div className="w-[9px] h-[9px] rounded-full" style={{ background: "#378ADD" }} />
+                {isEn ? "Engaged reasoning" : "Razonamiento comprometido"}
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <div className="w-[9px] h-[9px] rounded-full" style={{ background: "#BA7517" }} />
+                {isEn ? "Surface reasoning" : "Razonamiento superficial"}
+              </div>
+              <span className="text-[11px] text-muted-foreground/50 italic ml-auto">{isEn ? "Dots represent turns left to right" : "Los puntos representan turnos de izquierda a derecha"}</span>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground text-[13px]">
+            {isEn ? "No students have started this scenario yet." : "Ningún estudiante ha comenzado este escenario aún."}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function StatCard({ value, label, description, loading }: { value: string | number; label: string; description: string; loading?: boolean }) {
+  return (
+    <Card className="p-3.5">
+      <div className="text-[22px] font-medium text-muted-foreground mb-1" data-testid={`stat-value-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+        {loading ? <Skeleton className="h-7 w-12" /> : value}
+      </div>
+      <div className="text-[11px] font-medium text-muted-foreground mb-0.5">{label}</div>
+      <div className="text-[11px] text-muted-foreground/60 italic leading-snug">{description}</div>
+    </Card>
+  );
+}
+
+function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; isEn: boolean; onClose: () => void }) {
+  const [modalTab, setModalTab] = useState<"chat" | "debrief" | "signals" | "kpi">("chat");
+
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ["/api/sessions", sessionId, "summary"],
+    enabled: !!sessionId,
+  });
+
+  const { data: chatHistory, isLoading: chatLoading } = useQuery({
+    queryKey: ["/api/sessions", sessionId, "chat-history"],
+    enabled: !!sessionId && modalTab === "chat",
+  });
+
+  const { data: debriefPrep, isLoading: debriefLoading } = useQuery({
+    queryKey: ["/api/sessions", sessionId, "debrief-prep"],
+    enabled: !!sessionId && modalTab === "debrief",
+  });
+
+  const { data: reasoningSignals, isLoading: signalsLoading } = useQuery({
+    queryKey: ["/api/sessions", sessionId, "reasoning-signals"],
+    enabled: !!sessionId && modalTab === "signals",
+  });
+
+  const { data: kpiFrameworks, isLoading: kpiLoading } = useQuery({
+    queryKey: ["/api/sessions", sessionId, "kpi-frameworks"],
+    enabled: !!sessionId && modalTab === "kpi",
+  });
+
+  const modalTabs = [
+    { key: "chat" as const, label: isEn ? "Chat history" : "Historial de chat" },
+    { key: "debrief" as const, label: isEn ? "Debrief prep" : "Prep debrief" },
+    { key: "signals" as const, label: isEn ? "Reasoning signals" : "Señales de razonamiento" },
+    { key: "kpi" as const, label: isEn ? "KPI + course frameworks" : "KPI + marcos del curso" },
+  ];
+
+  const summaryData = summary as any;
+  const arc = summaryData?.arc || [];
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/25 z-50 overflow-y-auto py-8 px-5"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      data-testid="modal-overlay"
+    >
+      <div className="bg-card border rounded-xl w-full max-w-[700px] mx-auto" data-testid="modal-student-session">
+        <div className="p-4 border-b">
+          <div className="flex items-start justify-between mb-2.5">
+            <div>
+              <div className="text-[15px] font-medium" data-testid="text-modal-student-name">
+                {summaryLoading ? <Skeleton className="h-5 w-32" /> : summaryData?.studentName || "..."}
+              </div>
+              <div className="text-[12px] text-muted-foreground mt-0.5">
+                {summaryLoading ? <Skeleton className="h-4 w-48" /> : `${summaryData?.scenarioTitle || ""} · ${summaryData?.completedAt ? new Date(summaryData.completedAt).toLocaleDateString() : ""}`}
+              </div>
+            </div>
+            <button className="text-[22px] text-muted-foreground bg-transparent border-none cursor-pointer p-0 leading-none" onClick={onClose} data-testid="button-close-modal">×</button>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "Session summary" : "Resumen de sesión"}</div>
+              <div className="text-[11px] text-muted-foreground/80 leading-relaxed italic" data-testid="text-session-summary">
+                {summaryLoading ? <Skeleton className="h-8 w-full" /> : summaryData?.dashboardSummary?.session_headline || (isEn ? "Summary available when session is complete." : "Resumen disponible cuando la sesión esté completa.")}
+              </div>
+            </div>
+            <div className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border min-w-[130px]">
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">{isEn ? "Reasoning arc" : "Arco de razonamiento"}</div>
+              <div className="flex items-start gap-1.5">
+                {arc.map((a: any, i: number) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <DepthDot band={a.band} />
+                      <span className="text-[10px] text-muted-foreground/50">T{a.turn}</span>
+                    </div>
+                    {i < arc.length - 1 && <span className="text-[10px] text-muted-foreground/40 mt-1">→</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex px-4 border-b overflow-x-auto">
+          {modalTabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setModalTab(tab.key)}
+              className={`px-3 py-2 text-[12px] border-b-2 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer whitespace-nowrap ${
+                modalTab === tab.key
+                  ? "text-foreground border-b-[#378ADD] font-medium"
+                  : "text-muted-foreground border-b-transparent"
+              }`}
+              data-testid={`modal-tab-${tab.key}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <ScrollArea className="max-h-[60vh]">
+          <div className="p-4">
+            {modalTab === "chat" && <ChatHistoryTab data={chatHistory} loading={chatLoading} isEn={isEn} />}
+            {modalTab === "debrief" && <DebriefPrepTab data={debriefPrep} loading={debriefLoading} isEn={isEn} />}
+            {modalTab === "signals" && <ReasoningSignalsTab data={reasoningSignals} loading={signalsLoading} isEn={isEn} />}
+            {modalTab === "kpi" && <KpiFrameworksTab data={kpiFrameworks} loading={kpiLoading} isEn={isEn} />}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+}
+
+function ChatHistoryTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}</div>;
+
+  const turns = data?.turns || [];
+  return (
+    <div>
+      <div className="text-[12px] text-muted-foreground/70 leading-relaxed mb-4 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border/50 italic">
+        {isEn
+          ? "The full conversation exactly as it happened — every decision prompt and every word the student wrote, in sequence."
+          : "La conversación completa tal como ocurrió — cada pregunta y cada palabra que el estudiante escribió, en secuencia."}
+      </div>
+      {turns.map((turn: any) => (
+        <div key={turn.number} className="mb-3 border border-dashed border-border rounded-xl overflow-hidden" data-testid={`turn-card-chat-${turn.number}`}>
+          <div className="px-3.5 py-2.5 bg-muted/30 border-b border-dashed border-border/50 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
+            </span>
+          </div>
+          <div className="p-3.5">
+            {turn.prompt && (
+              <div className="mb-2.5">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "Decision prompt" : "Pregunta de decisión"}</div>
+                <div className="p-2 bg-muted/20 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground/80 leading-snug italic">{turn.prompt}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "Student response" : "Respuesta del estudiante"}</div>
+              <div className="p-2 bg-muted/20 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground/80 leading-snug">
+                {turn.studentInput.length > 300 && !expanded[turn.number]
+                  ? <>
+                      {turn.studentInput.substring(0, 300)}...
+                      <button className="text-[10px] text-muted-foreground underline ml-1 bg-transparent border-none cursor-pointer p-0" onClick={() => setExpanded(e => ({ ...e, [turn.number]: true }))}>{isEn ? "Expand" : "Expandir"}</button>
+                    </>
+                  : turn.studentInput}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+      {turns.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground text-[13px] italic">{isEn ? "No turns recorded." : "No hay turnos registrados."}</div>
+      )}
+    </div>
+  );
+}
+
+function DebriefPrepTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}</div>;
+
+  const turns = data?.turns || [];
+  return (
+    <div>
+      <div className="text-[12px] text-muted-foreground/70 leading-relaxed mb-4 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border/50 italic">
+        {isEn
+          ? "One card per turn. Shows what the student decided, KPI movements produced, and one specific question to ask in debrief."
+          : "Una tarjeta por turno. Muestra la decisión del estudiante, movimientos de KPI producidos, y una pregunta específica para el debrief."}
+      </div>
+      {turns.map((turn: any) => (
+        <div key={turn.number} className="mb-3 border border-dashed border-border rounded-xl overflow-hidden" data-testid={`turn-card-debrief-${turn.number}`}>
+          <div className="px-3.5 py-2.5 bg-muted/30 border-b border-dashed border-border/50 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
+            </span>
+            {turn.depth && (
+              <span className={`text-[10px] font-medium px-2 py-0.5 rounded`} style={{ background: DEPTH_COLORS[turn.depth] + "20", color: DEPTH_COLORS[turn.depth] }}>
+                {turn.depth.charAt(0).toUpperCase() + turn.depth.slice(1)}
+              </span>
+            )}
+          </div>
+          <div className="p-3.5">
+            <div className="mb-2.5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "Student response" : "Respuesta del estudiante"}</div>
+              <div className="p-2 bg-muted/20 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground/80 leading-snug">
+                {turn.studentInput.length > 200 && !expanded[turn.number]
+                  ? <>
+                      {turn.studentInput.substring(0, 200)}...
+                      <button className="text-[10px] text-muted-foreground underline ml-1 bg-transparent border-none cursor-pointer p-0" onClick={() => setExpanded(e => ({ ...e, [turn.number]: true }))}>{isEn ? "Expand" : "Expandir"}</button>
+                    </>
+                  : turn.studentInput}
+              </div>
+            </div>
+
+            {turn.kpiMovements?.length > 0 && (
+              <div className="mb-2.5">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "KPI movements" : "Movimientos de KPI"}</div>
+                <div className="flex gap-1.5 flex-wrap mt-1">
+                  {turn.kpiMovements.map((kpi: any, i: number) => {
+                    const isUp = kpi.direction === "up";
+                    const bg = isUp ? "#EAF3DE" : "#FCEBEB";
+                    const color = isUp ? "#27500A" : "#791F1F";
+                    const border = isUp ? "#C0DD97" : "#F7C1C1";
+                    return (
+                      <span key={i} className="text-[11px] px-2 py-0.5 rounded" style={{ background: bg, color, border: `0.5px solid ${border}` }}>
+                        {kpi.label} {isUp ? "↑" : "↓"} {kpi.tier}{kpi.reasoningLink ? ` · ${kpi.reasoningLink}` : ""}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {turn.debriefQuestion && (
+              <div className="p-3 bg-muted/30 border-l-2 border-l-[#378ADD]/30 rounded-r-lg mt-0.5">
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "Ask in debrief" : "Preguntar en debrief"}</div>
+                <div className="text-[11px] text-muted-foreground/80 leading-relaxed italic">{turn.debriefQuestion}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReasoningSignalsTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+  if (loading) return <div className="space-y-3"><Skeleton className="h-[230px]" /><Skeleton className="h-32" /></div>;
+
+  const signalAverages = data?.signalAverages || {};
+  const turns = data?.turns || [];
+
+  const radarData = [
+    { signal: isEn ? "Analytical" : "Analítico", value: signalAverages.analytical || 0, fullMark: 3 },
+    { signal: isEn ? "Strategic" : "Estratégico", value: signalAverages.strategic || 0, fullMark: 3 },
+    { signal: isEn ? "Tradeoff" : "Tradeoff", value: signalAverages.tradeoff || 0, fullMark: 3 },
+    { signal: isEn ? "Stakeholder" : "Stakeholder", value: signalAverages.stakeholder || 0, fullMark: 3 },
+    { signal: isEn ? "Ethical" : "Ético", value: signalAverages.ethical || 0, fullMark: 3 },
+  ];
+
+  return (
+    <div>
+      <div className="text-[12px] text-muted-foreground/70 leading-relaxed mb-4 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border/50 italic">
+        {isEn
+          ? "Radar chart shows the visual shape of the signal profile. Table below shows all five signals across every turn."
+          : "El gráfico radar muestra la forma visual del perfil de señales. La tabla muestra las cinco señales en cada turno."}
+      </div>
+
+      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "Signal strength — session overview" : "Fortaleza de señales — resumen de sesión"}</div>
+      <div className="h-[230px] bg-muted/30 rounded-lg border border-dashed border-border mb-3" data-testid="radar-chart-container">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
+            <PolarGrid stroke="rgba(0,0,0,0.08)" />
+            <PolarAngleAxis dataKey="signal" tick={{ fontSize: 10 }} />
+            <PolarRadiusAxis angle={90} domain={[0, 3]} tick={{ fontSize: 9 }} tickCount={4} />
+            <Radar dataKey="value" stroke="#378ADD" fill="#378ADD" fillOpacity={0.15} strokeWidth={2} />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "All signals — turn by turn" : "Todas las señales — turno por turno"}</div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-[11px]">{isEn ? "Turn" : "Turno"}</TableHead>
+            <TableHead className="text-[11px]">{isEn ? "Signal" : "Señal"}</TableHead>
+            <TableHead className="text-[11px]">{isEn ? "Level" : "Nivel"}</TableHead>
+            <TableHead className="text-[11px]">{isEn ? "What the data shows" : "Lo que muestran los datos"}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {turns.flatMap((turn: any) =>
+            turn.signals.map((sig: any, si: number) => (
+              <TableRow key={`${turn.number}-${si}`}>
+                {si === 0 && <TableCell rowSpan={turn.signals.length} className="text-[11px] font-medium text-muted-foreground align-top">T{turn.number}</TableCell>}
+                <TableCell className="text-[11px] text-muted-foreground">{sig.name}</TableCell>
+                <TableCell>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                    {sig.level}
+                  </span>
+                </TableCell>
+                <TableCell className="text-[11px] text-muted-foreground/70 italic">{sig.explanation}</TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function KpiFrameworksTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+  if (loading) return <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-32" /></div>;
+
+  const turns = data?.turns || [];
+  const activeKpis = data?.activeKpis || [];
+
+  const kpiNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const turn of turns) {
+      for (const kpi of turn.kpiMovements || []) {
+        if (!names.has(kpi.kpiId)) names.set(kpi.kpiId, kpi.label);
+      }
+    }
+    return names;
+  }, [turns]);
+
+  return (
+    <div>
+      <div className="text-[12px] text-muted-foreground/70 leading-relaxed mb-4 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border/50 italic">
+        {isEn
+          ? "KPI trajectory shows which indicators moved at each turn. Course framework application shows how frameworks appeared in each turn."
+          : "La trayectoria de KPI muestra qué indicadores se movieron en cada turno. La aplicación de marcos muestra cómo aparecieron los marcos."}
+      </div>
+
+      <div className="text-[12px] font-medium text-muted-foreground mb-2">{isEn ? "KPI trajectory — decisions and their outcomes" : "Trayectoria KPI — decisiones y sus resultados"}</div>
+      {activeKpis.length > 0 ? (
+        <div className="border border-dashed border-border rounded-lg overflow-hidden mb-4" data-testid="kpi-trajectory-table">
+          <div className="grid bg-muted/30 border-b border-dashed border-border" style={{ gridTemplateColumns: `90px repeat(${turns.length}, 1fr)` }}>
+            <div className="p-2 border-r border-dashed border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">KPI</div>
+            {turns.map((turn: any) => (
+              <div key={turn.number} className="p-2 border-r border-dashed border-border last:border-r-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                {isEn ? `Turn ${turn.number}` : `T${turn.number}`} · {turn.depth?.charAt(0).toUpperCase()}{turn.depth?.slice(1)}
+              </div>
+            ))}
+          </div>
+          {Array.from(kpiNames.entries()).map(([kpiId, label]) => (
+            <div key={kpiId} className="grid border-b border-dashed border-border/50 last:border-b-0" style={{ gridTemplateColumns: `90px repeat(${turns.length}, 1fr)` }}>
+              <div className="p-2 border-r border-dashed border-border text-[11px] font-medium text-muted-foreground">{label}</div>
+              {turns.map((turn: any) => {
+                const movement = turn.kpiMovements?.find((k: any) => k.kpiId === kpiId);
+                return (
+                  <div key={turn.number} className="p-2 border-r border-dashed border-border/50 last:border-r-0 text-[11px] text-muted-foreground/70 italic">
+                    {movement
+                      ? `${movement.direction === "up" ? "↑" : "↓"} ${movement.tier}${movement.reasoningLink ? ` — ${movement.reasoningLink}` : ""}`
+                      : <span className="text-muted-foreground/30">—</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-6 text-muted-foreground text-[13px] italic mb-4">{isEn ? "No KPI movements recorded." : "No se registraron movimientos de KPI."}</div>
+      )}
+
+      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "Course framework application — turn by turn" : "Aplicación de marcos del curso — turno por turno"}</div>
+      <div className="border border-dashed border-border rounded-lg p-3" data-testid="framework-application">
+        {turns.map((turn: any) => (
+          <div key={turn.number}>
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 mt-2.5 first:mt-0">
+              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
+            </div>
+            {turn.frameworkApplications?.length > 0 ? (
+              turn.frameworkApplications.map((fw: any, i: number) => (
+                <div key={i} className="flex gap-2 items-start mb-1.5">
+                  <span className="text-[11px] text-muted-foreground/70 italic min-w-[130px] shrink-0">{fw.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border shrink-0">{fw.level}</span>
+                  <span className="text-[11px] text-muted-foreground/50 italic leading-snug">{fw.evidence}</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-[11px] text-muted-foreground/40 italic mb-1.5">{isEn ? "No framework detections this turn" : "Sin detecciones de marcos en este turno"}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

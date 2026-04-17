@@ -1,0 +1,908 @@
+# ACADEMIUM — PROFESSOR DASHBOARD UI (Part C)
+
+**Context:** Parts A and B are already complete. All engine extensions are in place. This build adds the professor-facing dashboard UI that consumes the session state data the engine now produces.
+
+**Visual reference:** `docs/dashboard_blueprint.html` — open this in a browser while building. It shows the exact layout with descriptive placeholders explaining what each element represents and where its data comes from. Match its design system exactly.
+
+**Status check — confirm these exist before starting (Parts A+B completed):**
+- `CANONICAL_KPIS_ES` and `CANONICAL_KPIS_EN` in `shared/schema.ts` ✓
+- `hintButtonEnabled` and `maxHintsPerTurn` in scenario config ✓
+- No `handleRegenerate` / `regenerationUsed` anywhere ✓
+- `CaseFramework` interface and `frameworks?: CaseFramework[]` on scenario ✓
+- `server/agents/frameworkDetector.ts` exists and runs in director pipeline ✓
+- `dashboardReasoningLink` generated in `causalExplainer.ts` ✓
+- `DashboardSummary` interface with `session_headline` + `signal_averages` + `framework_summary` ✓
+- `dashboard_summary` on `SimulationState` (populated at session completion) ✓
+- `dashboard_debrief_question` on each turn record ✓
+- `framework_detections[]` on each turn record ✓
+
+If any of these are missing, stop and flag before building the UI.
+
+---
+
+## EXECUTION ORDER
+
+Build in this strict order, commit after each sub-task:
+
+1. **C1** — Scenario view navigation restructure (Analytics / Students / Control tabs)
+2. **C2** — Analytics tab (class overview: stats, module health, charts, student table)
+3. **C3** — Student session modal (4 tabs: Chat / Debrief / Signals / KPI+Frameworks)
+4. **C4** — Polish, edge cases, QA checklist
+
+---
+
+# C1. Scenario View Navigation Restructure
+
+**What it does:** Within a scenario view (professor perspective), replace the existing "Estudiantes" / "Vista de Clase" tabs with three top-level tabs: **Analytics** / **Students** / **Control**.
+
+**Current state:** `client/src/pages/ScenarioAnalytics.tsx` has "Estudiantes" and "Vista de Clase" tabs. Restructure this file or create a new `ScenarioDashboard.tsx` to replace it.
+
+**Implementation:**
+
+1. Create or restructure the scenario view to use three tabs: Analytics (default) / Students / Control.
+2. Use shadcn Tabs component. Match blueprint styling: small rounded tab buttons (`padding:5px 13px; border-radius:8px; font-size:13px`), gray text when inactive (`color:#999`), darker bg + bold text when active (`background:#f0f0ee; border:0.5px solid rgba(0,0,0,0.1); color:#1a1a1a; font-weight:500`).
+3. Header area above tabs:
+   - Scenario title (15px, weight 500, dark)
+   - Below title: `[Course name] · [Term] · [N] students enrolled` (12px, gray `#666`)
+4. Route: `/scenarios/:id/dashboard` defaults to Analytics tab. Persist tab selection via query param `?tab=analytics|students|control`.
+5. Tab content:
+   - **Analytics** → everything in C2 (the new class overview)
+   - **Students** → migrate existing student list (can be the existing list from ScenarioAnalytics, slightly adapted if needed)
+   - **Control** → existing control panel, untouched
+
+**Authorization:** Route is professor-only. Students cannot access.
+
+**Done looks like:**
+- Open a scenario as professor → three tabs visible, Analytics default.
+- Switching tabs updates the URL.
+- Header shows scenario metadata correctly.
+- Students tab still works as before.
+- Control tab unchanged.
+
+---
+
+# C2. Analytics Tab — Class Overview
+
+Build this in the order below. Each subsection matches a section of `docs/dashboard_blueprint.html` top-to-bottom. Match blueprint styling exactly.
+
+---
+
+## C2.1 — Top stats row (4 cards)
+
+**Layout:** 4 equal-width white cards in a row. `grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px`. Each card: `background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:14px`.
+
+**Card structure:**
+- Large number on top (`font-size:22px; font-weight:500; color:#1a1a1a`)
+- Label (`font-size:11px; font-weight:500; color:#1a1a1a`)
+- One-line italic description (`font-size:11px; color:#999; font-style:italic; line-height:1.4`)
+
+**Four cards:**
+
+| Card | Value source | Description below value |
+|---|---|---|
+| Completed | Count of sessions where `session_status === "complete"` | "Number of students who have finished all turns and submitted the reflection" |
+| In progress | Count of sessions where `session_status === "active"` | "Number of students who have started but not yet completed the simulation" |
+| Biggest drop point | Computed (see below) | "The turn where average reasoning depth dropped most significantly across the class" |
+| Applied course theory | Computed (see below) | "How many students showed evidence of applying at least one professor-specified framework" |
+
+**Biggest drop point computation:**
+```
+For each turn N (2 to max):
+  avgN = mean of student.turns[N].rds_band across all completed students
+  (where Surface=1, Engaged=2, Integrated=3)
+  delta[N] = avgN - avg[N-1]
+
+Largest negative delta → "Turn N"
+If no negative delta exists → "—"
+If no completed students yet → "—"
+```
+
+**Applied course theory count:**
+- Count students with ≥1 `framework_detections[].level === "explicit"` OR `"implicit"` across any turn of their completed session.
+- Display format: "N of M" where M = completed students, N = students with applied theory.
+- If no frameworks configured on scenario → display "—".
+- If 0 completed students → display "—".
+
+**API endpoint:** `POST /api/scenarios/:scenarioId/class-stats`
+```json
+Returns: {
+  "completed": 3,
+  "inProgress": 1,
+  "biggestDropPoint": { "turn": 3, "delta": -0.8 } | null,
+  "appliedCourseTheory": { "n": 2, "m": 3 } | null
+}
+```
+
+Authorization: professor only, only the owning professor.
+
+---
+
+## C2.2 — Module Health section
+
+**Layout:** White card. `background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:18px 20px; margin-bottom:16px`.
+
+**Card header:**
+- Title: "Module health" (`font-size:13px; font-weight:500; margin-bottom:3px`)
+- Subtitle: "How the frameworks and theories you connected to this simulation are showing up — or not — in student decisions. One block per framework. Read this when planning your next class." (`font-size:11px; color:#999; margin-bottom:14px; line-height:1.5; font-style:italic`)
+
+**Framework grid (below header):**
+- Grid: `grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:16px`
+- One block per professor-specified framework (max 8)
+- On tablet: 2 columns. On mobile: 1 column.
+- Each block: `padding:12px 14px; border-radius:8px; border:0.5px solid rgba(0,0,0,0.1); background:#f5f5f3`
+- Block content:
+  - Framework name (`font-size:12px; font-weight:500; margin-bottom:5px`)
+  - Status badge (see below)
+  - Description (`font-size:11px; color:#666; line-height:1.4`)
+
+**Status classification rules (HARD thresholds):**
+
+| Status | Badge colors | Rule |
+|---|---|---|
+| Transferring | Green — bg `#EAF3DE`, text `#27500A` | ≥60% of completed students showed Explicit or Implicit application of this framework in ≥1 turn |
+| Developing | Amber — bg `#FAEEDA`, text `#633806` | 20–59% of completed students showed application |
+| Not yet evidenced | Blue — bg `#E6F1FB`, text `#0C447C` | <20% of completed students showed application |
+| Absent | Red — bg `#FCEBEB`, text `#791F1F` | 0% of completed students showed any application |
+
+Badge styling: `font-size:10px; font-weight:500; padding:2px 7px; border-radius:5px; display:inline-block; margin-bottom:6px`.
+
+**Module health description generation rules (inline, enforce exactly):**
+- 2–3 sentences maximum.
+- States what fraction of students showed application using natural language: "2 of 3 students showed..." NOT "66.7%" or percentages.
+- Describes specifically which sub-concepts appeared or didn't — mine this from the aggregated `framework_detections[].evidence` strings across students.
+- Descriptive language only. NEVER recommendations. NEVER evaluations. NEVER "consider doing X" or "students need to Y".
+- Uses scenario language (ES or EN).
+- **PROHIBITED:**
+  - ❌ "Consider revisiting [framework] before the next class."
+  - ❌ "Students need more practice applying this framework explicitly."
+  - ❌ "This is weak — focus on this area."
+  - ❌ "You should address this gap in your next lecture."
+- **CORRECT:**
+  - ✅ "2 of 3 students showed principled negotiation logic without naming the framework. One student applied it explicitly with a performance clause."
+  - ✅ "No student referenced Hofstede dimensions, relationship norms, or cultural adaptation across any turn despite the Brazilian market context."
+
+**Below the framework grid:** horizontal divider (`height:0.5px; background:rgba(0,0,0,0.1); margin:14px 0`).
+
+**Class debrief opener box:**
+- Background: light blue `#E6F1FB`
+- Padding: `12px 14px`, border-radius: 8px
+- Label: "Class debrief opener" (uppercase, `font-size:11px; font-weight:500; color:#0C447C; letter-spacing:.04em; margin-bottom:4px`)
+- Question text: (`font-size:13px; color:#0C447C; line-height:1.5; font-weight:500`)
+
+**Class debrief opener generation rules:**
+1. Identify the competency with the lowest class demonstration rate.
+2. Cross-reference with the framework with the lowest module health status.
+3. Generate ONE question that connects both.
+4. Maximum 2 sentences.
+5. Must be a genuine question (ends with `?`).
+6. Must reference a specific decision point (turn number) where the gap was most pronounced.
+7. Must NOT imply any student was wrong.
+8. Must NOT name individual students.
+9. Must NOT contain recommendations or evaluations.
+10. Uses scenario language.
+
+If generation fails quality gate after 3 retries, use fallback:
+```
+EN: "In Turn [N], many students made a [decision type] — what framework were they working from, and what would it have looked like if they had named it?"
+ES: "En el Turno [N], muchos estudiantes tomaron una decisión de [tipo] — ¿desde qué marco estaban trabajando, y cómo se vería si lo nombraran explícitamente?"
+```
+
+**Expandable deeper view** (below the debrief box):
+- Button: "Show full framework breakdown ↓" / "Ocultar desglose completo ↑" — underlined text button, small, gray (`font-size:12px; color:#666`).
+- Click reveals 3-column grid with one deeper-view card per framework:
+  - Card: `padding:10px 12px; background:#f5f5f3; border-radius:8px; border:0.5px solid rgba(0,0,0,0.1)`
+  - Label: "Framework name — deeper view" (uppercase, `font-size:11px; font-weight:500; color:#666; letter-spacing:.03em`)
+  - Text: 3–5 sentence extended description detailing which sub-concepts appeared/didn't and how consistently the pattern held across students.
+
+**API endpoint:** `POST /api/scenarios/:scenarioId/module-health`
+```json
+Returns: {
+  "frameworks": [
+    {
+      "id": "...",
+      "name": "BATNA negotiation",
+      "status": "transferring" | "developing" | "not_yet_evidenced" | "absent",
+      "description": "2-3 sentence AI-generated description",
+      "deeperDescription": "3-5 sentence extended description"
+    }
+  ],
+  "classDebriefOpener": "AI-generated question"
+}
+```
+
+**Caching:** Cache this response per scenario for 5 minutes. Invalidate when a new session completes or scenario is edited.
+
+---
+
+## C2.3 — Reasoning Depth Chart (left card in 2-column row)
+
+**Layout:** Left card of a two-column row. `display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px`.
+
+**Card:** `background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px`.
+
+**Card header:**
+- Title: "Reasoning depth across turns" (`font-size:13px; font-weight:500; margin-bottom:3px`)
+- Subtitle: "Class average — what the data shows drove each shift" (`font-size:11px; color:#666; margin-bottom:12px`)
+
+**Chart (Chart.js line chart):**
+- Container: `position:relative; width:100%; height:115px`
+- Type: line chart with fill
+- X-axis: "Turn 1", "Turn 2", ... "Turn N" — one label per decision point in the scenario
+- Y-axis: 0 to 3, with tick labels at integers:
+  - 1 → "Surface"
+  - 2 → "Engaged"
+  - 3 → "Integrated"
+- Data: per turn, the class average of `rds_band` (Surface=1, Engaged=2, Integrated=3), rounded to 1 decimal
+- Line color: `#378ADD` (blue)
+- Fill color: `rgba(55,138,221,0.07)`
+- Tension: 0.35
+- Point radius: 6
+- Point colors (per turn, based on that turn's average):
+  - Green `#1D9E75` if avg ≥ 2.5 (predominantly Integrated)
+  - Blue `#378ADD` if avg ≥ 1.5 and < 2.5 (predominantly Engaged)
+  - Amber `#BA7517` if avg < 1.5 (predominantly Surface)
+- Grid: `rgba(0,0,0,0.05)` color on Y-axis, no grid on X-axis
+- Legend: hidden
+
+**Chart.js config (exact):**
+```javascript
+{
+  type: 'line',
+  data: {
+    labels: ['Turn 1', 'Turn 2', 'Turn 3'],
+    datasets: [{
+      data: [avg1, avg2, avg3],
+      borderColor: '#378ADD',
+      backgroundColor: 'rgba(55,138,221,0.07)',
+      pointBackgroundColor: [pointColor1, pointColor2, pointColor3],
+      pointRadius: 6,
+      tension: 0.35,
+      fill: true
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: {
+        min: 0, max: 3,
+        ticks: {
+          stepSize: 1,
+          callback: v => ['', 'Surface', 'Engaged', 'Integrated'][v] || '',
+          font: { size: 10 }
+        },
+        grid: { color: 'rgba(0,0,0,0.05)' }
+      },
+      x: {
+        ticks: { font: { size: 11 } },
+        grid: { display: false }
+      }
+    }
+  }
+}
+```
+
+**Below the chart: Turn annotations row (flex row, one per turn):**
+- Container: `display:flex; justify-content:space-around; gap:6px; margin-top:8px`
+- Per-turn block: `text-align:center; flex:1; padding:8px; background:#f5f5f3; border-radius:8px`
+- Block content:
+  - Turn label: `Turn N — [Shift type]` (`font-size:11px; font-weight:500`), color-coded by that turn's depth (green/blue/amber per the color rules above)
+  - Description: 1–2 sentences (`font-size:10px; color:#666; line-height:1.3; margin-top:2px`)
+
+**Shift type labels:**
+- If avg ≥ 2.5: "Peaked" or "Integrated"
+- If avg ≥ 1.5 and < 2.5: "Engaged"
+- If avg < 1.5: "Surface" or "Dropped" (if lower than prior turn)
+- First turn doesn't compare to a prior turn — use the band label directly
+
+**Turn annotation generation rules (per turn):**
+- Max 2 sentences.
+- Describes what the data shows drove the depth at that turn.
+- Grounded in: (a) RDS band distribution at this turn, (b) NUDGE/BLOCK event counts at this turn, (c) comparison to prior turn if applicable.
+- NEVER prescriptive.
+- NEVER "students need to" or "you should".
+- Uses scenario language.
+- Examples:
+  - ✅ "MCQ format lowered pressure. Students committed to a direction without needing to justify it in writing."
+  - ✅ "Specific negotiation scenario activated case-anchored reasoning. Most students engaged with the evidence."
+  - ✅ "Synthesis demand and ethical complexity arrived together. Students reverted to surface-level responses."
+  - ❌ "Students need more practice at Turn 3." (prescriptive)
+
+**API endpoint:** `POST /api/scenarios/:scenarioId/depth-trajectory`
+```json
+Returns: {
+  "points": [
+    { "turn": 1, "avg": 2.0, "color": "blue" },
+    { "turn": 2, "avg": 2.6, "color": "green" },
+    { "turn": 3, "avg": 1.2, "color": "amber" }
+  ],
+  "annotations": [
+    { "turn": 1, "label": "Engaged", "description": "MCQ format lowered pressure..." },
+    { "turn": 2, "label": "Peaked", "description": "Specific negotiation scenario..." },
+    { "turn": 3, "label": "Dropped", "description": "Synthesis demand..." }
+  ]
+}
+```
+
+Cache for 5 min.
+
+---
+
+## C2.4 — Class Reasoning Patterns (right card in 2-column row)
+
+**Card:** same styling as C2.3 left card.
+
+**Card header:**
+- Title: "Where the class is and where it's heading"
+- Subtitle: "Most significant reasoning patterns across all completed sessions"
+
+**Content:** 4 competency blocks, one per row. Show top 2 (highest demonstration rate = strengths) + bottom 2 (lowest rates = gaps). Rank by demonstration rate.
+
+**Per-competency block:**
+- Row 1: competency name (left, `font-size:12px; font-weight:500`) + status badge (right, same badge colors as module health)
+- Row 2: progress bar
+  - Container: `width:100%; height:4px; background:#f0f0ee; border-radius:2px; margin:6px 0`
+  - Fill: `height:100%; border-radius:2px` — width = demonstration rate 0–100%, fill color matches status badge color (green/amber/red)
+- Row 3: 1-sentence AI-generated description (`font-size:11px; color:#666; line-height:1.4`)
+
+**Class demonstration rate per competency (C1–C5):**
+```
+count = 0, total = 0
+For each completed session:
+  For each turn:
+    total += 1
+    if competency_evidence[Cx] in ["demonstrated", "emerging"]:
+      count += 1
+rate = count / total   // 0.0 to 1.0 — NEVER displayed as a number
+```
+
+**Status thresholds:**
+- Transferring: rate ≥ 0.60 → green bar, green badge
+- Developing: 0.20 ≤ rate < 0.60 → amber bar, amber badge
+- Not yet evidenced: rate < 0.20 → orange/red bar `#D85A30`, red badge (use "Not yet evidenced" label)
+
+**Competency display names (use these exact labels):**
+- C1 → "Analytical reasoning" / "Razonamiento analítico"
+- C2 → "Strategic decision-making" / "Toma de decisiones estratégicas"
+- C3 → "Stakeholder consideration" / "Consideración de stakeholders"
+- C4 → "Ethical reasoning" / "Razonamiento ético"
+- C5 → "Tradeoff awareness" / "Conciencia de tradeoffs"
+
+**Description generation rules:**
+- 1 sentence per competency.
+- Describes what was observed.
+- Uses scenario language.
+- Examples:
+  - ✅ "Most students justified decisions with case-specific evidence and followed a logical structure. Most consistent competency across the class."
+  - ✅ "Decisions were framed around outcomes, not the people those outcomes affected. Present in one student at one turn across the full class."
+  - ❌ "Students need to improve their ethical reasoning." (prescriptive)
+
+**API endpoint:** bundle into `/module-health` response OR create `POST /api/scenarios/:scenarioId/class-patterns`.
+
+Cache for 5 min.
+
+---
+
+## C2.5 — Students table
+
+**Layout:** White card below the 2-column row. `background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:18px 20px`.
+
+**Header:**
+- Title: "Students" (`font-size:13px; font-weight:500; margin-bottom:3px`)
+- Subtitle: "Each dot represents one turn. Click 'View session' to open the individual analysis." (`font-size:11px; color:#666; margin-bottom:12px`)
+
+**Table columns:** `Student | Status | Reasoning arc | Key pattern | (action)`
+
+**Per-row content:**
+
+| Column | Content |
+|---|---|
+| Student | Name (`font-weight:500; font-size:13px`) + email (`font-size:11px; color:#666`) |
+| Status | Badge: "Completed" (green `bg:#EAF3DE; text:#27500A`) or "In progress" (blue `bg:#E6F1FB; text:#0C447C`) |
+| Reasoning arc | N colored dots + arrows + short caption below |
+| Key pattern | 1-sentence observation (`font-size:12px; color:#666`) |
+| (action) | "View session" button |
+
+**Reasoning arc dots:**
+- Container: `display:flex; align-items:center; gap:6px`
+- Per-dot: `width:10px; height:10px; border-radius:50%; background:[color]`
+- Colors by RDS band:
+  - Integrated → `#1D9E75` (green)
+  - Engaged → `#378ADD` (blue)
+  - Surface → `#BA7517` (amber)
+- Between dots: small arrow `→` in light gray
+- Below the dots: small italic caption (`font-size:10px; color:#999; margin-top:2px`)
+  - Caption examples: "Peaked T2 · dropped T3", "Consistent throughout", "Late activator · improved T3"
+- If student in progress: show placeholder "Available when completed" (gray italic)
+
+**Short-form arc caption generation:**
+Given the sequence of `rds_band` values:
+- All same band → "Consistent throughout"
+- Rises then drops → "Peaked T[peakTurn] · dropped T[dropTurn]"
+- Continuously rises → "Late activator · improved T[lastTurn]"
+- Continuously drops → "Early peak · dropped T[lastTurn]"
+- Mixed → "Mixed depth · [most notable turn description]"
+Max 6 words. Uses scenario/UI language.
+
+**Key pattern content:**
+- Pulls from `session.dashboard_summary.session_headline` (B4), truncated to fit if needed.
+- For in-progress: "—" in gray
+
+**View session button:**
+- If completed: active button, `padding:5px 13px; border-radius:6px; border:0.5px solid rgba(0,0,0,0.15); font-size:12px; cursor:pointer; background:#fff`
+- If in progress: `opacity:0.35; cursor:default`
+
+**Legend below table:**
+- Container: `display:flex; gap:16px; margin-top:10px; padding-top:8px; border-top:0.5px solid rgba(0,0,0,0.08); font-size:11px; color:#666`
+- Legend items: green dot + "Integrated", blue dot + "Engaged", amber dot + "Surface"
+- Right-aligned text: "Dots = Turn 1 → Turn 2 → Turn 3" (italic, gray)
+
+**API endpoint:** `GET /api/scenarios/:scenarioId/students-summary`
+```json
+Returns: {
+  "students": [
+    {
+      "sessionId": "...",
+      "name": "Maria Fernández",
+      "email": "m.fernandez@univ.edu",
+      "status": "complete" | "active",
+      "arc": [
+        { "turn": 1, "band": "engaged", "color": "#378ADD" },
+        { "turn": 2, "band": "integrated", "color": "#1D9E75" },
+        { "turn": 3, "band": "surface", "color": "#BA7517" }
+      ],
+      "arcLabel": "Peaked T2 · dropped T3",
+      "keyPattern": "Strongest analytical reasoning. Ethical dimension absent.",
+      "canView": true
+    }
+  ]
+}
+```
+
+"View session" button click → opens the modal (C3) for that `sessionId`.
+
+---
+
+# C3. Student Session Modal
+
+**Full-screen modal overlay** that opens when "View session" is clicked.
+
+**Overlay:** `position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:1000; display:none; overflow-y:auto`. When open: `display:block`.
+
+**Modal:** `max-width:1100px; margin:40px auto; background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.2)`.
+
+**Close:** X button top-right, or click on the overlay outside the modal.
+
+**Opening behavior:**
+- Clicking "View session" opens modal and fetches Chat History (default tab).
+- Reopening preserves last active tab.
+- Tab content fetched on-demand, NOT all at once.
+
+---
+
+## C3.1 — Modal Header (always visible)
+
+**Structure:**
+- Top row:
+  - Left: Student name (`font-size:18px; font-weight:500`) + meta (`font-size:12px; color:#666`) — meta is `[Scenario name] · Completed [date]`
+  - Right: X close button
+- Below top row: divider + 2 side-by-side boxes:
+
+**Session Summary box (left, flex:2):**
+- `padding:12px; background:#f5f5f3; border-radius:8px`
+- Label: "Session summary" (`font-size:11px; font-weight:500; color:#666; margin-bottom:4px`)
+- Text: `session.dashboard_summary.session_headline` (from B4) — `font-size:12px; color:#1a1a1a; line-height:1.5`
+
+**Reasoning Arc box (right, flex:1):**
+- Same card styling as session summary
+- Label: "Reasoning arc"
+- Below: row of N dots (one per turn) with T1/T2/T3 labels below each, arrows between
+- Dot colors same as C2.5
+
+**API endpoint:** `GET /api/sessions/:sessionId/summary` returns student info + `dashboard_summary`.
+
+---
+
+## C3.2 — Modal Tabs
+
+Four tabs below the header, horizontal:
+
+- **Chat history** (default active)
+- **Debrief prep**
+- **Reasoning signals**
+- **KPI + course frameworks**
+
+Tab styling: `padding:8px 16px; border:none; background:none; font-size:13px; color:#666; cursor:pointer; border-bottom:2px solid transparent`.
+Active state: `color:#1a1a1a; font-weight:500; border-bottom-color:#1a1a1a`.
+
+Tab bar container: `display:flex; gap:4px; border-bottom:0.5px solid rgba(0,0,0,0.1); padding:0 20px`.
+
+Tab body: `padding:20px; max-height:calc(90vh - 200px); overflow-y:auto`.
+
+---
+
+## C3.3 — Tab 1: Chat History
+
+**Top of tab — intro box:**
+- `padding:10px 14px; background:#f5f5f3; border-radius:8px; margin-bottom:14px; font-size:11px; color:#666; line-height:1.5; font-style:italic`
+- Text (bilingual):
+  - ES: "La conversación completa tal como ocurrió — cada pregunta y cada palabra que escribió el estudiante. Sin análisis, sin etiquetas."
+  - EN: "The full conversation exactly as it happened — every question asked and every word the student wrote. No analysis, no labels."
+
+**Per-turn card:**
+- Card: `padding:14px; background:#f9f9f8; border-radius:8px; margin-bottom:10px; border:0.5px solid rgba(0,0,0,0.08)`
+- Turn header: "Turn N · [MCQ | Free response]" (`font-size:11px; font-weight:500; color:#666; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px`)
+- **Decision prompt** block:
+  - Label: "Decision prompt" / "Prompt de la decisión" (`font-size:10px; font-weight:500; color:#999; text-transform:uppercase; margin-bottom:3px`)
+  - Box: `padding:8px 10px; background:#fff; border-radius:6px; border-left:3px solid #999; font-size:12px; color:#1a1a1a; line-height:1.5` — the question text from case definition, italic
+- **Student response** block:
+  - Label: "Student response" / "Respuesta del estudiante"
+  - Box: same styling, `border-left-color:#378ADD` — the `student_input`, EXACT text as submitted, no modification, no grammar correction
+  - If text > 200 chars: truncate with "Show full response" / "Ver respuesta completa" button below
+
+**NOTHING ELSE on this tab.** No signal labels, no KPI movements, no debrief questions, no AI analysis of any kind.
+
+**API endpoint:** `GET /api/sessions/:sessionId/chat-history`
+```json
+Returns: {
+  "turns": [
+    {
+      "number": 1,
+      "type": "mcq" | "free_response",
+      "prompt": "...",
+      "studentInput": "..."
+    }
+  ]
+}
+```
+
+---
+
+## C3.4 — Tab 2: Debrief Prep
+
+**Intro box** (same styling as C3.3):
+- ES: "Una tarjeta por turno. Muestra qué decidió el estudiante, qué movimientos de KPI produjo y por qué, y una pregunta específica para hacerle en el debrief. Escaneable en menos de 60 segundos."
+- EN: "One card per turn. Shows what the student decided, what KPI movements their decision produced and why, and one specific question to ask them in debrief. Designed for fast scanning before class."
+
+**Per-turn card:**
+- Card: `padding:14px; background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:8px; margin-bottom:12px`
+- Header row (flex, `justify-content:space-between; margin-bottom:10px`):
+  - Left: "Turn N · [MCQ | Free response]"
+  - Right: depth badge:
+    - Integrated: green bg `#EAF3DE`, text `#27500A`
+    - Engaged: blue bg `#E6F1FB`, text `#0C447C`
+    - Surface: amber bg `#FAEEDA`, text `#633806`
+    - MCQ: gray `bg:#f0f0ee; text:#666; border:0.5px solid rgba(0,0,0,0.15)`
+  - Badge styling: `font-size:10px; font-weight:500; padding:2px 7px; border-radius:5px`
+
+- **Student response block:**
+  - Label above
+  - Box below, truncate to first 100 chars + "Show full response" expand button
+  - Preserve first complete sentence in truncation when possible
+
+- **KPI movements block:**
+  - Label: "KPI movements — what this decision produced" / "Movimientos de KPI — lo que produjo esta decisión"
+  - Row of colored pills (flex, gap 6px, wrap):
+    - Green pill (positive): `font-size:11px; padding:3px 8px; border-radius:5px; background:#EAF3DE; color:#27500A; border:0.5px solid #C0DD97`
+    - Red pill (negative): `background:#FCEBEB; color:#791F1F; border:0.5px solid #F7C1C1`
+  - Pill format: `[KPI label] [↑ or ↓] [Tier] · [dashboard_reasoning_link]`
+    - Tier: "Slight" / "Moderate" / "Significant" (EN) or "Ligero" / "Moderado" / "Significativo" (ES)
+    - Reasoning link: truncate at 40 chars if needed, with "..." suffix
+  - Only show KPIs that moved at this turn
+
+- **Ask in debrief callout:**
+  - `padding:12px 14px; background:#E6F1FB; border-left:4px solid #378ADD; border-radius:6px; margin-top:10px`
+  - Label: "Ask in debrief" / "Pregunta en el debrief" (`font-size:10px; font-weight:500; color:#0C447C; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px`)
+  - Question: `session.turns[].dashboard_debrief_question` (from B5) — `font-size:13px; color:#0C447C; line-height:1.5; font-weight:500`
+
+**API endpoint:** `GET /api/sessions/:sessionId/debrief-prep`
+```json
+Returns: {
+  "turns": [
+    {
+      "number": 1,
+      "type": "mcq",
+      "depth": "engaged",
+      "studentInput": "...",
+      "kpiMovements": [
+        { "label": "Stakeholder Trust", "direction": "up", "tier": "slight", "reasoningLink": "Driven by: ..." }
+      ],
+      "debriefQuestion": "..."
+    }
+  ]
+}
+```
+
+---
+
+## C3.5 — Tab 3: Reasoning Signals
+
+**Intro box:**
+- ES: "La vista analítica del razonamiento del estudiante — una vista visual de las 5 señales a lo largo de la sesión, seguida por la tabla completa turno por turno. Cada clasificación se explica con lo que el estudiante realmente escribió."
+- EN: "The analytical view of this student's reasoning — a visual overview of all five signals across the session, followed by the complete turn-by-turn signal table. Each classification is explained with what the student actually wrote."
+
+**Section 1 — Radar chart (title "Signal strength — session overview"):**
+
+Section title styling: `font-size:13px; font-weight:500; margin-bottom:10px; margin-top:6px`.
+
+Chart container: `width:100%; max-width:500px; margin:0 auto; height:320px; position:relative`.
+
+**Chart.js radar config:**
+```javascript
+{
+  type: 'radar',
+  data: {
+    labels: [
+      'Analytical reasoning',
+      'Strategic decision-making',
+      'Tradeoff awareness',
+      'Stakeholder consideration',
+      'Ethical reasoning'
+    ],
+    datasets: [{
+      data: [analytical, strategic, tradeoff, stakeholder, ethical],  // from dashboard_summary.signal_averages
+      backgroundColor: 'rgba(55,138,221,0.12)',
+      borderColor: '#378ADD',
+      borderWidth: 2,
+      pointBackgroundColor: '#378ADD',
+      pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      r: {
+        min: 0,
+        max: 3,
+        ticks: {
+          stepSize: 1,
+          callback: v => ['', 'Emerging', 'Present', 'Strong'][v] || '',
+          font: { size: 9 }
+        },
+        pointLabels: { font: { size: 10 } },
+        grid: { color: 'rgba(0,0,0,0.07)' },
+        angleLines: { color: 'rgba(0,0,0,0.07)' }
+      }
+    }
+  }
+}
+```
+
+**Use Spanish labels** when scenario language is Spanish:
+- "Razonamiento analítico", "Toma de decisiones estratégicas", "Conciencia de tradeoffs", "Consideración de stakeholders", "Razonamiento ético"
+
+**Caption below chart:**
+- `font-size:11px; color:#999; font-style:italic; margin:12px 0 20px; line-height:1.4; text-align:center`
+- ES: "Escala: 0 = no evidenciado · 1 = emergente · 2 = presente · 3 = fuertemente demostrado. Los valores representan la calidad promedio de la señal en todos los turnos."
+- EN: "Scale: 0 = not evidenced · 1 = emerging · 2 = present · 3 = strongly demonstrated. Values represent the average signal quality across all turns."
+
+**Section 2 — Signal table (title "All signals — turn by turn"):**
+
+Table: `width:100%; border-collapse:collapse; font-size:12px`
+
+Header row: `font-size:11px; font-weight:500; color:#999; text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:8px; border-bottom:0.5px solid rgba(0,0,0,0.1)`.
+
+Columns: `Turn | Signal | Level | What the data shows`
+
+Per-row:
+- Turn: `T1` / `T2` / `T3` (`font-size:11px; color:#666; font-weight:500; white-space:nowrap; padding:10px 8px; border-bottom:0.5px solid rgba(0,0,0,0.06)`)
+- Signal: signal name, e.g., "Analytical reasoning" (`font-size:12px; font-weight:500; padding:10px 8px`)
+- Level: colored chip
+  - Demonstrated (PRESENT or STRONG): bg `#EAF3DE`, text `#27500A`
+  - Emerging (WEAK): bg `#FAEEDA`, text `#633806`
+  - Not evidenced (ABSENT): bg `#f0f0ee`, text `#999`
+  - Chip styling: `font-size:11px; padding:2px 8px; border-radius:5px; display:inline-block; font-weight:500`
+- "What the data shows": 1-sentence AI-generated evidence (`font-size:11px; color:#666; line-height:1.5; padding:10px 8px`)
+
+**5 rows per turn (one per signal).** Group visually by adding a slightly darker border every 5 rows.
+
+**"What the data shows" generation rules:**
+- 1 sentence maximum.
+- Must reference the student's specific words or decision at that turn (paraphrase or short quote).
+- Explains WHY this signal level was assigned.
+- NO generic explanations. Instead of "the student didn't think about stakeholders" → "No mention of the engineering team, budget, or distributor in the response."
+- No prohibited language.
+- Uses scenario language.
+- **Store generated text in the turn record to avoid regenerating on every dashboard load.** Field: `session.turns[].signal_explanations?: Record<SignalName, string>`. If missing, generate on-demand and backfill.
+
+**API endpoint:** `GET /api/sessions/:sessionId/reasoning-signals`
+```json
+Returns: {
+  "signalAverages": {
+    "analytical": 2.0, "strategic": 2.3, "tradeoff": 1.3,
+    "stakeholder": 0.3, "ethical": 0
+  },
+  "turns": [
+    {
+      "number": 1,
+      "signals": [
+        { "name": "Analytical reasoning", "level": "Demonstrated", "explanation": "Entry mode choice reflects awareness of cost-risk tradeoff between MCQ options." }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## C3.6 — Tab 4: KPI + Course Frameworks
+
+**Intro box:**
+- ES: "Dos vistas en una pestaña: la trayectoria de KPI conecta las decisiones del estudiante con los resultados organizacionales que produjeron. Debajo, la aplicación de marcos del curso muestra cuáles de tus marcos especificados aparecieron en cada turno y cómo."
+- EN: "Two views in one tab: KPI trajectory connects this student's decisions to the organizational outcomes they produced. Below it, course framework application shows which of your specified frameworks appeared in each turn and how."
+
+**Section 1 — KPI trajectory grid (title "KPI trajectory — decisions and their outcomes"):**
+
+Table structure — CSS grid approach, not HTML table:
+- Header row: `display:grid; grid-template-columns:90px 1fr 1fr 1fr; gap:8px; padding:10px 12px; font-size:11px; font-weight:500; color:#666; text-transform:uppercase; letter-spacing:.04em; background:#f5f5f3; border-radius:8px 8px 0 0`
+- Columns:
+  - First column: "KPI"
+  - Subsequent columns: "Turn N" + depth pill (same depth badges as elsewhere)
+
+Data rows: `display:grid; grid-template-columns:90px 1fr 1fr 1fr; gap:8px; padding:12px; border-bottom:0.5px solid rgba(0,0,0,0.06); font-size:11px`
+
+Row cells:
+- First cell: KPI label (`font-weight:500; font-size:11px; color:#1a1a1a`)
+- Other cells (per turn):
+  - If KPI moved:
+    - Cell background: light green `#EAF3DE` for positive, light red `#FCEBEB` for negative
+    - Border-left: 2px solid (darker green `#1D9E75` or red `#D85A30`)
+    - Content line 1: `[↑ or ↓] Slight/Moderate/Significant` (`font-size:11px; font-weight:500`)
+    - Content line 2 (`font-size:10px; color:#666; font-style:italic; margin-top:2px`): `dashboard_reasoning_link` (truncate at ~50 chars)
+  - If KPI didn't move:
+    - Show "—" in gray `#999`, centered
+
+**Rows to show:** one per active KPI that moved at any point in the session. KPIs that never moved are omitted.
+
+**Section 2 — Course framework application (title "Course framework application — turn by turn"):**
+
+Per-turn block:
+- Container: `padding:14px; background:#f9f9f8; border-radius:8px; border:0.5px solid rgba(0,0,0,0.08); margin-bottom:10px`
+- Block header: "Turn N · [MCQ | Free response]" (`font-size:11px; font-weight:500; color:#666; text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px`)
+- Per-framework row (flex, aligns items baseline):
+  - Framework name: `font-size:12px; font-weight:500; min-width:140px`
+  - Level chip (same colors as signals table):
+    - Explicit / Demonstrated: green
+    - Implicit / Emerging: amber
+    - Not evidenced: gray
+  - Evidence description: `font-size:11px; color:#666; line-height:1.5; margin-left:12px; flex:1` — pulled from `session.turns[].framework_detections[].evidence` (B2)
+
+**If scenario has no frameworks configured:** Hide this entire Section 2 OR show a small note: "No frameworks configured for this case."
+
+**API endpoint:** `GET /api/sessions/:sessionId/kpi-frameworks`
+```json
+Returns: {
+  "turns": [
+    {
+      "number": 1,
+      "type": "mcq",
+      "depth": "engaged",
+      "kpiMovements": [
+        { "kpiId": "K1", "label": "Stakeholder Trust", "direction": "up", "tier": "slight", "reasoningLink": "..." }
+      ],
+      "frameworkApplications": [
+        { "frameworkId": "fw1", "name": "OLI entry mode", "level": "explicit", "evidence": "Partnership reflects limited ownership advantage..." }
+      ]
+    }
+  ],
+  "activeKpis": ["K1", "K2", "K3", "K4", "K5"]
+}
+```
+
+---
+
+# C4. Polish, QA, and Edge Cases
+
+## C4.1 — Design tokens (match blueprint exactly)
+
+- Body bg: `#f5f5f3`
+- Card bg: `#fff`
+- Card border: `0.5px solid rgba(0,0,0,0.1)`
+- Border radius: 8px (small), 12px (cards)
+- Font stack: `-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
+- Font sizes: 10px–22px range (most common: 11px, 12px, 13px)
+
+**Status color palette (use ONLY these colors for status indicators):**
+
+| State | Hex | Bg | Text |
+|---|---|---|---|
+| Integrated / Transferring / Demonstrated / Positive | `#1D9E75` | `#EAF3DE` | `#27500A` |
+| Engaged / Developing / Implicit / Info | `#378ADD` | `#E6F1FB` | `#0C447C` |
+| Surface / Not yet evidenced / Emerging | `#BA7517` | `#FAEEDA` | `#633806` |
+| Absent / Negative | `#D85A30` | `#FCEBEB` | `#791F1F` |
+
+## C4.2 — Empty and edge states
+
+- Class overview with 0 completed sessions: Show empty state message "No sessions completed yet. Dashboard data will appear once students finish simulations." Don't render charts.
+- Class overview with 1 completed session: all sections render correctly with N=1 data.
+- Scenario with 0 frameworks configured: Module Health section shows "No frameworks configured for this case. Add frameworks in the scenario editor to see how students apply them." Hide framework grid, debrief opener, and deeper view.
+- Biggest drop point when depth never dropped: show "—".
+- Radar chart with all-zero signal values: renders as a single center point, no crash.
+- Student in progress: "View session" disabled with `opacity:0.35; cursor:default`. "Arc" column shows "Available when completed".
+- Student with no KPI movements at all (all BLOCKs): KPI trajectory section shows "No KPI movements recorded for this session."
+
+## C4.3 — Language compliance
+
+Every AI-generated dashboard text respects scenario language:
+- English scenarios → all AI output in English
+- Spanish scenarios → all AI output in Spanish
+- UI chrome (static labels, buttons, tab names) uses the professor's UI language from the existing `useTranslation()` hook
+
+## C4.4 — Performance targets
+
+- Aggregation endpoints (`class-stats`, `module-health`, `depth-trajectory`, `class-patterns`, `students-summary`) return in < 500ms for a class of 30 students.
+- `dashboard_summary` is NOT recomputed — already stored from B4.
+- Module health, class patterns, depth chart annotations: cached per-scenario for 5 minutes. Invalidate when: (a) a new session completes, (b) the scenario is edited.
+- Student modal tabs: fetch on-demand from stored session state, no cache needed.
+
+## C4.5 — Authorization
+
+- All dashboard endpoints behind professor-role auth.
+- Only the owning professor accesses their scenario's dashboard.
+- Students NEVER see the dashboard or its endpoints (return 403).
+
+## C4.6 — Final QA checklist (ALL must pass)
+
+**Data integrity:**
+- [ ] Every displayed competency status traces to a named `competency_evidence` field
+- [ ] Every displayed KPI movement traces to `kpi_movements[].direction` and `.tier`
+- [ ] Every displayed student response matches `student_input` EXACTLY (no modification)
+- [ ] Framework detection levels populated for all configured frameworks across all FR turns
+- [ ] Debrief questions present for all turns in all completed sessions
+- [ ] Signal averages match manual computation from `signals_detected`
+
+**Language compliance scan (AI-generated text):**
+- [ ] Zero `correct / incorrect / good decision / bad decision / well done / optimal / ideal / best`
+- [ ] Zero `should have / you should / consider / needs to / would benefit from / missed the opportunity`
+- [ ] Zero `weak student / strong performer / struggling student`
+- [ ] Zero `unfortunately / fortunately / sadly / surprisingly / as expected`
+- [ ] Zero exclamation marks
+- [ ] Zero student comparisons by name at class-overview level
+- [ ] Zero teaching recommendations in module health descriptions
+
+**Functional:**
+- [ ] All 4 modal tabs render independently without errors
+- [ ] Tab switching preserves data (doesn't re-fetch on every switch)
+- [ ] All edge states render gracefully
+- [ ] English scenarios produce zero Spanish text
+- [ ] Spanish scenarios produce zero English text
+- [ ] Professor-role authorization enforced on all endpoints
+
+---
+
+# ABSOLUTE PROHIBITIONS (apply to ALL Part C work)
+
+1. **Do not modify engine behavior.** Part C only reads from the data Parts A+B produce. Do not add new fields to session state. Do not change the semantics of any existing field.
+2. **Do not add prohibited language anywhere in AI output.** Full list inlined in C2.2, C2.3, C2.4. Zero exceptions.
+3. **Do not make the dashboard student-facing.** Professor only. Enforce via middleware.
+4. **Do not deviate from the blueprint visually.** Colors, typography, spacing, tab structure — match `docs/dashboard_blueprint.html` exactly.
+5. **Do not regenerate AI text on every dashboard load.** Cache for 5 min where specified. Use stored data where specified.
+6. **Do not touch the student simulation UI** (`/simulation/:sessionId`). It stays exactly as it is.
+
+---
+
+# DEFINITION OF DONE (Part C)
+
+- Three-tab navigation (Analytics / Students / Control) works.
+- Analytics tab renders all 5 sections matching the blueprint visually.
+- Clicking "View session" opens the modal with all 4 tabs working.
+- Created a test scenario with 3 frameworks + 3 active KPIs, enrolled 3 students with varying signals, had them complete sessions, then:
+  - Top stats row shows correct counts
+  - Module health descriptions grounded, non-prescriptive
+  - Depth chart renders with correct line + point colors + turn annotations
+  - Class reasoning patterns ranked correctly by demonstration rate
+  - Student table shows correct arcs + pattern labels
+  - Each student modal opens, all 4 tabs render correctly
+- English-language scenario test: zero Spanish text anywhere in the dashboard
+- Spanish-language scenario test: zero English text anywhere in the dashboard
+- Prohibited language scan clean across all AI-generated output
+- All items in C4.6 QA checklist pass
+
+Commit after each sub-task:
+- `feat(C1): scenario view navigation restructure`
+- `feat(C2): analytics tab — class overview`
+- `feat(C3): student session modal with 4 tabs`
+- `feat(C4): dashboard polish and QA`

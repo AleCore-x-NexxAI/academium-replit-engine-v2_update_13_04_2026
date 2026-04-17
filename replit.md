@@ -18,6 +18,14 @@ The backend is an Express.js (Node.js) REST API, using PostgreSQL with Drizzle O
 ### Feature Specifications
 The platform incorporates a robust turn processing pipeline, including a 6-gate input classifier, a signal extractor scoring 5 reasoning signals, and a director orchestrating various agents. It includes a Framework Detector for analytical frameworks and a Debrief Question Generator targeting low-scoring signals. A Dashboard Summary Generator provides session-level analytics for professors. Simulations are structured with configurable decision points and reflection steps, utilizing "thinking scaffolds." Indicators have directionality (e.g., `up_better`/`down_better`) influencing UI displays. Role-Based Access Control (RBAC) manages user permissions.
 
+### Professor Dashboard (Part C)
+The professor dashboard at `/scenarios/:scenarioId/dashboard` provides a 3-tab view (Analytics/Students/Control) with:
+- **Analytics Tab**: 4 stat cards (completed, in progress, biggest drop point, applied course theory), Module Health section (framework detection rates with status badges), Reasoning Depth trajectory chart (Recharts LineChart), Class Patterns section (competency rates with progress bars), Students table with reasoning arc dots and session links.
+- **Student Session Modal**: 4-tab modal (Chat history, Debrief prep, Reasoning signals with RadarChart, KPI+Frameworks trajectory table). All endpoints are professor-only with scenario ownership verification.
+- **Backend Endpoints**: `class-stats`, `module-health`, `depth-trajectory`, `class-patterns`, `students-summary`, `session summary`, `chat-history`, `debrief-prep`, `reasoning-signals`, `kpi-frameworks` — all with 5-minute server-side cache.
+- **Visual Reference**: `docs/dashboard_blueprint.html` (528 lines) — blueprint for colors, typography, spacing.
+- **Status Colors**: Integrated/Positive `#1D9E75`, Engaged/Info `#378ADD`, Surface/Emerging `#BA7517`, Absent/Negative `#D85A30`.
+
 ### System Design Choices
 The architecture emphasizes event-driven updates with optimistic UI, a hierarchical agent pattern, and component composition based on atomic design principles. It features end-to-end type safety. The system includes LLM resilience with structured errors and frontend auto-retry. The dynamic indicator engine builds prompts from scenario indicators, and previous decisions influence the domain expert's impact calculations for context-sensitive results. Input validation is lenient, preserving student text on rejection.
 

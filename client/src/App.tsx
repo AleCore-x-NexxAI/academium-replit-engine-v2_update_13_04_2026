@@ -18,6 +18,7 @@ import Analytics from "@/pages/Analytics";
 import ProfessorDashboard from "@/pages/ProfessorDashboard";
 import ScenarioEdit from "@/pages/ScenarioEdit";
 import ScenarioAnalytics from "@/pages/ScenarioAnalytics";
+import ScenarioDashboard from "@/pages/ScenarioDashboard";
 import SimulationManagement from "@/pages/SimulationManagement";
 import Settings from "@/pages/Settings";
 import AiCostDashboard from "@/pages/AiCostDashboard";
@@ -75,6 +76,13 @@ function AuthenticatedApp() {
           {(params) => (
             <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
               <ScenarioAnalytics />
+            </RoleProtectedRoute>
+          )}
+        </Route>
+        <Route path="/scenarios/:scenarioId/dashboard">
+          {(params) => (
+            <RoleProtectedRoute allowedRoles={["professor", "admin"]}>
+              <ScenarioDashboard />
             </RoleProtectedRoute>
           )}
         </Route>

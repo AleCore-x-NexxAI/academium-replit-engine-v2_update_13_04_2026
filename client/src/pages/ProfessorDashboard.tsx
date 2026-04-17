@@ -6,6 +6,7 @@ import {
   Loader2,
   ArrowLeft,
   AlertTriangle,
+  BarChart3,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,17 @@ export default function ProfessorDashboard() {
                       </Badge>
                     </div>
 
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/scenarios/${scenario.id}/dashboard`);
+                      }}
+                      data-testid={`button-dashboard-${scenario.id}`}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
