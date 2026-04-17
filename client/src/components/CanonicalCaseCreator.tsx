@@ -1,4 +1,4 @@
-import { useState, useImperativeHandle, forwardRef } from "react";
+import { useState, useImperativeHandle, forwardRef, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -143,7 +143,32 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
   const [conceptTagInput, setConceptTagInput] = useState("");
   const [frameworks, setFrameworks] = useState<CaseFramework[]>([]);
   const [frameworkNameInput, setFrameworkNameInput] = useState("");
+  const [keywordSuggestions, setKeywordSuggestions] = useState<Record<string, string[]>>({});
+  const [suggestingKeywords, setSuggestingKeywords] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
+
+  const fetchKeywordSuggestions = useCallback(async (fw: CaseFramework) => {
+    setSuggestingKeywords(prev => ({ ...prev, [fw.id]: true }));
+    try {
+      const caseContext = scenarioData ? `${scenarioData.title || ""} ${scenarioData.description || ""}`.trim() : "";
+      const res = await apiRequest("POST", "/api/scenarios/suggest-framework-keywords", {
+        frameworkName: fw.name,
+        caseContext: caseContext || undefined,
+        language,
+      });
+      const data = await res.json();
+      setKeywordSuggestions(prev => ({ ...prev, [fw.id]: data.keywords || [] }));
+      if (data.signalPattern) {
+        setFrameworks(prev => prev.map(f =>
+          f.id === fw.id ? { ...f, signalPattern: f.signalPattern || data.signalPattern } : f
+        ));
+      }
+    } catch {
+      toast({ title: language === "en" ? "Could not fetch keyword suggestions" : "No se pudieron obtener sugerencias", variant: "destructive" });
+    } finally {
+      setSuggestingKeywords(prev => ({ ...prev, [fw.id]: false }));
+    }
+  }, [language, scenarioData, toast]);
   const { t } = useTranslation();
 
   useImperativeHandle(ref, () => ({
@@ -910,6 +935,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                         };
                         setFrameworks([...frameworks, newFw]);
                         setFrameworkNameInput("");
+                        fetchKeywordSuggestions(newFw);
                       }
                     }
                   }}
@@ -930,6 +956,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                       };
                       setFrameworks([...frameworks, newFw]);
                       setFrameworkNameInput("");
+                      fetchKeywordSuggestions(newFw);
                     }
                   }}
                   data-testid="button-add-framework"
@@ -944,16 +971,32 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                     <div key={fw.id} className="border rounded-md p-3 space-y-2" data-testid={`framework-card-${idx}`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-sm">{fw.name}</span>
-                        {isEditing && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setFrameworks(frameworks.filter((_, i) => i !== idx))}
-                            data-testid={`button-remove-framework-${idx}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {isEditing && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              disabled={suggestingKeywords[fw.id]}
+                              onClick={() => fetchKeywordSuggestions(fw)}
+                              data-testid={`button-suggest-keywords-${idx}`}
+                            >
+                              {suggestingKeywords[fw.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lightbulb className="w-4 h-4" />}
+                            </Button>
+                          )}
+                          {isEditing && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                setFrameworks(frameworks.filter((_, i) => i !== idx));
+                                setKeywordSuggestions(prev => { const n = { ...prev }; delete n[fw.id]; return n; });
+                              }}
+                              data-testid={`button-remove-framework-${idx}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <Label className="text-xs">{language === "en" ? "Keywords" : "Palabras clave"}</Label>
@@ -997,6 +1040,113 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                           )}
                         </div>
                       </div>
+
+                      {isEditing && keywordSuggestions[fw.id] && keywordSuggestions[fw.id].length > 0 && (
+                        <div data-testid={`suggestions-${idx}`}>
+                          <Label className="text-xs text-muted-foreground">
+                            {language === "en" ? "Suggested keywords (click to add)" : "Sugerencias (clic para agregar)"}
+                          </Label>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {keywordSuggestions[fw.id]
+                              .filter(s => !fw.domainKeywords.includes(s.toLowerCase()))
+                              .map((suggestion, sIdx) => (
+                                <Badge
+                                  key={sIdx}
+                                  variant="outline"
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    const val = suggestion.toLowerCase();
+                                    if (!fw.domainKeywords.includes(val)) {
+                                      const updated = [...frameworks];
+                                      updated[idx] = { ...fw, domainKeywords: [...fw.domainKeywords, val] };
+                                      setFrameworks(updated);
+                                    }
+                                  }}
+                                  data-testid={`badge-suggestion-${idx}-${sIdx}`}
+                                >
+                                  <Plus className="w-3 h-3 mr-1" />
+                                  {suggestion}
+                                </Badge>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {suggestingKeywords[fw.id] && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid={`loading-suggestions-${idx}`}>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          {language === "en" ? "Fetching keyword suggestions..." : "Obteniendo sugerencias..."}
+                        </div>
+                      )}
+
+                      {isEditing && (
+                        <div className="border-t pt-2 space-y-2" data-testid={`signal-pattern-${idx}`}>
+                          <Label className="text-xs">{language === "en" ? "Signal Pattern (implicit detection)" : "Patrón de señales (detección implícita)"}</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {(["intent", "justification", "tradeoffAwareness", "stakeholderAwareness", "ethicalAwareness"] as const).map(signal => {
+                              const active = fw.signalPattern?.requiredSignals?.includes(signal) ?? false;
+                              const signalLabels: Record<string, string> = {
+                                intent: language === "en" ? "Intent" : "Intención",
+                                justification: language === "en" ? "Justification" : "Justificación",
+                                tradeoffAwareness: language === "en" ? "Tradeoff" : "Compensación",
+                                stakeholderAwareness: language === "en" ? "Stakeholder" : "Stakeholders",
+                                ethicalAwareness: language === "en" ? "Ethical" : "Ético",
+                              };
+                              return (
+                                <Badge
+                                  key={signal}
+                                  variant={active ? "default" : "outline"}
+                                  className="cursor-pointer toggle-elevate"
+                                  onClick={() => {
+                                    const current = fw.signalPattern?.requiredSignals || [];
+                                    const newSignals = active
+                                      ? current.filter(s => s !== signal)
+                                      : [...current, signal] as typeof current;
+                                    const updated = [...frameworks];
+                                    updated[idx] = {
+                                      ...fw,
+                                      signalPattern: {
+                                        requiredSignals: newSignals,
+                                        minQuality: fw.signalPattern?.minQuality || "PRESENT",
+                                      },
+                                    };
+                                    setFrameworks(updated);
+                                  }}
+                                  data-testid={`badge-signal-${idx}-${signal}`}
+                                >
+                                  {signalLabels[signal]}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs whitespace-nowrap">{language === "en" ? "Min Quality" : "Calidad mín."}</Label>
+                            <Select
+                              value={fw.signalPattern?.minQuality || "PRESENT"}
+                              onValueChange={(val) => {
+                                const updated = [...frameworks];
+                                updated[idx] = {
+                                  ...fw,
+                                  signalPattern: {
+                                    requiredSignals: fw.signalPattern?.requiredSignals || [],
+                                    minQuality: val as "WEAK" | "PRESENT" | "STRONG",
+                                  },
+                                };
+                                setFrameworks(updated);
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-32" data-testid={`select-min-quality-${idx}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="WEAK">{language === "en" ? "Weak" : "Débil"}</SelectItem>
+                                <SelectItem value="PRESENT">{language === "en" ? "Present" : "Presente"}</SelectItem>
+                                <SelectItem value="STRONG">{language === "en" ? "Strong" : "Fuerte"}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
