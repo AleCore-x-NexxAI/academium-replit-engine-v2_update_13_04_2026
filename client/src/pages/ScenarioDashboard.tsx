@@ -48,6 +48,144 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { apiRequest } from "@/lib/queryClient";
 import type { Scenario } from "@shared/schema";
 
+interface ClassStats {
+  completed: number;
+  inProgress: number;
+  biggestDropPoint: { turn: number; delta: number } | null;
+  appliedCourseTheory: { n: number; m: number } | null;
+}
+
+interface FrameworkHealth {
+  id: string;
+  name: string;
+  status: string;
+  description: string;
+  deeperDescription: string;
+}
+
+interface ModuleHealth {
+  frameworks: FrameworkHealth[];
+  classDebriefOpener: string | null;
+}
+
+interface DepthPoint {
+  turn: number;
+  avg: number;
+  color: string;
+}
+
+interface DepthAnnotation {
+  turn: number;
+  label: string;
+  description: string;
+}
+
+interface DepthTrajectory {
+  points: DepthPoint[];
+  annotations: DepthAnnotation[];
+}
+
+interface ClassPattern {
+  id: string;
+  name: string;
+  rate: number;
+  status: string;
+  description: string;
+}
+
+interface ClassPatterns {
+  patterns: ClassPattern[];
+}
+
+interface ArcPoint {
+  turn: number;
+  band: string;
+  color: string;
+}
+
+interface StudentSummaryEntry {
+  sessionId: string;
+  name: string;
+  email: string;
+  status: string;
+  arc: ArcPoint[];
+  arcLabel: string;
+  keyPattern: string;
+  canView: boolean;
+}
+
+interface StudentsSummary {
+  students: StudentSummaryEntry[];
+}
+
+interface SessionSummaryData {
+  studentName: string;
+  scenarioTitle: string;
+  completedAt: string;
+  dashboardSummary: { session_headline?: string } | null;
+  arc: ArcPoint[];
+}
+
+interface ChatTurn {
+  number: number;
+  type: string;
+  prompt: string;
+  studentInput: string;
+}
+
+interface KpiMovement {
+  kpiId: string;
+  label: string;
+  direction: string;
+  tier: string;
+  reasoningLink: string;
+}
+
+interface DebriefTurn {
+  number: number;
+  type: string;
+  depth: string;
+  studentInput: string;
+  kpiMovements: KpiMovement[];
+  debriefQuestion: string;
+}
+
+interface SignalEntry {
+  name: string;
+  level: string;
+  explanation: string;
+}
+
+interface SignalTurn {
+  number: number;
+  signals: SignalEntry[];
+}
+
+interface ReasoningSignalsData {
+  signalAverages: Record<string, number>;
+  turns: SignalTurn[];
+}
+
+interface FrameworkApplication {
+  frameworkId: string;
+  name: string;
+  level: string;
+  evidence: string;
+}
+
+interface KpiTurn {
+  number: number;
+  type: string;
+  depth: string;
+  kpiMovements: KpiMovement[];
+  frameworkApplications: FrameworkApplication[];
+}
+
+interface KpiFrameworksData {
+  turns: KpiTurn[];
+  activeKpis: string[];
+}
+
 const DEPTH_COLORS: Record<string, string> = {
   integrated: "#1D9E75",
   engaged: "#378ADD",
@@ -106,43 +244,42 @@ export default function ScenarioDashboard() {
     queryKey: ["/api/scenarios", scenarioId],
   });
 
-  const { data: classStats, isLoading: statsLoading } = useQuery({
+  const { data: classStats, isLoading: statsLoading } = useQuery<ClassStats>({
     queryKey: ["/api/scenarios", scenarioId, "class-stats"],
     queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/class-stats`).then(r => r.json()),
     enabled: activeTab === "analytics" && !!scenarioId,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: moduleHealth, isLoading: mhLoading } = useQuery({
+  const { data: moduleHealth, isLoading: mhLoading } = useQuery<ModuleHealth>({
     queryKey: ["/api/scenarios", scenarioId, "module-health"],
     queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/module-health`).then(r => r.json()),
     enabled: activeTab === "analytics" && !!scenarioId,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: depthTrajectory, isLoading: dtLoading } = useQuery({
+  const { data: depthTrajectory, isLoading: dtLoading } = useQuery<DepthTrajectory>({
     queryKey: ["/api/scenarios", scenarioId, "depth-trajectory"],
     queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/depth-trajectory`).then(r => r.json()),
     enabled: activeTab === "analytics" && !!scenarioId,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: classPatterns, isLoading: cpLoading } = useQuery({
+  const { data: classPatterns, isLoading: cpLoading } = useQuery<ClassPatterns>({
     queryKey: ["/api/scenarios", scenarioId, "class-patterns"],
     queryFn: () => apiRequest("POST", `/api/scenarios/${scenarioId}/class-patterns`).then(r => r.json()),
     enabled: activeTab === "analytics" && !!scenarioId,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: studentsSummary, isLoading: ssLoading } = useQuery({
+  const { data: studentsSummary, isLoading: ssLoading } = useQuery<StudentsSummary>({
     queryKey: ["/api/scenarios", scenarioId, "students-summary"],
     enabled: activeTab === "analytics" && !!scenarioId,
     staleTime: 5 * 60 * 1000,
   });
 
   const scenarioTitle = scenario?.title || "...";
-  const initialState = scenario?.initialState as any;
-  const enrolledCount = (studentsSummary as any)?.students?.length || 0;
+  const enrolledCount = studentsSummary?.students?.length || 0;
 
   const tabs = [
     { key: "analytics" as const, label: isEn ? "Analytics" : "Analíticas", icon: BarChart3 },
@@ -227,6 +364,21 @@ export default function ScenarioDashboard() {
   );
 }
 
+interface AnalyticsTabProps {
+  classStats: ClassStats | undefined;
+  statsLoading: boolean;
+  moduleHealth: ModuleHealth | undefined;
+  mhLoading: boolean;
+  depthTrajectory: DepthTrajectory | undefined;
+  dtLoading: boolean;
+  classPatterns: ClassPatterns | undefined;
+  cpLoading: boolean;
+  studentsSummary: StudentsSummary | undefined;
+  ssLoading: boolean;
+  isEn: boolean;
+  onViewSession: (sessionId: string) => void;
+}
+
 function AnalyticsTab({
   classStats,
   statsLoading,
@@ -240,7 +392,7 @@ function AnalyticsTab({
   ssLoading,
   isEn,
   onViewSession,
-}: any) {
+}: AnalyticsTabProps) {
   const [showFullBreakdown, setShowFullBreakdown] = useState(false);
 
   return (
@@ -288,7 +440,7 @@ function AnalyticsTab({
         ) : moduleHealth?.frameworks?.length > 0 ? (
           <>
             <div className="grid grid-cols-4 gap-2 mb-4" data-testid="framework-grid">
-              {moduleHealth.frameworks.map((fw: any) => (
+              {moduleHealth.frameworks.map((fw) => (
                 <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
                   <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
                   <StatusBadge status={fw.status} />
@@ -313,7 +465,7 @@ function AnalyticsTab({
             </button>
             {showFullBreakdown && (
               <div className="grid grid-cols-3 gap-2.5 mt-3 pt-3 border-t">
-                {moduleHealth.frameworks.map((fw: any) => (
+                {moduleHealth.frameworks.map((fw) => (
                   <div key={fw.id} className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
                     <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{fw.name} — {isEn ? "deeper view" : "vista detallada"}</div>
                     <div className="text-[11px] text-muted-foreground/70 leading-snug italic">{fw.deeperDescription}</div>
@@ -352,7 +504,7 @@ function AnalyticsTab({
                 </ResponsiveContainer>
               </div>
               <div className="flex gap-1.5" data-testid="depth-annotations">
-                {depthTrajectory.annotations?.map((anno: any) => (
+                {depthTrajectory.annotations?.map((anno) => (
                   <div key={anno.turn} className="flex-1 text-center p-2 bg-muted/30 rounded-lg border border-dashed border-border/50">
                     <div className="text-[11px] font-medium text-muted-foreground mb-0.5">{isEn ? `Turn ${anno.turn}` : `Turno ${anno.turn}`}</div>
                     <div className="text-[10px] text-muted-foreground/70 italic leading-snug">{anno.description}</div>
@@ -378,7 +530,7 @@ function AnalyticsTab({
             </div>
           ) : classPatterns?.patterns?.length > 0 ? (
             <div>
-              {classPatterns.patterns.map((p: any, i: number) => (
+              {classPatterns.patterns.map((p, i) => (
                 <div key={p.id} className={`py-2.5 ${i < classPatterns.patterns.length - 1 ? "border-b" : ""}`}>
                   <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-[12px] font-medium text-muted-foreground">{p.name}</span>
@@ -408,7 +560,7 @@ function AnalyticsTab({
           <div className="space-y-2">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-12" />)}
           </div>
-        ) : (studentsSummary as any)?.students?.length > 0 ? (
+        ) : studentsSummary?.students?.length ? (
           <>
             <Table>
               <TableHeader>
@@ -421,7 +573,7 @@ function AnalyticsTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(studentsSummary as any).students.map((s: any) => (
+                {studentsSummary.students.map((s) => (
                   <TableRow key={s.sessionId} data-testid={`row-student-${s.sessionId}`}>
                     <TableCell>
                       <div className="font-medium text-[13px]">{s.name}</div>
@@ -532,7 +684,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
     { key: "kpi" as const, label: isEn ? "KPI + course frameworks" : "KPI + marcos del curso" },
   ];
 
-  const summaryData = summary as any;
+  const summaryData = summary as SessionSummaryData | undefined;
   const arc = summaryData?.arc || [];
 
   return (
@@ -564,7 +716,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
             <div className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border min-w-[130px]">
               <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">{isEn ? "Reasoning arc" : "Arco de razonamiento"}</div>
               <div className="flex items-start gap-1.5">
-                {arc.map((a: any, i: number) => (
+                {arc.map((a, i) => (
                   <span key={i} className="flex items-center gap-1.5">
                     <div className="flex flex-col items-center gap-0.5">
                       <DepthDot band={a.band} />
@@ -608,7 +760,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
   );
 }
 
-function ChatHistoryTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+function ChatHistoryTab({ data, loading, isEn }: { data: { turns: ChatTurn[] } | undefined; loading: boolean; isEn: boolean }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}</div>;
@@ -621,7 +773,7 @@ function ChatHistoryTab({ data, loading, isEn }: { data: any; loading: boolean; 
           ? "The full conversation exactly as it happened — every decision prompt and every word the student wrote, in sequence."
           : "La conversación completa tal como ocurrió — cada pregunta y cada palabra que el estudiante escribió, en secuencia."}
       </div>
-      {turns.map((turn: any) => (
+      {turns.map((turn) => (
         <div key={turn.number} className="mb-3 border border-dashed border-border rounded-xl overflow-hidden" data-testid={`turn-card-chat-${turn.number}`}>
           <div className="px-3.5 py-2.5 bg-muted/30 border-b border-dashed border-border/50 flex items-center justify-between">
             <span className="text-[11px] font-medium text-muted-foreground">
@@ -656,7 +808,7 @@ function ChatHistoryTab({ data, loading, isEn }: { data: any; loading: boolean; 
   );
 }
 
-function DebriefPrepTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] } | undefined; loading: boolean; isEn: boolean }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}</div>;
@@ -669,7 +821,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: any; loading: boolean; 
           ? "One card per turn. Shows what the student decided, KPI movements produced, and one specific question to ask in debrief."
           : "Una tarjeta por turno. Muestra la decisión del estudiante, movimientos de KPI producidos, y una pregunta específica para el debrief."}
       </div>
-      {turns.map((turn: any) => (
+      {turns.map((turn) => (
         <div key={turn.number} className="mb-3 border border-dashed border-border rounded-xl overflow-hidden" data-testid={`turn-card-debrief-${turn.number}`}>
           <div className="px-3.5 py-2.5 bg-muted/30 border-b border-dashed border-border/50 flex items-center justify-between">
             <span className="text-[11px] font-medium text-muted-foreground">
@@ -698,7 +850,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: any; loading: boolean; 
               <div className="mb-2.5">
                 <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "KPI movements" : "Movimientos de KPI"}</div>
                 <div className="flex gap-1.5 flex-wrap mt-1">
-                  {turn.kpiMovements.map((kpi: any, i: number) => {
+                  {turn.kpiMovements.map((kpi, i) => {
                     const isUp = kpi.direction === "up";
                     const bg = isUp ? "#EAF3DE" : "#FCEBEB";
                     const color = isUp ? "#27500A" : "#791F1F";
@@ -726,7 +878,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: any; loading: boolean; 
   );
 }
 
-function ReasoningSignalsTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsData | undefined; loading: boolean; isEn: boolean }) {
   if (loading) return <div className="space-y-3"><Skeleton className="h-[230px]" /><Skeleton className="h-32" /></div>;
 
   const signalAverages = data?.signalAverages || {};
@@ -771,8 +923,8 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: any; loading: bool
           </TableRow>
         </TableHeader>
         <TableBody>
-          {turns.flatMap((turn: any) =>
-            turn.signals.map((sig: any, si: number) => (
+          {turns.flatMap((turn) =>
+            turn.signals.map((sig, si) => (
               <TableRow key={`${turn.number}-${si}`}>
                 {si === 0 && <TableCell rowSpan={turn.signals.length} className="text-[11px] font-medium text-muted-foreground align-top">T{turn.number}</TableCell>}
                 <TableCell className="text-[11px] text-muted-foreground">{sig.name}</TableCell>
@@ -791,7 +943,7 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: any; loading: bool
   );
 }
 
-function KpiFrameworksTab({ data, loading, isEn }: { data: any; loading: boolean; isEn: boolean }) {
+function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | undefined; loading: boolean; isEn: boolean }) {
   if (loading) return <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-32" /></div>;
 
   const turns = data?.turns || [];
@@ -820,7 +972,7 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: any; loading: boolean
         <div className="border border-dashed border-border rounded-lg overflow-hidden mb-4" data-testid="kpi-trajectory-table">
           <div className="grid bg-muted/30 border-b border-dashed border-border" style={{ gridTemplateColumns: `90px repeat(${turns.length}, 1fr)` }}>
             <div className="p-2 border-r border-dashed border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">KPI</div>
-            {turns.map((turn: any) => (
+            {turns.map((turn) => (
               <div key={turn.number} className="p-2 border-r border-dashed border-border last:border-r-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                 {isEn ? `Turn ${turn.number}` : `T${turn.number}`} · {turn.depth?.charAt(0).toUpperCase()}{turn.depth?.slice(1)}
               </div>
@@ -829,8 +981,8 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: any; loading: boolean
           {Array.from(kpiNames.entries()).map(([kpiId, label]) => (
             <div key={kpiId} className="grid border-b border-dashed border-border/50 last:border-b-0" style={{ gridTemplateColumns: `90px repeat(${turns.length}, 1fr)` }}>
               <div className="p-2 border-r border-dashed border-border text-[11px] font-medium text-muted-foreground">{label}</div>
-              {turns.map((turn: any) => {
-                const movement = turn.kpiMovements?.find((k: any) => k.kpiId === kpiId);
+              {turns.map((turn) => {
+                const movement = turn.kpiMovements?.find((k) => k.kpiId === kpiId);
                 return (
                   <div key={turn.number} className="p-2 border-r border-dashed border-border/50 last:border-r-0 text-[11px] text-muted-foreground/70 italic">
                     {movement
@@ -848,13 +1000,13 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: any; loading: boolean
 
       <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "Course framework application — turn by turn" : "Aplicación de marcos del curso — turno por turno"}</div>
       <div className="border border-dashed border-border rounded-lg p-3" data-testid="framework-application">
-        {turns.map((turn: any) => (
+        {turns.map((turn) => (
           <div key={turn.number}>
             <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 mt-2.5 first:mt-0">
               {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
             </div>
             {turn.frameworkApplications?.length > 0 ? (
-              turn.frameworkApplications.map((fw: any, i: number) => (
+              turn.frameworkApplications.map((fw, i) => (
                 <div key={i} className="flex gap-2 items-start mb-1.5">
                   <span className="text-[11px] text-muted-foreground/70 italic min-w-[130px] shrink-0">{fw.name}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border shrink-0">{fw.level}</span>
