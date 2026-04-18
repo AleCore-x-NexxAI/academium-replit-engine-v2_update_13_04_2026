@@ -38,7 +38,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "@/contexts/LanguageContext";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import type { SimulationSession, Scenario, Turn, Indicator, MetricExplanation } from "@shared/schema";
+import type { SimulationSession, Scenario, Turn, Indicator, MetricExplanation, FrameworkDetection, CaseFramework } from "@shared/schema";
 import { t as tSim, type SimulationLanguage } from "@/lib/i18n";
 
 const KPI_ICONS: Record<string, React.ElementType> = {
@@ -698,6 +698,131 @@ export default function SessionResults() {
             })()}
           </div>
         </motion.div>
+
+        {/* S10.2: Frameworks Applied */}
+        {(() => {
+          const frameworks: CaseFramework[] | undefined = session.scenario?.initialState?.frameworks;
+          if (!frameworks || frameworks.length === 0) return null;
+
+          const fwDetections: FrameworkDetection[][] = session.currentState?.framework_detections || [];
+
+          type FwSummary = {
+            id: string;
+            name: string;
+            bestLevel: "explicit" | "implicit" | "not_evidenced";
+            appliedTurns: number[];
+            implicitTurns: number[];
+            evidence: string;
+          };
+
+          const summaries: FwSummary[] = frameworks.map((fw) => {
+            const appliedTurns: number[] = [];
+            const implicitTurns: number[] = [];
+            let evidence = "";
+            fwDetections.forEach((turnDets, idx) => {
+              const det = turnDets?.find((d) => d.framework_id === fw.id);
+              if (!det) return;
+              const turnNum = idx + 1;
+              if (det.level === "explicit") {
+                appliedTurns.push(turnNum);
+                if (!evidence && det.evidence) evidence = det.evidence;
+              } else if (det.level === "implicit") {
+                implicitTurns.push(turnNum);
+                if (!evidence && det.evidence) evidence = det.evidence;
+              }
+            });
+            const bestLevel: FwSummary["bestLevel"] =
+              appliedTurns.length > 0 ? "explicit" : implicitTurns.length > 0 ? "implicit" : "not_evidenced";
+            return { id: fw.id, name: fw.name, bestLevel, appliedTurns, implicitTurns, evidence };
+          });
+
+          const turnLabel = (nums: number[]) => {
+            const prefix = nums.length === 1 ? tSim("results.frameworks.turn", lang) : tSim("results.frameworks.turns", lang);
+            return `${prefix} ${nums.map(n => `T${n}`).join(", ")}`;
+          };
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+            >
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-violet-500/10 flex items-center justify-center">
+                  <Compass className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">{tSim("results.frameworks.title", lang)}</h2>
+                  <p className="text-sm text-muted-foreground">{tSim("results.frameworks.desc", lang)}</p>
+                </div>
+              </div>
+
+              <Card className="p-5 rounded-xl" data-testid="card-frameworks-applied">
+                <div className="space-y-3">
+                  {summaries.map((s) => {
+                    const isApplied = s.bestLevel === "explicit";
+                    const isImplicit = s.bestLevel === "implicit";
+                    const badgeText = isApplied
+                      ? tSim("results.frameworks.applied", lang)
+                      : isImplicit
+                        ? tSim("results.frameworks.implicit", lang)
+                        : tSim("results.frameworks.not_evidenced", lang);
+                    const badgeClass = isApplied
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                      : isImplicit
+                        ? "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300"
+                        : "bg-muted border-border text-muted-foreground";
+                    const Icon = isApplied ? CheckCircle2 : isImplicit ? Sparkles : Shield;
+                    const iconClass = isApplied
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : isImplicit
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-muted-foreground";
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex flex-wrap items-start gap-3 p-3 rounded-lg border border-dashed border-border bg-muted/20"
+                        data-testid={`row-framework-${s.id}`}
+                      >
+                        <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${iconClass}`} />
+                        <div className="flex-1 min-w-[180px]">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold" data-testid={`text-framework-name-${s.id}`}>
+                              {s.name}
+                            </span>
+                            <Badge variant="outline" className={`text-xs ${badgeClass}`} data-testid={`badge-framework-status-${s.id}`}>
+                              {badgeText}
+                            </Badge>
+                          </div>
+                          {s.appliedTurns.length > 0 && (
+                            <div className="text-xs text-muted-foreground" data-testid={`text-framework-applied-turns-${s.id}`}>
+                              <span className="font-medium text-emerald-700 dark:text-emerald-300">{tSim("results.frameworks.applied", lang)}:</span> {turnLabel(s.appliedTurns)}
+                            </div>
+                          )}
+                          {s.implicitTurns.length > 0 && (
+                            <div className="text-xs text-muted-foreground" data-testid={`text-framework-implicit-turns-${s.id}`}>
+                              <span className="font-medium text-blue-700 dark:text-blue-300">{tSim("results.frameworks.implicit", lang)}:</span> {turnLabel(s.implicitTurns)}
+                            </div>
+                          )}
+                          {s.bestLevel === "not_evidenced" && (
+                            <div className="text-xs text-muted-foreground italic" data-testid={`text-framework-none-${s.id}`}>
+                              {tSim("results.frameworks.none.detected", lang)}
+                            </div>
+                          )}
+                          {s.evidence && (
+                            <div className="text-xs text-muted-foreground/80 mt-1.5 italic leading-snug" data-testid={`text-framework-evidence-${s.id}`}>
+                              "{s.evidence}"
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </motion.div>
+          );
+        })()}
 
         {/* S10.1: Final Feedback - Highlighted Card */}
         {scoreSummary?.feedback && (

@@ -966,6 +966,21 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
     return names;
   }, [turns]);
 
+  const frameworkCounts = useMemo(() => {
+    const counts = new Map<string, { name: string; explicit: number; implicit: number }>();
+    for (const turn of turns) {
+      for (const fw of turn.frameworkApplications || []) {
+        const entry = counts.get(fw.frameworkId) || { name: fw.name, explicit: 0, implicit: 0 };
+        if (fw.level === "explicit") entry.explicit++;
+        else if (fw.level === "implicit") entry.implicit++;
+        counts.set(fw.frameworkId, entry);
+      }
+    }
+    return Array.from(counts.entries()).map(([id, v]) => ({ id, ...v }));
+  }, [turns]);
+
+  const totalTurns = turns.length;
+
   return (
     <div>
       <div className="text-[12px] text-muted-foreground/70 leading-relaxed mb-4 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border/50 italic">
@@ -973,6 +988,35 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
           ? "KPI trajectory shows which indicators moved at each turn. Course framework application shows how frameworks appeared in each turn."
           : "La trayectoria de KPI muestra qué indicadores se movieron en cada turno. La aplicación de marcos muestra cómo aparecieron los marcos."}
       </div>
+
+      {frameworkCounts.length > 0 && totalTurns > 0 && (
+        <div className="mb-4" data-testid="framework-counts-summary">
+          <div className="text-[12px] font-medium text-muted-foreground mb-2">
+            {isEn ? "Frameworks applied — totals across this session" : "Marcos aplicados — totales en esta sesión"}
+          </div>
+          <div className="border border-dashed border-border rounded-lg p-3 space-y-2">
+            {frameworkCounts.map((fw) => {
+              const total = fw.explicit + fw.implicit;
+              const pct = totalTurns > 0 ? Math.min(100, Math.round((total / totalTurns) * 100)) : 0;
+              const explicitPct = totalTurns > 0 ? Math.min(100, Math.round((fw.explicit / totalTurns) * 100)) : 0;
+              return (
+                <div key={fw.id} data-testid={`framework-count-${fw.id}`}>
+                  <div className="flex items-center justify-between mb-1 gap-2">
+                    <span className="text-[11px] font-medium text-muted-foreground truncate">{fw.name}</span>
+                    <span className="text-[10px] text-muted-foreground/70 shrink-0">
+                      {fw.explicit} {isEn ? "explicit" : "explícitos"} · {fw.implicit} {isEn ? "implicit" : "implícitos"} · {total}/{totalTurns} {isEn ? "turns" : "turnos"}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-muted/40 rounded overflow-hidden flex">
+                    <div className="h-full bg-[#1D9E75]" style={{ width: `${explicitPct}%` }} />
+                    <div className="h-full bg-[#378ADD]" style={{ width: `${Math.max(0, pct - explicitPct)}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="text-[12px] font-medium text-muted-foreground mb-2">{isEn ? "KPI trajectory — decisions and their outcomes" : "Trayectoria KPI — decisiones y sus resultados"}</div>
       {activeKpis.length > 0 ? (
