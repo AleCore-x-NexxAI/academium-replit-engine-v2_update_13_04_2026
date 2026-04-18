@@ -254,7 +254,16 @@ export async function setupAuth(app: Express) {
           res.clearCookie("adminVerifyToken");
         }
         
-        return res.redirect("/");
+        // Force the session (with the freshly-logged-in user) to persist
+        // BEFORE redirecting to "/". Without this, the browser can race the
+        // session cookie write and arrive at "/" while /api/auth/user still
+        // returns 401, leaving the user staring at a blank/landing screen.
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.log("[Auth] /api/callback - session.save error:", saveErr);
+          }
+          return res.redirect("/");
+        });
       });
     })(req, res, next);
   });
