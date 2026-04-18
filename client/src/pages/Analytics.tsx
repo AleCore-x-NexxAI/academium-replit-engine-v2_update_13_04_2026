@@ -151,7 +151,13 @@ export default function Analytics() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/")}
+              onClick={() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  navigate("/professor");
+                }
+              }}
               data-testid="button-back-home"
             >
               <ArrowLeft className="w-5 h-5" />

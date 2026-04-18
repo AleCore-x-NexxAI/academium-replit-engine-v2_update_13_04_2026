@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -1315,6 +1315,7 @@ function SessionDetailDialog({ session }: { session: SessionWithUserInfo }) {
 
 export default function ScenarioAnalytics() {
   const { scenarioId } = useParams<{ scenarioId: string }>();
+  const [, setLocation] = useLocation();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const { t, language } = useTranslation();
@@ -1409,10 +1410,21 @@ export default function ScenarioAnalytics() {
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild data-testid="button-back">
-              <Link href="/">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else if (scenarioId) {
+                  setLocation(`/scenarios/${scenarioId}/dashboard`);
+                } else {
+                  setLocation("/professor");
+                }
+              }}
+              data-testid="button-back"
+            >
+              <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
               <h1 className="text-xl font-semibold">{scenario?.title || t("scenarioAnalytics.scenarioAnalysis")}</h1>
