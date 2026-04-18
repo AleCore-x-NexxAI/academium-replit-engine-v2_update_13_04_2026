@@ -83,10 +83,22 @@ function updateUserSession(
   user.expires_at = user.claims?.exp;
 }
 
+const PERMANENT_SUPER_ADMIN_EMAILS = [
+  "santiago@avalanche-ai.com",
+];
+
+function isPermanentSuperAdmin(email?: string): boolean {
+  return !!email && PERMANENT_SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
 async function upsertUser(claims: any, role?: "student" | "professor" | "admin", isSuperAdmin?: boolean) {
+  const email = claims["email"];
+  if (isPermanentSuperAdmin(email)) {
+    isSuperAdmin = true;
+  }
   await storage.upsertUser({
     id: claims["sub"],
-    email: claims["email"],
+    email,
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
@@ -202,8 +214,13 @@ export async function setupAuth(app: Express) {
         // Create/update user with the correct role
         if (user.claims?.sub) {
           const claims = user.claims;
+          const existingUser = await storage.getUser(claims["sub"]);
           let effectiveRole: "student" | "professor" | "admin" = "student";
-          let isSuperAdmin = false;
+          let isSuperAdmin = existingUser?.isSuperAdmin ?? false;
+          
+          if (isPermanentSuperAdmin(claims["email"])) {
+            isSuperAdmin = true;
+          }
           
           if (pendingRole === "admin" && isVerifiedAdmin) {
             effectiveRole = "admin";
@@ -221,6 +238,9 @@ export async function setupAuth(app: Express) {
           if (pendingRole) {
             await storage.upsertUserWithRole(claims["sub"], effectiveRole, isSuperAdmin);
             console.log(`[Auth] Explicitly applied role ${effectiveRole} for user ${claims.email}`);
+          } else if (existingUser && isSuperAdmin !== existingUser.isSuperAdmin) {
+            await storage.upsertUserWithRole(claims["sub"], existingUser.role, isSuperAdmin);
+            console.log(`[Auth] Synced permanent super admin status for ${claims.email}`);
           }
           
           console.log(`[Auth] User ${claims.email} created/updated successfully`);
