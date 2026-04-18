@@ -296,7 +296,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!isAuthor && !isSuperAdmin) {
         return res.status(403).json({ message: "Not authorized to update scenario configuration" });
       }
-      
+
+      const enrollmentCount = await storage.countScenarioEnrollments(req.params.id);
+      if (enrollmentCount > 0) {
+        return res.status(409).json({
+          message: "Scenario is locked: students are already enrolled",
+          code: "SCENARIO_LOCKED",
+          enrollmentCount,
+        });
+      }
+
       const updateSchema = z.object({
         llmModel: llmModelSchema.optional(),
         agentPrompts: agentPromptsSchema,
@@ -415,7 +424,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!scenario) {
         return res.status(404).json({ message: "Scenario not found" });
       }
-      res.json(scenario);
+      const enrollmentCount = await storage.countScenarioEnrollments(req.params.id);
+      res.json({ ...scenario, enrollmentCount, isLocked: enrollmentCount > 0 });
     } catch (error) {
       console.error("Error fetching scenario:", error);
       res.status(500).json({ message: "Failed to fetch scenario" });
@@ -462,6 +472,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(403).json({ message: "Not authorized" });
       }
 
+      const enrollmentCount = await storage.countScenarioEnrollments(req.params.id);
+      if (enrollmentCount > 0) {
+        return res.status(409).json({
+          message: "Scenario is locked: students are already enrolled",
+          code: "SCENARIO_LOCKED",
+          enrollmentCount,
+        });
+      }
+
       const { title, description, domain, language, initialState, status } = req.body;
       const updateData: Record<string, any> = {};
       if (title !== undefined) updateData.title = title;
@@ -495,6 +514,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       if (scenario.authorId !== userId) {
         return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const enrollmentCount = await storage.countScenarioEnrollments(req.params.id);
+      if (enrollmentCount > 0) {
+        return res.status(409).json({
+          message: "Scenario is locked: students are already enrolled",
+          code: "SCENARIO_LOCKED",
+          enrollmentCount,
+        });
       }
 
       await storage.deleteScenario(req.params.id);

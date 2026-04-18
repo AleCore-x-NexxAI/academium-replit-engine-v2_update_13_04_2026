@@ -31,7 +31,7 @@ import {
   type InsertTurnEvent,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, or, inArray } from "drizzle-orm";
+import { eq, and, desc, or, inArray, sql } from "drizzle-orm";
 
 export interface AnalyticsData {
   totalSessions: number;
@@ -120,6 +120,7 @@ export interface IStorage {
   // Student Enrollment operations
   getStudentEnrollments(studentId: string): Promise<{ scenarioId: string }[]>;
   isStudentEnrolled(studentId: string, scenarioId: string): Promise<boolean>;
+  countScenarioEnrollments(scenarioId: string): Promise<number>;
   enrollStudent(studentId: string, scenarioId: string, via: "email" | "code"): Promise<void>;
   enrollStudentsByEmail(scenarioId: string, emails: string[]): Promise<{ added: number; notFound: string[] }>;
   getScenariosForStudent(studentId: string): Promise<Scenario[]>;
@@ -726,6 +727,14 @@ export class DatabaseStorage implements IStorage {
         )
       );
     return !!enrollment;
+  }
+
+  async countScenarioEnrollments(scenarioId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(studentEnrollments)
+      .where(eq(studentEnrollments.scenarioId, scenarioId));
+    return result?.count ?? 0;
   }
 
   async enrollStudent(studentId: string, scenarioId: string, via: "email" | "code"): Promise<void> {

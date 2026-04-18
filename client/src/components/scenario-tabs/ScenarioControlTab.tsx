@@ -1,14 +1,27 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Settings, PlayCircle, StopCircle, Play, AlertTriangle, Loader2, Database } from "lucide-react";
+import { Settings, PlayCircle, StopCircle, Play, AlertTriangle, Loader2, Database, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTranslation } from "@/contexts/LanguageContext";
 import { useLocation } from "wouter";
 import type { Scenario } from "@shared/schema";
+
+type ScenarioWithLock = Scenario & { isLocked?: boolean; enrollmentCount?: number };
 
 interface ScenarioControlTabProps {
   scenarioId: string;
@@ -24,8 +37,9 @@ export function ScenarioControlTab({
   const { toast } = useToast();
   const { t } = useTranslation();
   const [, navigate] = useLocation();
+  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
-  const { data: scenario } = useQuery<Scenario>({
+  const { data: scenario } = useQuery<ScenarioWithLock>({
     queryKey: ["/api/scenarios", scenarioId],
     enabled: !!scenarioId,
   });
@@ -105,11 +119,27 @@ export function ScenarioControlTab({
             </div>
             <Switch
               checked={scenario.isStarted || false}
-              onCheckedChange={(checked) => toggleStartMutation.mutate(checked)}
+              onCheckedChange={(checked) => {
+                if (checked && !scenario.isStarted && !scenario.isLocked) {
+                  setShowActivateConfirm(true);
+                } else {
+                  toggleStartMutation.mutate(checked);
+                }
+              }}
               disabled={toggleStartMutation.isPending}
               data-testid="switch-simulation-started"
             />
           </div>
+
+          {scenario.isLocked && (
+            <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-2" data-testid="banner-locked">
+              <Lock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>{t("scenarioEdit.lockedTitle")}.</strong>{" "}
+                {t("scenarioEdit.lockedDesc")}
+              </p>
+            </div>
+          )}
 
           {!scenario.isStarted && (
             <div className="p-4 rounded-md bg-muted">
@@ -186,6 +216,29 @@ export function ScenarioControlTab({
           </CardContent>
         </Card>
       )}
+
+      <AlertDialog open={showActivateConfirm} onOpenChange={setShowActivateConfirm}>
+        <AlertDialogContent data-testid="dialog-activate-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("scenarioEdit.lockWarningTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("scenarioEdit.lockWarningDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-activate-cancel">
+              {t("scenarioEdit.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowActivateConfirm(false);
+                toggleStartMutation.mutate(true);
+              }}
+              data-testid="button-activate-confirm"
+            >
+              {t("scenarioEdit.activateConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

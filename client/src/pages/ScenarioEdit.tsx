@@ -17,9 +17,13 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  Lock,
+  Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FrameworkEditor } from "@/components/FrameworkEditor";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,7 +54,9 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTranslation } from "@/contexts/LanguageContext";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import type { Scenario, AgentPrompts, DecisionPoint } from "@shared/schema";
+import type { Scenario, AgentPrompts, DecisionPoint, CaseFramework } from "@shared/schema";
+
+type ScenarioWithLock = Scenario & { isLocked?: boolean; enrollmentCount?: number };
 
 interface ScenarioConfig {
   llmModel: string;
@@ -119,8 +125,9 @@ export default function ScenarioEdit() {
   const [agentPrompts, setAgentPrompts] = useState<AgentPrompts>({});
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
   const [decisionPoints, setDecisionPoints] = useState<DecisionPoint[]>([]);
+  const [frameworks, setFrameworks] = useState<CaseFramework[]>([]);
 
-  const { data: scenario, isLoading: scenarioLoading, error: scenarioError } = useQuery<Scenario>({
+  const { data: scenario, isLoading: scenarioLoading, error: scenarioError } = useQuery<ScenarioWithLock>({
     queryKey: ["/api/scenarios", scenarioId],
     enabled: !!scenarioId && !!user,
   });
@@ -197,8 +204,15 @@ export default function ScenarioEdit() {
       if (Array.isArray(initialState?.decisionPoints)) {
         setDecisionPoints(initialState.decisionPoints);
       }
+      if (Array.isArray(initialState?.frameworks)) {
+        setFrameworks(initialState.frameworks);
+      } else {
+        setFrameworks([]);
+      }
     }
   }, [scenario, form]);
+
+  const isLocked = !!scenario?.isLocked;
 
   const handleDepthStrictnessChange = (dpIndex: number, value: string) => {
     setDecisionPoints(prev => {
@@ -258,6 +272,7 @@ export default function ScenarioEdit() {
           learningObjectives: data.learningObjectivesText?.split("\n").filter(Boolean) || [],
           decisionPoints: decisionPoints.length > 0 ? decisionPoints : currentState.decisionPoints,
           totalDecisions: decisionPoints.length > 0 ? decisionPoints.length : (currentState.totalDecisions || currentState.decisionPoints?.length),
+          frameworks,
         },
       };
       const response = await apiRequest("PUT", `/api/scenarios/${scenarioId}`, updatedScenario);
@@ -269,7 +284,17 @@ export default function ScenarioEdit() {
       navigate("/");
     },
     onError: (error: Error) => {
-      toast({ title: t("scenarioEdit.failedUpdateScenario"), description: error.message, variant: "destructive" });
+      const msg = error.message || "";
+      if (msg.includes("SCENARIO_LOCKED") || msg.includes("409")) {
+        toast({
+          title: t("scenarioEdit.lockedTitle"),
+          description: t("scenarioEdit.lockedDesc"),
+          variant: "destructive",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/scenarios", scenarioId] });
+      } else {
+        toast({ title: t("scenarioEdit.failedUpdateScenario"), description: error.message, variant: "destructive" });
+      }
     },
   });
   
@@ -355,7 +380,7 @@ export default function ScenarioEdit() {
           </div>
           <Button 
             onClick={form.handleSubmit(onSubmit)} 
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || isLocked}
             data-testid="button-save"
           >
             {updateMutation.isPending ? (
@@ -370,8 +395,19 @@ export default function ScenarioEdit() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8">
+        {isLocked && (
+          <Alert className="mb-6 border-amber-500/50 bg-amber-500/10" data-testid="alert-locked">
+            <Lock className="h-4 w-4" />
+            <AlertDescription>
+              <strong>{t("scenarioEdit.lockedTitle")}</strong>{" "}
+              {t("scenarioEdit.lockedDesc")}
+              {scenario?.enrollmentCount ? ` (${scenario.enrollmentCount})` : ""}
+            </AlertDescription>
+          </Alert>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <fieldset disabled={isLocked} className="space-y-8 contents">
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-6">
                 <BookOpen className="w-5 h-5 text-primary" />
@@ -710,6 +746,27 @@ export default function ScenarioEdit() {
               </Card>
             )}
 
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Network className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold">{t("manualCase.frameworks")}</h2>
+              </div>
+              <FrameworkEditor
+                value={frameworks}
+                onChange={setFrameworks}
+                caseContext={[
+                  form.watch("title"),
+                  form.watch("description"),
+                  form.watch("situationBackground"),
+                  form.watch("objective"),
+                ]
+                  .filter(Boolean)
+                  .join(" — ")}
+                language={(form.watch("language") as "es" | "en") || "es"}
+                disabled={isLocked}
+              />
+            </Card>
+
             {/* AI Configuration Section */}
             {configData && (
               <Card className="p-6">
@@ -857,6 +914,7 @@ export default function ScenarioEdit() {
                 </div>
               </Card>
             )}
+            </fieldset>
           </form>
         </Form>
       </main>
