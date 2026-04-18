@@ -73,6 +73,7 @@ export default function RoleSelection() {
   };
 
   const handleCodeSubmit = async () => {
+    if (isVerifying) return;
     if (!adminCode.trim()) {
       toast({
         title: t("roleSelection.codeRequired"),
