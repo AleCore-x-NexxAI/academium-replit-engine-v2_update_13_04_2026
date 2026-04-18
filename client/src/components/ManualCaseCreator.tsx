@@ -9,7 +9,13 @@ import {
   X,
   Plus,
   Trash2,
+  Sparkles,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +114,11 @@ export default function ManualCaseCreator({
   const [language, setLanguage] = useState<"es" | "en">("es");
   const [conceptInput, setConceptInput] = useState("");
   const [frameworkNameInput, setFrameworkNameInput] = useState("");
+  const [aiFillingField, setAiFillingField] = useState<string | null>(null);
+  const [aiSuggesting, setAiSuggesting] = useState<"concepts" | "frameworks" | null>(null);
+  const [conceptSuggestions, setConceptSuggestions] = useState<string[]>([]);
+  const [frameworkSuggestions, setFrameworkSuggestions] = useState<string[]>([]);
+  const [fetchingKeywordsFor, setFetchingKeywordsFor] = useState<Set<string>>(new Set());
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -170,6 +181,7 @@ export default function ManualCaseCreator({
       };
       setFormData((prev) => ({ ...prev, frameworks: [...prev.frameworks, newFw] }));
       setFrameworkNameInput("");
+      void fetchKeywordsForFramework(newFw.id, name);
     }
   };
 
@@ -202,6 +214,140 @@ export default function ManualCaseCreator({
       };
       return { ...prev, frameworks: updated };
     });
+  };
+
+  const aiFillContextFor = (field: string) => ({
+    title: formData.title,
+    caseContext: formData.caseContext,
+    studentRole: formData.studentRole,
+    customTradeoff: formData.customTradeoff,
+    reflectionPrompt: formData.reflectionPrompt,
+    discipline: formData.discipline,
+    targetLevel: formData.targetLevel,
+    scenarioObjective: formData.scenarioObjective,
+    tradeoffs: formData.tradeoffs,
+    conceptTags: formData.conceptTags,
+  });
+
+  const hasMinContext = () => {
+    return (
+      formData.title.trim().length > 0 ||
+      formData.discipline.trim().length > 0 ||
+      formData.caseContext.trim().length > 0
+    );
+  };
+
+  const handleAiFill = async (field: keyof FormData) => {
+    if (aiFillingField) return;
+    setAiFillingField(field as string);
+    try {
+      const res = await apiRequest("POST", "/api/scenarios/manual-ai-fill", {
+        field,
+        language,
+        formState: aiFillContextFor(field as string),
+      });
+      const data = await res.json();
+      if (data?.value) {
+        setFormData((prev) => ({ ...prev, [field]: data.value }));
+      } else {
+        toast({ title: t("manualCase.aiFillError"), variant: "destructive" });
+      }
+    } catch {
+      toast({ title: t("manualCase.aiFillError"), variant: "destructive" });
+    } finally {
+      setAiFillingField(null);
+    }
+  };
+
+  const handleAiSuggestList = async (kind: "concepts" | "frameworks") => {
+    if (aiSuggesting) return;
+    setAiSuggesting(kind);
+    try {
+      const existing =
+        kind === "concepts"
+          ? formData.conceptTags
+          : formData.frameworks.map((f) => f.name);
+      const res = await apiRequest("POST", "/api/scenarios/manual-ai-suggest-list", {
+        kind,
+        language,
+        formState: aiFillContextFor(""),
+        existing,
+      });
+      const data = await res.json();
+      const items: string[] = Array.isArray(data?.items) ? data.items : [];
+      if (kind === "concepts") setConceptSuggestions(items);
+      else setFrameworkSuggestions(items);
+    } catch {
+      toast({ title: t("manualCase.aiSuggestError"), variant: "destructive" });
+    } finally {
+      setAiSuggesting(null);
+    }
+  };
+
+  const acceptConceptSuggestion = (item: string) => {
+    const val = item.trim();
+    if (!val) return;
+    setFormData((prev) => {
+      if (prev.conceptTags.includes(val) || prev.conceptTags.length >= 8) return prev;
+      return { ...prev, conceptTags: [...prev.conceptTags, val] };
+    });
+    setConceptSuggestions((prev) => prev.filter((s) => s !== item));
+  };
+
+  const fetchKeywordsForFramework = async (fwId: string, fwName: string) => {
+    setFetchingKeywordsFor((prev) => {
+      const next = new Set(prev);
+      next.add(fwId);
+      return next;
+    });
+    try {
+      const caseContext = `${formData.title} ${formData.caseContext}`.trim();
+      const res = await apiRequest("POST", "/api/scenarios/suggest-framework-keywords", {
+        frameworkName: fwName,
+        caseContext: caseContext || undefined,
+        language,
+      });
+      const data = await res.json();
+      const newKeywords: string[] = Array.isArray(data?.keywords) ? data.keywords : [];
+      const signalPattern = data?.signalPattern;
+      setFormData((prev) => ({
+        ...prev,
+        frameworks: prev.frameworks.map((f) => {
+          if (f.id !== fwId) return f;
+          const merged = Array.from(
+            new Set([...f.domainKeywords, ...newKeywords.map((k) => k.toLowerCase())])
+          );
+          return {
+            ...f,
+            domainKeywords: merged,
+            signalPattern: f.signalPattern || signalPattern,
+          };
+        }),
+      }));
+    } catch {
+      // silent: keywords are background enhancement
+    } finally {
+      setFetchingKeywordsFor((prev) => {
+        const next = new Set(prev);
+        next.delete(fwId);
+        return next;
+      });
+    }
+  };
+
+  const acceptFrameworkSuggestion = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (formData.frameworks.length >= 8) return;
+    if (formData.frameworks.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) return;
+    const newFw: CaseFramework = {
+      id: `fw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: trimmed,
+      domainKeywords: [],
+    };
+    setFormData((prev) => ({ ...prev, frameworks: [...prev.frameworks, newFw] }));
+    setFrameworkSuggestions((prev) => prev.filter((s) => s !== name));
+    fetchKeywordsForFramework(newFw.id, trimmed);
   };
 
   const buildPayload = (isPublished: boolean) => {
@@ -337,6 +483,38 @@ export default function ManualCaseCreator({
     );
   };
 
+  const renderAiFillButton = (field: keyof FormData, requireContext = true) => {
+    const isLoading = aiFillingField === field;
+    const disabled = isLoading || (requireContext && !hasMinContext());
+    const tooltip = requireContext && !hasMinContext()
+      ? t("manualCase.aiFillNeedsContext")
+      : t("manualCase.aiFillTooltip");
+    const btn = (
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-6 px-2 gap-1 text-xs"
+        disabled={disabled}
+        onClick={() => handleAiFill(field)}
+        data-testid={`button-ai-fill-${field}`}
+      >
+        {isLoading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Sparkles className="w-3 h-3" />
+        )}
+        <span>{t("manualCase.aiFill")}</span>
+      </Button>
+    );
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild><span>{btn}</span></TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    );
+  };
+
   return (
     <Card className="h-full flex flex-col overflow-hidden" data-testid="manual-case-creator">
       <div className="flex items-center justify-between p-4 border-b bg-muted/30">
@@ -354,9 +532,10 @@ export default function ManualCaseCreator({
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Case Title */}
         <div className="space-y-2">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <Label htmlFor="title">{t("manualCase.caseTitle")}</Label>
             <HelpIcon content={t("manualCase.caseTitleHelp")} />
+            <div className="ml-auto">{renderAiFillButton("title", false)}</div>
           </div>
           <Input
             id="title"
@@ -454,10 +633,11 @@ export default function ManualCaseCreator({
 
         {/* Case Context */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Label htmlFor="context">{t("manualCase.caseContext")}</Label>
             <HelpIcon content={t("manualCase.caseContextHelp")} />
             <Badge variant="secondary" className="text-xs">{t("common.required")}</Badge>
+            <div className="ml-auto">{renderAiFillButton("caseContext")}</div>
           </div>
           <Textarea
             id="context"
@@ -471,10 +651,11 @@ export default function ManualCaseCreator({
 
         {/* Student Role */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Label htmlFor="role">{t("manualCase.studentRole")}</Label>
             <HelpIcon content={t("manualCase.studentRoleHelp")} />
             <Badge variant="secondary" className="text-xs">{t("common.required")}</Badge>
+            <div className="ml-auto">{renderAiFillButton("studentRole")}</div>
           </div>
           <Input
             id="role"
@@ -513,14 +694,17 @@ export default function ManualCaseCreator({
               </Badge>
             ))}
           </div>
-          <Input
-            value={formData.customTradeoff}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, customTradeoff: e.target.value }))
-            }
-            placeholder={t("manualCase.customTradeoff")}
-            data-testid="input-custom-tradeoff"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              value={formData.customTradeoff}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, customTradeoff: e.target.value }))
+              }
+              placeholder={t("manualCase.customTradeoff")}
+              data-testid="input-custom-tradeoff"
+            />
+            {renderAiFillButton("customTradeoff")}
+          </div>
           {formData.tradeoffs.length === 0 && (
             <p className="text-xs text-muted-foreground">{t("manualCase.selectTradeoff")}</p>
           )}
@@ -593,10 +777,11 @@ export default function ManualCaseCreator({
 
             {/* Reflection Prompt */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Label htmlFor="reflection">{t("manualCase.reflectionPrompt")}</Label>
                 <HelpIcon content={t("manualCase.reflectionHelp")} />
                 <Badge variant="outline" className="text-xs">{t("common.optional")}</Badge>
+                <div className="ml-auto">{renderAiFillButton("reflectionPrompt")}</div>
               </div>
               <Textarea
                 id="reflection"
@@ -660,10 +845,67 @@ export default function ManualCaseCreator({
 
             {/* Course Concepts */}
             <div className="space-y-3">
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
                 <Label>{t("manualCase.courseConcepts")}</Label>
                 <HelpIcon content={t("manualCase.courseConceptsDesc")} />
+                <div className="ml-auto">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 gap-1 text-xs"
+                          disabled={
+                            aiSuggesting === "concepts" ||
+                            !hasMinContext() ||
+                            formData.conceptTags.length >= 8
+                          }
+                          onClick={() => handleAiSuggestList("concepts")}
+                          data-testid="button-ai-suggest-concepts"
+                        >
+                          {aiSuggesting === "concepts" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          <span>{t("manualCase.aiSuggest")}</span>
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!hasMinContext()
+                        ? t("manualCase.aiFillNeedsContext")
+                        : t("manualCase.aiFillTooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
+              {conceptSuggestions.length > 0 && (
+                <div
+                  className="space-y-1"
+                  data-testid="concept-suggestions"
+                >
+                  <p className="text-xs text-muted-foreground">
+                    {t("manualCase.aiSuggestionsLabel")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {conceptSuggestions.map((s, i) => (
+                      <Badge
+                        key={`${s}-${i}`}
+                        variant="outline"
+                        className="cursor-pointer gap-1"
+                        onClick={() => acceptConceptSuggestion(s)}
+                        data-testid={`chip-concept-suggestion-${i}`}
+                      >
+                        <Plus className="w-3 h-3" />
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 {t("manualCase.courseConceptsDesc")}
               </p>
@@ -730,10 +972,64 @@ export default function ManualCaseCreator({
 
             {/* Frameworks */}
             <div className="space-y-3">
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
                 <Label>{t("manualCase.frameworks")}</Label>
                 <HelpIcon content={t("manualCase.frameworksDesc")} />
+                <div className="ml-auto">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 gap-1 text-xs"
+                          disabled={
+                            aiSuggesting === "frameworks" ||
+                            !hasMinContext() ||
+                            formData.frameworks.length >= 8
+                          }
+                          onClick={() => handleAiSuggestList("frameworks")}
+                          data-testid="button-ai-suggest-frameworks"
+                        >
+                          {aiSuggesting === "frameworks" ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          <span>{t("manualCase.aiSuggest")}</span>
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!hasMinContext()
+                        ? t("manualCase.aiFillNeedsContext")
+                        : t("manualCase.aiFillTooltip")}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
+              {frameworkSuggestions.length > 0 && (
+                <div className="space-y-1" data-testid="framework-suggestions">
+                  <p className="text-xs text-muted-foreground">
+                    {t("manualCase.aiSuggestionsLabel")}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {frameworkSuggestions.map((s, i) => (
+                      <Badge
+                        key={`${s}-${i}`}
+                        variant="outline"
+                        className="cursor-pointer gap-1"
+                        onClick={() => acceptFrameworkSuggestion(s)}
+                        data-testid={`chip-framework-suggestion-${i}`}
+                      >
+                        <Plus className="w-3 h-3" />
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 {t("manualCase.frameworksDesc")}
               </p>
@@ -789,7 +1085,18 @@ export default function ManualCaseCreator({
                         </Button>
                       </div>
                       <div>
-                        <Label className="text-xs">{t("manualCase.keywords")}</Label>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-xs">{t("manualCase.keywords")}</Label>
+                          {fetchingKeywordsFor.has(fw.id) && (
+                            <span
+                              className="flex items-center gap-1 text-xs text-muted-foreground"
+                              data-testid={`keywords-loading-${idx}`}
+                            >
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              {t("manualCase.aiFetchingKeywords")}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-wrap gap-1 mt-1 items-center">
                           {fw.domainKeywords.map((kw, kwIdx) => (
                             <Badge

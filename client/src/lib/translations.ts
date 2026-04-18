@@ -494,6 +494,14 @@ const translations = {
     keywords: { es: "Palabras clave", en: "Keywords" },
     addKeyword: { es: "Agregar palabra...", en: "Add keyword..." },
     settingsSection: { es: "Configuración de Simulación", en: "Simulation Settings" },
+    aiFill: { es: "Crear con IA", en: "Create with AI" },
+    aiFillTooltip: { es: "Generar este campo con IA según lo que ya escribiste", en: "Generate this field with AI based on what you've written" },
+    aiFillNeedsContext: { es: "Agrega un título o disciplina para usar IA", en: "Add a title or discipline to use AI" },
+    aiSuggest: { es: "Sugerir con IA", en: "Suggest with AI" },
+    aiSuggestionsLabel: { es: "Sugerencias", en: "Suggestions" },
+    aiFillError: { es: "No se pudo generar la sugerencia. Intenta de nuevo.", en: "Could not generate the suggestion. Try again." },
+    aiSuggestError: { es: "No se pudieron obtener sugerencias.", en: "Could not get suggestions." },
+    aiFetchingKeywords: { es: "Obteniendo palabras clave…", en: "Fetching keywords…" },
   },
 
   canonicalCase: {

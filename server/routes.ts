@@ -1654,6 +1654,173 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
     }
   });
 
+  const ALLOWED_AI_FILL_FIELDS = [
+    "title",
+    "caseContext",
+    "studentRole",
+    "customTradeoff",
+    "reflectionPrompt",
+  ] as const;
+  type AiFillField = typeof ALLOWED_AI_FILL_FIELDS[number];
+
+  const aiFillSchema = z.object({
+    field: z.enum(ALLOWED_AI_FILL_FIELDS),
+    language: z.enum(["es", "en"]).default("es"),
+    formState: z.object({
+      title: z.string().optional().default(""),
+      caseContext: z.string().optional().default(""),
+      studentRole: z.string().optional().default(""),
+      customTradeoff: z.string().optional().default(""),
+      reflectionPrompt: z.string().optional().default(""),
+      discipline: z.string().optional().default(""),
+      targetLevel: z.string().optional().default(""),
+      scenarioObjective: z.string().optional().default(""),
+      tradeoffs: z.array(z.string()).optional().default([]),
+      conceptTags: z.array(z.string()).optional().default([]),
+    }),
+  });
+
+  function buildContextBlock(state: any, lang: "es" | "en"): string {
+    const isEn = lang === "en";
+    const lines: string[] = [];
+    const labels = isEn
+      ? {
+          title: "Title",
+          discipline: "Discipline",
+          level: "Target level",
+          objective: "Scenario objective",
+          context: "Case context",
+          role: "Student role",
+          tradeoffs: "Tradeoff focus",
+          customTradeoff: "Custom tradeoff",
+          reflection: "Reflection prompt",
+          concepts: "Course concepts",
+        }
+      : {
+          title: "Título",
+          discipline: "Disciplina",
+          level: "Nivel objetivo",
+          objective: "Objetivo del escenario",
+          context: "Contexto del caso",
+          role: "Rol del estudiante",
+          tradeoffs: "Enfoque de trade-off",
+          customTradeoff: "Trade-off personalizado",
+          reflection: "Pregunta de reflexión",
+          concepts: "Conceptos del curso",
+        };
+    if (state.title) lines.push(`${labels.title}: ${state.title}`);
+    if (state.discipline) lines.push(`${labels.discipline}: ${state.discipline}`);
+    if (state.targetLevel) lines.push(`${labels.level}: ${state.targetLevel}`);
+    if (state.scenarioObjective) lines.push(`${labels.objective}: ${state.scenarioObjective}`);
+    if (state.caseContext) lines.push(`${labels.context}: ${state.caseContext}`);
+    if (state.studentRole) lines.push(`${labels.role}: ${state.studentRole}`);
+    if (state.tradeoffs?.length) lines.push(`${labels.tradeoffs}: ${state.tradeoffs.join(", ")}`);
+    if (state.customTradeoff) lines.push(`${labels.customTradeoff}: ${state.customTradeoff}`);
+    if (state.reflectionPrompt) lines.push(`${labels.reflection}: ${state.reflectionPrompt}`);
+    if (state.conceptTags?.length) lines.push(`${labels.concepts}: ${state.conceptTags.join(", ")}`);
+    return lines.join("\n");
+  }
+
+  function fieldInstruction(field: AiFillField, lang: "es" | "en"): { instruction: string; jsonShape: string } {
+    const isEn = lang === "en";
+    const map: Record<AiFillField, { es: string; en: string }> = {
+      title: {
+        es: "Genera un título conciso y descriptivo (3-8 palabras) para este caso de simulación de negocios. Sin comillas ni puntuación final.",
+        en: "Generate a concise, descriptive title (3-8 words) for this business simulation case. No quotes or trailing punctuation.",
+      },
+      caseContext: {
+        es: "Escribe un contexto de caso profesional (120-180 palabras) al estilo Harvard Business School. Incluye empresa, industria, situación actual y la tensión central. No incluyas la decisión específica.",
+        en: "Write a professional case context (120-180 words) in Harvard Business School style. Include company, industry, current situation, and the central tension. Do not include the specific decision.",
+      },
+      studentRole: {
+        es: "Sugiere un rol específico que asumirá el estudiante (ej: 'Director de Operaciones de una empresa de logística regional'). Una sola línea, 8-15 palabras.",
+        en: "Suggest a specific role the student will take (e.g., 'Operations Director at a regional logistics company'). Single line, 8-15 words.",
+      },
+      customTradeoff: {
+        es: "Propón un trade-off central específico para este caso, en formato 'X vs. Y' con una breve descripción de la tensión (máx. 25 palabras).",
+        en: "Propose a specific central trade-off for this case, in 'X vs. Y' format with a brief description of the tension (max 25 words).",
+      },
+      reflectionPrompt: {
+        es: "Escribe una pregunta de reflexión final (1-2 oraciones) que invite al estudiante a metacognición sobre sus decisiones en este caso.",
+        en: "Write a final reflection question (1-2 sentences) inviting the student to metacognition about their decisions in this case.",
+      },
+    };
+    return {
+      instruction: map[field][lang],
+      jsonShape: '{"value": "..."}',
+    };
+  }
+
+  app.post("/api/scenarios/manual-ai-fill", isAuthenticated, async (req: any, res) => {
+    try {
+      const parse = aiFillSchema.safeParse(req.body);
+      if (!parse.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parse.error.errors });
+      }
+      const { field, language, formState } = parse.data;
+      const ctx = buildContextBlock(formState, language);
+      const { instruction, jsonShape } = fieldInstruction(field, language);
+      const langInstr = language === "en" ? "Respond in English." : "Responde en español.";
+      const prompt = `${language === "en" ? "Current draft of a manual case being authored by a professor" : "Borrador actual de un caso siendo creado manualmente por un profesor"}:\n\n${ctx || (language === "en" ? "(empty)" : "(vacío)")}\n\n${instruction}\n\n${langInstr} ${language === "en" ? "Return JSON only" : "Retorna solo JSON"}: ${jsonShape}`;
+
+      const response = await generateChatCompletion(
+        [{ role: "user", content: prompt }],
+        { responseFormat: "json", maxTokens: 600, agentName: "manualCaseFieldFiller" }
+      );
+      const parsed = JSON.parse(response);
+      const value = typeof parsed.value === "string" ? parsed.value.trim() : "";
+      if (!value) {
+        return res.status(502).json({ message: "Empty AI response" });
+      }
+      res.json({ value });
+    } catch (error) {
+      console.error("Error in manual-ai-fill:", error);
+      res.status(500).json({ message: "Error generating field" });
+    }
+  });
+
+  const aiSuggestListSchema = z.object({
+    kind: z.enum(["concepts", "frameworks"]),
+    language: z.enum(["es", "en"]).default("es"),
+    formState: aiFillSchema.shape.formState,
+    existing: z.array(z.string()).optional().default([]),
+  });
+
+  app.post("/api/scenarios/manual-ai-suggest-list", isAuthenticated, async (req: any, res) => {
+    try {
+      const parse = aiSuggestListSchema.safeParse(req.body);
+      if (!parse.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parse.error.errors });
+      }
+      const { kind, language, formState, existing } = parse.data;
+      const ctx = buildContextBlock(formState, language);
+      const isEn = language === "en";
+      const existingStr = existing.length > 0 ? `\n\n${isEn ? "Already added (do not repeat)" : "Ya agregados (no repetir)"}: ${existing.join(", ")}` : "";
+      const instr = kind === "concepts"
+        ? (isEn
+            ? "Suggest 6 concise course concepts (1-3 words each) relevant to this case that a professor would assess in analytics."
+            : "Sugiere 6 conceptos del curso concisos (1-3 palabras cada uno) relevantes para este caso que un profesor evaluaría en analíticas.")
+        : (isEn
+            ? "Suggest 6 named theoretical frameworks (e.g., 'Porter's Five Forces', 'SWOT', 'Kotter 8 Steps') relevant to this case."
+            : "Sugiere 6 marcos teóricos nombrados (ej: 'Cinco Fuerzas de Porter', 'FODA', '8 Pasos de Kotter') relevantes para este caso.");
+      const langInstr = isEn ? "Respond in English." : "Responde en español.";
+      const prompt = `${isEn ? "Manual case draft" : "Borrador de caso manual"}:\n\n${ctx || (isEn ? "(empty)" : "(vacío)")}${existingStr}\n\n${instr}\n\n${langInstr} ${isEn ? "Return JSON only" : "Retorna solo JSON"}: {"items": ["...", "..."]}`;
+
+      const response = await generateChatCompletion(
+        [{ role: "user", content: prompt }],
+        { responseFormat: "json", maxTokens: 400, agentName: "manualCaseListSuggester" }
+      );
+      const parsed = JSON.parse(response);
+      const items = Array.isArray(parsed.items)
+        ? parsed.items.filter((s: unknown) => typeof s === "string" && s.trim().length > 0).map((s: string) => s.trim()).slice(0, 8)
+        : [];
+      res.json({ items });
+    } catch (error) {
+      console.error("Error in manual-ai-suggest-list:", error);
+      res.status(500).json({ message: "Error generating suggestions" });
+    }
+  });
+
   app.post("/api/drafts/:id/publish", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
