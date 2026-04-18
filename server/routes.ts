@@ -1262,6 +1262,59 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
     }
   });
 
+  app.post("/api/admin/backfill-session-analytics", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+
+      if (!user || (user.role !== "admin" && user.role !== "professor" && !user.isSuperAdmin)) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const { sessionId, scenarioId, dryRun } = req.body || {};
+
+      if (sessionId && typeof sessionId !== "string") {
+        return res.status(400).json({ message: "sessionId must be a string" });
+      }
+      if (scenarioId && typeof scenarioId !== "string") {
+        return res.status(400).json({ message: "scenarioId must be a string" });
+      }
+
+      if (!user.isSuperAdmin && !sessionId && !scenarioId) {
+        return res.status(403).json({
+          message: "Only superadmins can run a global backfill. Provide sessionId or scenarioId.",
+        });
+      }
+
+      if (scenarioId && user.role === "professor") {
+        const scenario = await storage.getScenario(scenarioId);
+        if (!scenario || (scenario.authorId !== userId && !user.isSuperAdmin)) {
+          return res.status(403).json({ message: "Not authorized for this scenario" });
+        }
+      }
+
+      if (sessionId && !user.isSuperAdmin) {
+        const session = await storage.getSimulationSessionWithScenario(sessionId);
+        if (!session) return res.status(404).json({ message: "Session not found" });
+        if (session.scenario?.authorId !== userId) {
+          return res.status(403).json({ message: "Not authorized for this session" });
+        }
+      }
+
+      const { backfillSessionAnalytics } = await import("./scripts/backfillSessionAnalytics");
+      const summary = await backfillSessionAnalytics({
+        sessionId,
+        scenarioId,
+        dryRun: Boolean(dryRun),
+      });
+
+      res.json(summary);
+    } catch (error) {
+      console.error("Error running session analytics backfill:", error);
+      res.status(500).json({ message: "Failed to run backfill", error: (error as Error).message });
+    }
+  });
+
   app.post("/api/upload/url", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

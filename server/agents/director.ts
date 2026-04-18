@@ -1360,7 +1360,7 @@ Devuelve SOLO el texto de la pregunta, nada más.`;
     : `En el Turno ${turnNumber}, la decisión se centró en ${intentText.substring(0, 60)} — ¿qué consideraciones se estaban sopesando en esa dirección?`;
 }
 
-async function generateDashboardSummary(
+export async function generateDashboardSummary(
   context: AgentContext,
   evidenceLogs: import("@shared/schema").DecisionEvidenceLogEntry[],
   frameworkDetections: import("@shared/schema").FrameworkDetection[][],
