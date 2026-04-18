@@ -93,7 +93,10 @@ export default function RoleSelection() {
       const data = await response.json();
 
       if (data.valid) {
-        window.location.href = `/api/fresh-login?role=admin&verified=true`;
+        // Go straight to /api/login (do NOT use /api/fresh-login here):
+        // /api/fresh-login redirects through Replit's end-session URL which
+        // would clear the pendingAdminVerify cookie before /api/login reads it.
+        window.location.href = `/api/login?role=admin`;
       } else {
         toast({
           title: t("roleSelection.invalidCode"),

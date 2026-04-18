@@ -17,14 +17,14 @@ function getSigningSecret(): string {
   return secret;
 }
 
-function signAdminVerification(timestamp: number): string {
+export function signAdminVerification(timestamp: number): string {
   const payload = `admin-verified:${timestamp}`;
   const hmac = crypto.createHmac("sha256", getSigningSecret());
   hmac.update(payload);
   return `${timestamp}.${hmac.digest("hex")}`;
 }
 
-function verifyAdminSignature(token: string): boolean {
+export function verifyAdminSignature(token: string): boolean {
   try {
     const parts = token.split(".");
     if (parts.length !== 2) return false;
@@ -150,11 +150,12 @@ export async function setupAuth(app: Express) {
   app.get("/api/login", async (req, res, next) => {
     const role = req.query.role as string | undefined;
     
-    // Check if admin code was verified server-side (within last 5 minutes)
-    const adminCodeVerified = (req.session as any).adminCodeVerified === true;
-    const verifiedAt = (req.session as any).adminCodeVerifiedAt || 0;
-    const isRecentVerification = Date.now() - verifiedAt < 5 * 60 * 1000; // 5 minute window
-    const isValidAdminVerification = adminCodeVerified && isRecentVerification;
+    // Check if admin code was verified - read from a short-lived signed cookie
+    // (sessions get destroyed by /api/fresh-login's logout round trip, cookies do not)
+    const pendingAdminVerifyCookie = req.cookies?.pendingAdminVerify as string | undefined;
+    const isValidAdminVerification = pendingAdminVerifyCookie
+      ? verifyAdminSignature(pendingAdminVerifyCookie)
+      : false;
     
     // Store role in cookie that survives OIDC redirect (session is unreliable across redirects)
     if (role && ["student", "professor", "admin"].includes(role)) {
@@ -177,9 +178,8 @@ export async function setupAuth(app: Express) {
       }
     }
     
-    // Clear the admin verification flags from session after use
-    delete (req.session as any).adminCodeVerified;
-    delete (req.session as any).adminCodeVerifiedAt;
+    // Single-use: clear the pending verification cookie as soon as it's consumed
+    res.clearCookie("pendingAdminVerify");
     
     console.log(`[Auth] /api/login - role: ${role}, isValidAdminVerification: ${isValidAdminVerification}`);
     

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, signAdminVerification } from "./replitAuth";
 import { processStudentTurn, processReflection, DEFAULT_DIRECTOR_PROMPT } from "./agents/director";
 import { DEFAULT_EVALUATOR_PROMPT } from "./agents/evaluator";
 import { DEFAULT_NARRATOR_PROMPT } from "./agents/narrator";
@@ -191,7 +191,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Verify super admin code (before login) - stores verification in session
+  // Verify super admin code (before login) - issues a short-lived signed cookie.
+  // We do NOT use the session here: the subsequent /api/login flow goes through
+  // Replit's OIDC end-session URL which destroys the local session, so a cookie
+  // is the only reliable way to carry the verification across that round trip.
   app.post("/api/auth/verify-admin-code", async (req: any, res) => {
     try {
       const { code } = req.body;
@@ -204,10 +207,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const valid = code === adminCode;
       
-      // Store verification result in session (server-side, cannot be spoofed)
       if (valid) {
-        req.session.adminCodeVerified = true;
-        req.session.adminCodeVerifiedAt = Date.now();
+        const signedToken = signAdminVerification(Date.now());
+        res.cookie("pendingAdminVerify", signedToken, {
+          httpOnly: true,
+          secure: true,
+          maxAge: 2 * 60 * 1000, // 2 minutes - just enough to complete the login redirect
+          sameSite: "lax",
+        });
       }
       
       res.json({ valid });
