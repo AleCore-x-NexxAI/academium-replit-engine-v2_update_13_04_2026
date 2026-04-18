@@ -62,6 +62,23 @@ const POC_SCENARIO = {
       }
     ],
     subjectMatterContext: "Gestión de productos tecnológicos, metodologías ágiles, gestión de stakeholders, comunicación de crisis en startups. Conceptos clave: MVP (Producto Mínimo Viable), deuda técnica, gestión de expectativas, balance entre velocidad y calidad.",
+    frameworks: [
+      {
+        id: "fw_poc_001",
+        name: "Análisis de Stakeholders",
+        domainKeywords: ["stakeholder", "inversionistas", "equipo", "usuarios", "interesados", "partes interesadas", "impacto", "expectativas"],
+      },
+      {
+        id: "fw_poc_002",
+        name: "Gestión de Riesgo vs. Velocidad",
+        domainKeywords: ["riesgo", "velocidad", "plazo", "calidad", "tradeoff", "balance", "bug", "deuda técnica", "parche", "contingencia"],
+      },
+      {
+        id: "fw_poc_003",
+        name: "Comunicación de Crisis",
+        domainKeywords: ["transparencia", "comunicación", "confianza", "reputación", "mensaje", "crisis", "estrategia", "divulgación", "respuesta"],
+      },
+    ],
   } as InitialState,
   rubric: {
     criteria: [
@@ -195,7 +212,16 @@ export async function seedSampleScenarios() {
     });
     console.log(`Created POC scenario: ${POC_SCENARIO.title}`);
   } else {
-    console.log(`POC scenario already exists: ${POC_SCENARIO.title}`);
+    const existingFrameworks = (existingPoc[0].initialState as any)?.frameworks;
+    if (!existingFrameworks || !Array.isArray(existingFrameworks) || existingFrameworks.length === 0) {
+      const updatedInitialState = { ...(existingPoc[0].initialState as any), frameworks: POC_SCENARIO.initialState.frameworks };
+      await db.update(scenarios)
+        .set({ initialState: updatedInitialState as any })
+        .where(eq(scenarios.title, POC_SCENARIO.title));
+      console.log(`Updated POC scenario with frameworks: ${POC_SCENARIO.title}`);
+    } else {
+      console.log(`POC scenario already exists with frameworks: ${POC_SCENARIO.title}`);
+    }
   }
 
   // Sample scenarios disabled for POC

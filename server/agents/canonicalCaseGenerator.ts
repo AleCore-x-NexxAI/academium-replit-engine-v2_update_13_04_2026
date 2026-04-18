@@ -16,7 +16,8 @@ import type {
   KPIs,
   Rubric,
   DecisionPoint,
-  Indicator
+  Indicator,
+  CaseFramework
 } from "@shared/schema";
 import { getCanonicalKPIs } from "@shared/schema";
 import { generateChatCompletion } from "../openai";
@@ -179,8 +180,27 @@ IMPORTANTE: El thinkingScaffold NUNCA contiene verbos imperativos ni sugerencias
   "timelineContext": "Contexto de presión temporal",
   "keyConstraints": ["Restricción 1", "Restricción 2", "Restricción 3"],
   "learningObjectives": ["Objetivo de aprendizaje 1", "Objetivo 2", "Objetivo 3"],
+  "frameworks": [
+    {
+      "id": "fw_001",
+      "name": "Nombre del marco analítico (ej: Análisis de Stakeholders)",
+      "domainKeywords": ["palabra1", "palabra2", "palabra3", "palabra4", "palabra5"]
+    },
+    {
+      "id": "fw_002",
+      "name": "Segundo marco relevante (ej: Análisis Costo-Beneficio)",
+      "domainKeywords": ["término1", "término2", "término3", "término4"]
+    }
+  ],
   "confidence": 85
 }
+
+=== INSTRUCCIONES PARA FRAMEWORKS ===
+- Genera entre 1 y 4 marcos analíticos que sean genuinamente relevantes para el dominio y las decisiones del caso
+- Cada marco debe incluir 4-8 palabras clave específicas que un estudiante usaría al aplicarlo
+- Los nombres de los marcos deben ser concretos y reconocibles (ej: "Análisis FODA", "Análisis de Stakeholders", "Análisis Costo-Beneficio", "Marco de Gestión de Crisis")
+- Las palabras clave deben reflejar el vocabulario real del marco aplicado al contexto del caso
+- Los IDs deben ser únicos: fw_001, fw_002, etc.
 
 IMPORTANTE: 
 - TODO el contenido DEBE estar en ESPAÑOL LATINOAMERICANO
@@ -205,6 +225,7 @@ export interface CanonicalCaseData {
   timelineContext: string;
   keyConstraints: string[];
   learningObjectives: string[];
+  frameworks: CaseFramework[];
   confidence: number;
 }
 
@@ -224,8 +245,8 @@ export async function generateCanonicalCase(
     : "";
 
   const langDirective = isEn
-    ? `\n\nCRITICAL LANGUAGE OVERRIDE: Generate ALL content in ENGLISH. All titles, descriptions, prompts, options, contexts, constraints, and objectives MUST be in English. Zero Spanish.\nCRITICAL: Indicator labels MUST be in English. Example English labels: "Team Morale", "Budget", "Brand Reputation".`
-    : `\n\nCRÍTICO: Los nombres de indicadores DEBEN estar en español. Ejemplo: "Moral del Equipo", "Presupuesto", "Reputación".`;
+    ? `\n\nCRITICAL LANGUAGE OVERRIDE: Generate ALL content in ENGLISH. All titles, descriptions, prompts, options, contexts, constraints, objectives, framework names, and keywords MUST be in English. Zero Spanish.\nCRITICAL: Indicator labels MUST be in English. Example English labels: "Team Morale", "Budget", "Brand Reputation".\nCRITICAL: Framework names and keywords must also be in English (e.g., "Stakeholder Analysis", "Cost-Benefit Analysis", "SWOT Analysis").`
+    : `\n\nCRÍTICO: Los nombres de indicadores DEBEN estar en español. Ejemplo: "Moral del Equipo", "Presupuesto", "Reputación".\nCRÍTICO: Los nombres y palabras clave de los frameworks también deben estar en español.`;
 
   const response = await generateChatCompletion(
     [
@@ -306,6 +327,23 @@ export async function generateCanonicalCase(
       }))
     : defaultIndicators;
 
+  const parsedFrameworks: CaseFramework[] = [];
+  if (Array.isArray(parsed.frameworks)) {
+    for (const fw of parsed.frameworks) {
+      if (!fw || typeof fw.name !== "string" || !fw.name.trim()) continue;
+      if (!Array.isArray(fw.domainKeywords) || fw.domainKeywords.length < 2) continue;
+      const keywords = fw.domainKeywords
+        .filter((k: any) => typeof k === "string" && k.trim().length > 0)
+        .map((k: string) => k.trim().toLowerCase())
+        .slice(0, 12);
+      if (keywords.length < 2) continue;
+      const fwId = typeof fw.id === "string" && fw.id.trim()
+        ? fw.id.trim()
+        : `fw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      parsedFrameworks.push({ id: fwId, name: fw.name.trim(), domainKeywords: keywords });
+    }
+  }
+
   return {
     title: parsed.title || "Caso de Negocios",
     description: parsed.description || "Un caso de simulación de negocios",
@@ -322,6 +360,7 @@ export async function generateCanonicalCase(
     timelineContext: parsed.timelineContext || "Situación urgente",
     keyConstraints: parsed.keyConstraints || ["Presupuesto limitado", "Tiempo restringido"],
     learningObjectives: parsed.learningObjectives || ["Pensamiento crítico", "Toma de decisiones"],
+    frameworks: parsedFrameworks.slice(0, 4),
     confidence: parsed.confidence || 75,
   };
 }
@@ -371,6 +410,7 @@ ${canonical.coreChallenge}`;
     caseContext: canonical.caseContext,
     coreChallenge: canonical.coreChallenge,
     reflectionPrompt: canonical.reflectionPrompt,
+    frameworks: canonical.frameworks && canonical.frameworks.length > 0 ? canonical.frameworks : undefined,
   };
 
   return {

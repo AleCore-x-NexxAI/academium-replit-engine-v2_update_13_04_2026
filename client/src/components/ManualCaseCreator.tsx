@@ -119,6 +119,7 @@ export default function ManualCaseCreator({
   const [conceptSuggestions, setConceptSuggestions] = useState<string[]>([]);
   const [frameworkSuggestions, setFrameworkSuggestions] = useState<string[]>([]);
   const [fetchingKeywordsFor, setFetchingKeywordsFor] = useState<Set<string>>(new Set());
+  const [signalPatternOpen, setSignalPatternOpen] = useState<Record<number, boolean>>({});
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -348,6 +349,115 @@ export default function ManualCaseCreator({
     setFormData((prev) => ({ ...prev, frameworks: [...prev.frameworks, newFw] }));
     setFrameworkSuggestions((prev) => prev.filter((s) => s !== name));
     fetchKeywordsForFramework(newFw.id, trimmed);
+  };
+
+  const updateFrameworkSignalPattern = (fwIdx: number, patch: Partial<NonNullable<CaseFramework["signalPattern"]>>) => {
+    setFormData((prev) => {
+      const updated = [...prev.frameworks];
+      const fw = updated[fwIdx];
+      updated[fwIdx] = {
+        ...fw,
+        signalPattern: {
+          requiredSignals: fw.signalPattern?.requiredSignals ?? [],
+          minQuality: fw.signalPattern?.minQuality ?? "PRESENT",
+          additionalKeywords: fw.signalPattern?.additionalKeywords,
+          ...patch,
+        },
+      };
+      return { ...prev, frameworks: updated };
+    });
+  };
+
+  const toggleSignalForFramework = (fwIdx: number, signal: NonNullable<CaseFramework["signalPattern"]>["requiredSignals"][number]) => {
+    setFormData((prev) => {
+      const updated = [...prev.frameworks];
+      const fw = updated[fwIdx];
+      const current = fw.signalPattern?.requiredSignals ?? [];
+      const newSignals = current.includes(signal) ? current.filter(s => s !== signal) : [...current, signal];
+      updated[fwIdx] = {
+        ...fw,
+        signalPattern: {
+          requiredSignals: newSignals,
+          minQuality: fw.signalPattern?.minQuality ?? "PRESENT",
+          additionalKeywords: fw.signalPattern?.additionalKeywords,
+        },
+      };
+      return { ...prev, frameworks: updated };
+    });
+  };
+
+  const addAdditionalKeyword = (fwIdx: number, keyword: string) => {
+    const val = keyword.trim().toLowerCase();
+    if (!val) return;
+    setFormData((prev) => {
+      const updated = [...prev.frameworks];
+      const fw = updated[fwIdx];
+      const existing = fw.signalPattern?.additionalKeywords ?? [];
+      if (existing.includes(val)) return prev;
+      updated[fwIdx] = {
+        ...fw,
+        signalPattern: {
+          requiredSignals: fw.signalPattern?.requiredSignals ?? [],
+          minQuality: fw.signalPattern?.minQuality ?? "PRESENT",
+          additionalKeywords: [...existing, val],
+        },
+      };
+      return { ...prev, frameworks: updated };
+    });
+  };
+
+  const removeAdditionalKeyword = (fwIdx: number, kwIdx: number) => {
+    setFormData((prev) => {
+      const updated = [...prev.frameworks];
+      const fw = updated[fwIdx];
+      updated[fwIdx] = {
+        ...fw,
+        signalPattern: {
+          requiredSignals: fw.signalPattern?.requiredSignals ?? [],
+          minQuality: fw.signalPattern?.minQuality ?? "PRESENT",
+          additionalKeywords: (fw.signalPattern?.additionalKeywords ?? []).filter((_, i) => i !== kwIdx),
+        },
+      };
+      return { ...prev, frameworks: updated };
+    });
+  };
+
+  const moveFrameworkUp = (idx: number) => {
+    if (idx <= 0) return;
+    setFormData((prev) => {
+      const updated = [...prev.frameworks];
+      [updated[idx - 1], updated[idx]] = [updated[idx], updated[idx - 1]];
+      return { ...prev, frameworks: updated };
+    });
+    setSignalPatternOpen((prev) => {
+      const next: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const n = Number(k);
+        if (n === idx) next[idx - 1] = v;
+        else if (n === idx - 1) next[idx] = v;
+        else next[n] = v;
+      });
+      return next;
+    });
+  };
+
+  const moveFrameworkDown = (idx: number, total: number) => {
+    if (idx >= total - 1) return;
+    setFormData((prev) => {
+      const updated = [...prev.frameworks];
+      [updated[idx], updated[idx + 1]] = [updated[idx + 1], updated[idx]];
+      return { ...prev, frameworks: updated };
+    });
+    setSignalPatternOpen((prev) => {
+      const next: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const n = Number(k);
+        if (n === idx) next[idx + 1] = v;
+        else if (n === idx + 1) next[idx] = v;
+        else next[n] = v;
+      });
+      return next;
+    });
   };
 
   const buildPayload = (isPublished: boolean) => {
@@ -1075,14 +1185,34 @@ export default function ManualCaseCreator({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-sm">{fw.name}</span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => removeFramework(idx)}
-                          data-testid={`button-manual-remove-framework-${idx}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => moveFrameworkUp(idx)}
+                            disabled={idx === 0}
+                            data-testid={`button-manual-move-up-${idx}`}
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => moveFrameworkDown(idx, formData.frameworks.length)}
+                            disabled={idx === formData.frameworks.length - 1}
+                            data-testid={`button-manual-move-down-${idx}`}
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => removeFramework(idx)}
+                            data-testid={`button-manual-remove-framework-${idx}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -1130,6 +1260,101 @@ export default function ManualCaseCreator({
                           />
                         </div>
                       </div>
+                      <Collapsible
+                        open={signalPatternOpen[idx] ?? false}
+                        onOpenChange={(open) => setSignalPatternOpen((prev) => ({ ...prev, [idx]: open }))}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-between h-7 text-xs px-2"
+                            data-testid={`button-manual-signal-pattern-toggle-${idx}`}
+                          >
+                            <span className="text-muted-foreground">{t("manualCase.signalPattern")}</span>
+                            {signalPatternOpen[idx] ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-2 pt-1 border-t mt-1">
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {(["intent", "justification", "tradeoffAwareness", "stakeholderAwareness", "ethicalAwareness"] as const).map((signal) => {
+                              const active = fw.signalPattern?.requiredSignals?.includes(signal) ?? false;
+                              const signalLabelKey: Record<string, string> = {
+                                intent: "manualCase.signalIntent",
+                                justification: "manualCase.signalJustification",
+                                tradeoffAwareness: "manualCase.signalTradeoff",
+                                stakeholderAwareness: "manualCase.signalStakeholder",
+                                ethicalAwareness: "manualCase.signalEthical",
+                              };
+                              return (
+                                <Badge
+                                  key={signal}
+                                  variant={active ? "default" : "outline"}
+                                  className="cursor-pointer toggle-elevate"
+                                  onClick={() => toggleSignalForFramework(idx, signal)}
+                                  data-testid={`badge-manual-signal-${idx}-${signal}`}
+                                >
+                                  {t(signalLabelKey[signal])}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs whitespace-nowrap">{t("manualCase.minQuality")}</Label>
+                            <Select
+                              value={fw.signalPattern?.minQuality ?? "PRESENT"}
+                              onValueChange={(val) => updateFrameworkSignalPattern(idx, { minQuality: val as "WEAK" | "PRESENT" | "STRONG" })}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-28" data-testid={`select-manual-min-quality-${idx}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="WEAK">{t("manualCase.qualityWeak")}</SelectItem>
+                                <SelectItem value="PRESENT">{t("manualCase.qualityPresent")}</SelectItem>
+                                <SelectItem value="STRONG">{t("manualCase.qualityStrong")}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs">{t("manualCase.additionalKeywords")}</Label>
+                            <div className="flex flex-wrap gap-1 mt-1 items-center">
+                              {(fw.signalPattern?.additionalKeywords ?? []).map((kw, kwIdx) => (
+                                <Badge
+                                  key={kwIdx}
+                                  variant="secondary"
+                                  data-testid={`badge-manual-add-keyword-${idx}-${kwIdx}`}
+                                >
+                                  {kw}
+                                  <button
+                                    type="button"
+                                    className="ml-1"
+                                    onClick={() => removeAdditionalKeyword(idx, kwIdx)}
+                                    data-testid={`button-manual-remove-add-keyword-${idx}-${kwIdx}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                              <Input
+                                className="w-32 h-7 text-xs"
+                                placeholder={t("manualCase.addKeyword")}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const target = e.target as HTMLInputElement;
+                                    addAdditionalKeyword(idx, target.value);
+                                    target.value = "";
+                                  }
+                                }}
+                                data-testid={`input-manual-add-keyword-${idx}`}
+                              />
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     </div>
                   ))}
                 </div>

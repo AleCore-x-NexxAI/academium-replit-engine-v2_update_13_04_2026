@@ -666,6 +666,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       };
 
+      const frameworkCount = (initialState?.frameworks ?? []).length;
+      if (frameworkCount > 0) {
+        console.log(`[Engine] Turn ${context.turnCount + 1} — scenario "${context.scenario.title}" has ${frameworkCount} framework(s): ${(initialState.frameworks ?? []).map((f: any) => f.name).join(", ")}`);
+      } else {
+        console.log(`[Engine] Turn ${context.turnCount + 1} — no frameworks configured for scenario "${context.scenario.title}"`);
+      }
+
       // S9.1: Check if we're in the reflection step (Step 4)
       const isReflectionStep = session.currentState.isReflectionStep === true;
 
