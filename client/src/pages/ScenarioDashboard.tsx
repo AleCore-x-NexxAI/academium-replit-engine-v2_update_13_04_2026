@@ -405,6 +405,7 @@ function AnalyticsTab({
   isEn,
   onViewSession,
 }: AnalyticsTabProps) {
+  const { t } = useTranslation();
   const [showFullBreakdown, setShowFullBreakdown] = useState(false);
 
   return (
@@ -412,32 +413,32 @@ function AnalyticsTab({
       <div className="grid grid-cols-4 gap-2.5" data-testid="stats-row">
         <StatCard
           value={statsLoading ? "..." : classStats?.completed ?? "—"}
-          label={isEn ? "Completed" : "Completados"}
-          description={isEn ? "Students who finished all turns and submitted the reflection" : "Estudiantes que terminaron todos los turnos y enviaron la reflexión"}
+          label={t("scenarioDashboard.completed")}
+          description={t("scenarioDashboard.studentsWhoFinishedAllTurns")}
           loading={statsLoading}
         />
         <StatCard
           value={statsLoading ? "..." : classStats?.inProgress ?? "—"}
-          label={isEn ? "In progress" : "En progreso"}
-          description={isEn ? "Students who started but have not yet completed" : "Estudiantes que comenzaron pero no han completado"}
+          label={t("scenarioDashboard.inProgress")}
+          description={t("scenarioDashboard.studentsWhoStartedButHave")}
           loading={statsLoading}
         />
         <StatCard
           value={statsLoading ? "..." : classStats?.biggestDropPoint ? `T${classStats.biggestDropPoint.turn}` : "—"}
-          label={isEn ? "Biggest drop point" : "Mayor punto de caída"}
-          description={isEn ? "Turn where average reasoning depth dropped most" : "Turno donde la profundidad de razonamiento cayó más"}
+          label={t("scenarioDashboard.biggestDropPoint")}
+          description={t("scenarioDashboard.turnWhereAverageReasoningDepth")}
           loading={statsLoading}
         />
         <StatCard
           value={statsLoading ? "..." : classStats?.appliedCourseTheory ? `${classStats.appliedCourseTheory.n}/${classStats.appliedCourseTheory.m}` : "—"}
-          label={isEn ? "Applied course theory" : "Teoría del curso aplicada"}
-          description={isEn ? "Students showing evidence of applying at least one framework" : "Estudiantes que muestran evidencia de aplicar al menos un marco"}
+          label={t("scenarioDashboard.appliedCourseTheory")}
+          description={t("scenarioDashboard.studentsShowingEvidenceOfApplying")}
           loading={statsLoading}
         />
       </div>
 
       <Card className="p-5" data-testid="module-health-card">
-        <div className="text-[13px] font-medium mb-0.5">{isEn ? "Module health" : "Salud del módulo"}</div>
+        <div className="text-[13px] font-medium mb-0.5">{t("scenarioDashboard.moduleHealth")}</div>
         <div className="text-[11px] text-muted-foreground mb-3.5 leading-relaxed italic">
           {isEn
             ? "How the frameworks and theories connected to this simulation are showing up in student decisions."
@@ -462,7 +463,7 @@ function AnalyticsTab({
             </div>
             <div className="h-px bg-border my-3.5" />
             <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
-              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "Class debrief opener" : "Apertura de debrief de clase"}</div>
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{t("scenarioDashboard.classDebriefOpener")}</div>
               <div className="text-[12px] text-muted-foreground/80 leading-relaxed italic" data-testid="text-debrief-opener">{moduleHealth.classDebriefOpener}</div>
             </div>
             <button
@@ -471,15 +472,15 @@ function AnalyticsTab({
               data-testid="button-toggle-breakdown"
             >
               {showFullBreakdown
-                ? (isEn ? "Hide full framework breakdown" : "Ocultar desglose completo")
-                : (isEn ? "Show full framework breakdown" : "Mostrar desglose completo")}
+                ? (t("scenarioDashboard.hideFullFrameworkBreakdown"))
+                : (t("scenarioDashboard.showFullFrameworkBreakdown"))}
               {showFullBreakdown ? " ↑" : " ↓"}
             </button>
             {showFullBreakdown && (
               <div className="grid grid-cols-3 gap-2.5 mt-3 pt-3 border-t">
                 {moduleHealth.frameworks.map((fw) => (
                   <div key={fw.id} className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
-                    <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{fw.name} — {isEn ? "deeper view" : "vista detallada"}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{fw.name} — {t("scenarioDashboard.deeperView")}</div>
                     <div className="text-[11px] text-muted-foreground/70 leading-snug italic">{fw.deeperDescription}</div>
                   </div>
                 ))}
@@ -488,17 +489,17 @@ function AnalyticsTab({
           </>
         ) : (
           <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
-            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "No frameworks configured" : "No hay marcos configurados"}</div>
-            <div className="text-[11px] text-muted-foreground/80 italic">{isEn ? "Add frameworks in the scenario editor to see module health data." : "Agrega marcos en el editor de escenarios para ver datos de salud del módulo."}</div>
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{t("scenarioDashboard.noFrameworksConfigured")}</div>
+            <div className="text-[11px] text-muted-foreground/80 italic">{t("scenarioDashboard.addFrameworksInTheScenario")}</div>
           </div>
         )}
       </Card>
 
       <div className="grid grid-cols-2 gap-3.5">
         <Card className="p-4" data-testid="depth-trajectory-card">
-          <div className="text-[13px] font-medium mb-0.5">{isEn ? "Reasoning depth across turns" : "Profundidad de razonamiento por turno"}</div>
+          <div className="text-[13px] font-medium mb-0.5">{t("scenarioDashboard.reasoningDepthAcrossTurns")}</div>
           <div className="text-[11px] text-muted-foreground mb-3 italic">
-            {isEn ? "Class average reasoning depth at each turn" : "Profundidad de razonamiento promedio de la clase en cada turno"}
+            {t("scenarioDashboard.classAverageReasoningDepthAt")}
           </div>
           {dtLoading ? (
             <Skeleton className="h-[115px] mb-2.5" />
@@ -510,7 +511,7 @@ function AnalyticsTab({
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                     <XAxis dataKey="turn" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `T${v}`} />
                     <YAxis domain={[0, 3]} ticks={[1, 2, 3]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v === 1 ? "Surface" : v === 2 ? "Engaged" : "Integrated"} width={65} />
-                    <RechartsTooltip formatter={(v: number) => [v.toFixed(1), isEn ? "Avg depth" : "Prof. prom."]} />
+                    <RechartsTooltip formatter={(v: number) => [v.toFixed(1), t("scenarioDashboard.avgDepth")]} />
                     <Line type="monotone" dataKey="avg" stroke="#378ADD" strokeWidth={2} dot={(props: any) => {
                       const { cx, cy, payload, index } = props;
                       const colorMap: Record<string, string> = { green: "#1D9E75", blue: "#378ADD", amber: "#BA7517" };
@@ -531,15 +532,15 @@ function AnalyticsTab({
             </>
           ) : (
             <div className="h-[115px] flex items-center justify-center bg-muted/30 rounded-lg border border-dashed border-border">
-              <span className="text-[11px] text-muted-foreground italic">{isEn ? "No completed sessions yet" : "No hay sesiones completadas aún"}</span>
+              <span className="text-[11px] text-muted-foreground italic">{t("scenarioDashboard.noCompletedSessionsYet")}</span>
             </div>
           )}
         </Card>
 
         <Card className="p-4" data-testid="class-patterns-card">
-          <div className="text-[13px] font-medium mb-0.5">{isEn ? "Where the class is and where it's heading" : "Dónde está la clase y hacia dónde va"}</div>
+          <div className="text-[13px] font-medium mb-0.5">{t("scenarioDashboard.whereTheClassIsAnd")}</div>
           <div className="text-[11px] text-muted-foreground mb-3 italic">
-            {isEn ? "Most significant reasoning patterns detected across all sessions" : "Patrones de razonamiento más significativos detectados"}
+            {t("scenarioDashboard.mostSignificantReasoningPatternsDetected")}
           </div>
           {cpLoading ? (
             <div className="space-y-3">
@@ -562,16 +563,16 @@ function AnalyticsTab({
             </div>
           ) : (
             <div className="flex items-center justify-center h-24 bg-muted/30 rounded-lg border border-dashed border-border">
-              <span className="text-[11px] text-muted-foreground italic">{isEn ? "No completed sessions yet" : "No hay sesiones completadas aún"}</span>
+              <span className="text-[11px] text-muted-foreground italic">{t("scenarioDashboard.noCompletedSessionsYet")}</span>
             </div>
           )}
         </Card>
       </div>
 
       <Card className="p-4" data-testid="students-table-card">
-        <div className="text-[13px] font-medium mb-0.5">{isEn ? "Students" : "Estudiantes"}</div>
+        <div className="text-[13px] font-medium mb-0.5">{t("scenarioDashboard.students")}</div>
         <div className="text-[11px] text-muted-foreground mb-3 italic">
-          {isEn ? "Each dot represents one turn — color shows reasoning depth. Click \"View session\" to open the analysis." : "Cada punto representa un turno — el color muestra la profundidad. Haz clic en \"Ver sesión\" para abrir el análisis."}
+          {t("scenarioDashboard.eachDotRepresentsOneTurn")}
         </div>
         {ssLoading ? (
           <div className="space-y-2">
@@ -582,10 +583,10 @@ function AnalyticsTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-[11px]">{isEn ? "Student" : "Estudiante"}</TableHead>
-                  <TableHead className="text-[11px]">{isEn ? "Status" : "Estado"}</TableHead>
-                  <TableHead className="text-[11px]">{isEn ? "Reasoning arc" : "Arco de razonamiento"}</TableHead>
-                  <TableHead className="text-[11px]">{isEn ? "Key pattern" : "Patrón clave"}</TableHead>
+                  <TableHead className="text-[11px]">{t("scenarioDashboard.student")}</TableHead>
+                  <TableHead className="text-[11px]">{t("scenarioDashboard.status")}</TableHead>
+                  <TableHead className="text-[11px]">{t("scenarioDashboard.reasoningArc")}</TableHead>
+                  <TableHead className="text-[11px]">{t("scenarioDashboard.keyPattern")}</TableHead>
                   <TableHead className="text-[11px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -602,7 +603,7 @@ function AnalyticsTab({
                           ? "bg-[#EAF3DE] text-[#27500A] border border-[#C0DD97]"
                           : "bg-[#E6F1FB] text-[#0C447C] border border-[#A3CCF0]"
                       }`}>
-                        {s.status === "completed" ? (isEn ? "Completed" : "Completado") : (isEn ? "In progress" : "En progreso")}
+                        {s.status === "completed" ? (t("scenarioDashboard.completed2")) : (t("scenarioDashboard.inProgress"))}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -621,7 +622,7 @@ function AnalyticsTab({
                         onClick={() => s.canView && onViewSession(s.sessionId)}
                         data-testid={`button-view-session-${s.sessionId}`}
                       >
-                        {isEn ? "View session" : "Ver sesión"}
+                        {t("scenarioDashboard.viewSession")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -631,22 +632,22 @@ function AnalyticsTab({
             <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t flex-wrap">
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <div className="w-[9px] h-[9px] rounded-full" style={{ background: "#1D9E75" }} />
-                {isEn ? "Integrated reasoning" : "Razonamiento integrado"}
+                {t("scenarioDashboard.integratedReasoning")}
               </div>
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <div className="w-[9px] h-[9px] rounded-full" style={{ background: "#378ADD" }} />
-                {isEn ? "Engaged reasoning" : "Razonamiento comprometido"}
+                {t("scenarioDashboard.engagedReasoning")}
               </div>
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <div className="w-[9px] h-[9px] rounded-full" style={{ background: "#BA7517" }} />
-                {isEn ? "Surface reasoning" : "Razonamiento superficial"}
+                {t("scenarioDashboard.surfaceReasoning")}
               </div>
-              <span className="text-[11px] text-muted-foreground/50 italic ml-auto">{isEn ? "Dots represent turns left to right" : "Los puntos representan turnos de izquierda a derecha"}</span>
+              <span className="text-[11px] text-muted-foreground/50 italic ml-auto">{t("scenarioDashboard.dotsRepresentTurnsLeftTo")}</span>
             </div>
           </>
         ) : (
           <div className="text-center py-8 text-muted-foreground text-[13px]">
-            {isEn ? "No students have started this scenario yet." : "Ningún estudiante ha comenzado este escenario aún."}
+            {t("scenarioDashboard.noStudentsHaveStartedThis")}
           </div>
         )}
       </Card>
@@ -667,6 +668,7 @@ function StatCard({ value, label, description, loading }: { value: string | numb
 }
 
 function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; isEn: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [modalTab, setModalTab] = useState<"chat" | "debrief" | "signals" | "kpi">("chat");
   const { toast } = useToast();
 
@@ -680,14 +682,14 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sessions", sessionId, "summary"] });
       toast({
-        title: isEn ? "Summary regenerated" : "Resumen regenerado",
-        description: isEn ? "The session summary has been refreshed." : "El resumen de la sesión se actualizó.",
+        title: t("scenarioDashboard.summaryRegenerated"),
+        description: t("scenarioDashboard.theSessionSummaryHasBeen"),
       });
     },
     onError: (err: any) => {
       toast({
-        title: isEn ? "Could not regenerate summary" : "No se pudo regenerar el resumen",
-        description: err?.message || (isEn ? "Try again in a moment." : "Inténtalo de nuevo en un momento."),
+        title: t("scenarioDashboard.couldNotRegenerateSummary"),
+        description: err?.message || (t("scenarioDashboard.tryAgainInAMoment")),
         variant: "destructive",
       });
     },
@@ -714,10 +716,10 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
   });
 
   const modalTabs = [
-    { key: "chat" as const, label: isEn ? "Chat history" : "Historial de chat" },
-    { key: "debrief" as const, label: isEn ? "Debrief prep" : "Prep debrief" },
-    { key: "signals" as const, label: isEn ? "Reasoning signals" : "Señales de razonamiento" },
-    { key: "kpi" as const, label: isEn ? "KPI + course frameworks" : "KPI + marcos del curso" },
+    { key: "chat" as const, label: t("scenarioDashboard.chatHistory") },
+    { key: "debrief" as const, label: t("scenarioDashboard.debriefPrep") },
+    { key: "signals" as const, label: t("scenarioDashboard.reasoningSignals") },
+    { key: "kpi" as const, label: t("scenarioDashboard.kpiCourseFrameworks") },
   ];
 
   const summaryData = summary as SessionSummaryData | undefined;
@@ -745,7 +747,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
           <div className="flex gap-2">
             <div className="flex-1 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{isEn ? "Session summary" : "Resumen de sesión"}</div>
+                <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("scenarioDashboard.sessionSummary")}</div>
                 {!summaryLoading && summaryData && summaryData.isComplete && (
                   (!summaryData.dashboardSummary?.session_headline ||
                    (summaryData.dashboardSummary as any)?.generation_status === "fallback") && (
@@ -760,7 +762,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
                         ? <Loader2 className="w-3 h-3 animate-spin" />
                         : <RefreshCw className="w-3 h-3" />}
                       <span className="ml-1.5 text-[11px]">
-                        {isEn ? "Regenerate" : "Regenerar"}
+                        {t("scenarioDashboard.regenerate")}
                       </span>
                     </Button>
                   )
@@ -774,7 +776,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
                     {summaryData.dashboardSummary.session_headline}
                     {(summaryData.dashboardSummary as any)?.generation_status === "fallback" && (
                       <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 not-italic" data-testid="badge-summary-fallback">
-                        {isEn ? "(fallback)" : "(respaldo)"}
+                        {t("scenarioDashboard.fallback")}
                       </span>
                     )}
                   </>
@@ -783,12 +785,12 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
                     ? "Summary generation did not complete for this session. Click Regenerate to try again."
                     : "La generación del resumen no se completó para esta sesión. Haz clic en Regenerar para intentarlo de nuevo."
                 ) : (
-                  isEn ? "Summary available when session is complete." : "Resumen disponible cuando la sesión esté completa."
+                  t("scenarioDashboard.summaryAvailableWhenSessionIs")
                 )}
               </div>
             </div>
             <div className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border min-w-[130px]">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">{isEn ? "Reasoning arc" : "Arco de razonamiento"}</div>
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">{t("scenarioDashboard.reasoningArc")}</div>
               <div className="flex items-start gap-1.5">
                 {arc.map((a, i) => (
                   <span key={i} className="flex items-center gap-1.5">
@@ -835,6 +837,7 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
 }
 
 function ChatHistoryTab({ data, loading, isEn }: { data: { turns: ChatTurn[] } | undefined; loading: boolean; isEn: boolean }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}</div>;
@@ -851,18 +854,18 @@ function ChatHistoryTab({ data, loading, isEn }: { data: { turns: ChatTurn[] } |
         <div key={turn.number} className="mb-3 border border-dashed border-border rounded-xl overflow-hidden" data-testid={`turn-card-chat-${turn.number}`}>
           <div className="px-3.5 py-2.5 bg-muted/30 border-b border-dashed border-border/50 flex items-center justify-between">
             <span className="text-[11px] font-medium text-muted-foreground">
-              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
+              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (t("scenarioDashboard.freeResponse"))}
             </span>
           </div>
           <div className="p-3.5">
             {turn.prompt && (
               <div className="mb-2.5">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "Decision prompt" : "Pregunta de decisión"}</div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{t("scenarioDashboard.decisionPrompt")}</div>
                 <div className="p-2 bg-muted/20 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground/80 leading-snug italic">{turn.prompt}</div>
               </div>
             )}
             <div>
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "Student response" : "Respuesta del estudiante"}</div>
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{t("scenarioDashboard.studentResponse")}</div>
               <div className="p-2 bg-muted/20 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground/80 leading-snug whitespace-pre-wrap">
                 {turn.studentInput}
               </div>
@@ -871,13 +874,14 @@ function ChatHistoryTab({ data, loading, isEn }: { data: { turns: ChatTurn[] } |
         </div>
       ))}
       {turns.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground text-[13px] italic">{isEn ? "No turns recorded." : "No hay turnos registrados."}</div>
+        <div className="text-center py-8 text-muted-foreground text-[13px] italic">{t("scenarioDashboard.noTurnsRecorded")}</div>
       )}
     </div>
   );
 }
 
 function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] } | undefined; loading: boolean; isEn: boolean }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-32" />)}</div>;
@@ -894,7 +898,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] 
         <div key={turn.number} className="mb-3 border border-dashed border-border rounded-xl overflow-hidden" data-testid={`turn-card-debrief-${turn.number}`}>
           <div className="px-3.5 py-2.5 bg-muted/30 border-b border-dashed border-border/50 flex items-center justify-between">
             <span className="text-[11px] font-medium text-muted-foreground">
-              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
+              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (t("scenarioDashboard.freeResponse"))}
             </span>
             {turn.depth && (
               <span className={`text-[10px] font-medium px-2 py-0.5 rounded`} style={{ background: DEPTH_COLORS[turn.depth] + "20", color: DEPTH_COLORS[turn.depth] }}>
@@ -904,12 +908,12 @@ function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] 
           </div>
           <div className="p-3.5">
             <div className="mb-2.5">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "Student response" : "Respuesta del estudiante"}</div>
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{t("scenarioDashboard.studentResponse")}</div>
               <div className="p-2 bg-muted/20 rounded-lg border border-dashed border-border/40 text-[11px] text-muted-foreground/80 leading-snug">
                 {turn.studentInput.length > 100 && !expanded[turn.number]
                   ? <>
                       {smartTruncate(turn.studentInput, 100)}
-                      <button className="text-[10px] text-muted-foreground underline ml-1 bg-transparent border-none cursor-pointer p-0" onClick={() => setExpanded(e => ({ ...e, [turn.number]: true }))}>{isEn ? "Show full response" : "Ver respuesta completa"}</button>
+                      <button className="text-[10px] text-muted-foreground underline ml-1 bg-transparent border-none cursor-pointer p-0" onClick={() => setExpanded(e => ({ ...e, [turn.number]: true }))}>{t("scenarioDashboard.showFullResponse")}</button>
                     </>
                   : turn.studentInput}
               </div>
@@ -917,7 +921,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] 
 
             {turn.kpiMovements?.length > 0 && (
               <div className="mb-2.5">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{isEn ? "KPI movements" : "Movimientos de KPI"}</div>
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60 mb-1">{t("scenarioDashboard.kpiMovements")}</div>
                 <div className="flex gap-1.5 flex-wrap mt-1">
                   {turn.kpiMovements.map((kpi, i) => {
                     const isUp = kpi.direction === "up";
@@ -936,7 +940,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] 
 
             {turn.debriefQuestion && (
               <div className="p-3 bg-muted/30 border-l-2 border-l-[#378ADD]/30 rounded-r-lg mt-0.5">
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{isEn ? "Ask in debrief" : "Preguntar en debrief"}</div>
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{t("scenarioDashboard.askInDebrief")}</div>
                 <div className="text-[11px] text-muted-foreground/80 leading-relaxed italic">{turn.debriefQuestion}</div>
               </div>
             )}
@@ -948,17 +952,18 @@ function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] 
 }
 
 function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsData | undefined; loading: boolean; isEn: boolean }) {
+  const { t } = useTranslation();
   if (loading) return <div className="space-y-3"><Skeleton className="h-[230px]" /><Skeleton className="h-32" /></div>;
 
   const signalAverages = data?.signalAverages || {};
   const turns = data?.turns || [];
 
   const radarData = [
-    { signal: isEn ? "Analytical" : "Analítico", value: signalAverages.analytical || 0, fullMark: 3 },
-    { signal: isEn ? "Strategic" : "Estratégico", value: signalAverages.strategic || 0, fullMark: 3 },
-    { signal: isEn ? "Tradeoff" : "Tradeoff", value: signalAverages.tradeoff || 0, fullMark: 3 },
-    { signal: isEn ? "Stakeholder" : "Stakeholder", value: signalAverages.stakeholder || 0, fullMark: 3 },
-    { signal: isEn ? "Ethical" : "Ético", value: signalAverages.ethical || 0, fullMark: 3 },
+    { signal: t("scenarioDashboard.analytical"), value: signalAverages.analytical || 0, fullMark: 3 },
+    { signal: t("scenarioDashboard.strategic"), value: signalAverages.strategic || 0, fullMark: 3 },
+    { signal: t("scenarioDashboard.tradeoff"), value: signalAverages.tradeoff || 0, fullMark: 3 },
+    { signal: t("scenarioDashboard.stakeholder"), value: signalAverages.stakeholder || 0, fullMark: 3 },
+    { signal: t("scenarioDashboard.ethical"), value: signalAverages.ethical || 0, fullMark: 3 },
   ];
 
   return (
@@ -969,7 +974,7 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsDa
           : "El gráfico radar muestra la forma visual del perfil de señales. La tabla muestra las cinco señales en cada turno."}
       </div>
 
-      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "Signal strength — session overview" : "Fortaleza de señales — resumen de sesión"}</div>
+      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{t("scenarioDashboard.signalStrengthSessionOverview")}</div>
       <div className="h-[230px] bg-muted/30 rounded-lg border border-dashed border-border mb-3" data-testid="radar-chart-container">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
@@ -981,14 +986,14 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsDa
         </ResponsiveContainer>
       </div>
 
-      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "All signals — turn by turn" : "Todas las señales — turno por turno"}</div>
+      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{t("scenarioDashboard.allSignalsTurnByTurn")}</div>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="text-[11px]">{isEn ? "Turn" : "Turno"}</TableHead>
-            <TableHead className="text-[11px]">{isEn ? "Signal" : "Señal"}</TableHead>
-            <TableHead className="text-[11px]">{isEn ? "Level" : "Nivel"}</TableHead>
-            <TableHead className="text-[11px]">{isEn ? "What the data shows" : "Lo que muestran los datos"}</TableHead>
+            <TableHead className="text-[11px]">{t("scenarioDashboard.turn")}</TableHead>
+            <TableHead className="text-[11px]">{t("scenarioDashboard.signal")}</TableHead>
+            <TableHead className="text-[11px]">{t("scenarioDashboard.level")}</TableHead>
+            <TableHead className="text-[11px]">{t("scenarioDashboard.whatTheDataShows")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1013,6 +1018,7 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsDa
 }
 
 function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | undefined; loading: boolean; isEn: boolean }) {
+  const { t } = useTranslation();
   if (loading) return <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-32" /></div>;
 
   const turns = data?.turns || [];
@@ -1054,7 +1060,7 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
       {frameworkCounts.length > 0 && totalTurns > 0 && (
         <div className="mb-4" data-testid="framework-counts-summary">
           <div className="text-[12px] font-medium text-muted-foreground mb-2">
-            {isEn ? "Frameworks applied — totals across this session" : "Marcos aplicados — totales en esta sesión"}
+            {t("scenarioDashboard.frameworksAppliedTotalsAcrossThis")}
           </div>
           <div className="border border-dashed border-border rounded-lg p-3 space-y-2">
             {frameworkCounts.map((fw) => {
@@ -1066,7 +1072,7 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
                   <div className="flex items-center justify-between mb-1 gap-2">
                     <span className="text-[11px] font-medium text-muted-foreground truncate">{fw.name}</span>
                     <span className="text-[10px] text-muted-foreground/70 shrink-0">
-                      {fw.explicit} {isEn ? "explicit" : "explícitos"} · {fw.implicit} {isEn ? "implicit" : "implícitos"} · {total}/{totalTurns} {isEn ? "turns" : "turnos"}
+                      {fw.explicit} {t("scenarioDashboard.explicit")} · {fw.implicit} {t("scenarioDashboard.implicit")} · {total}/{totalTurns} {t("scenarioDashboard.turns")}
                     </span>
                   </div>
                   <div className="h-1.5 w-full bg-muted/40 rounded overflow-hidden flex">
@@ -1080,7 +1086,7 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
         </div>
       )}
 
-      <div className="text-[12px] font-medium text-muted-foreground mb-2">{isEn ? "KPI trajectory — decisions and their outcomes" : "Trayectoria KPI — decisiones y sus resultados"}</div>
+      <div className="text-[12px] font-medium text-muted-foreground mb-2">{t("scenarioDashboard.kpiTrajectoryDecisionsAndTheir")}</div>
       {activeKpis.length > 0 ? (
         <div className="border border-dashed border-border rounded-lg overflow-hidden mb-4" data-testid="kpi-trajectory-table">
           <div className="grid bg-muted/30 border-b border-dashed border-border" style={{ gridTemplateColumns: `90px repeat(${turns.length}, 1fr)` }}>
@@ -1135,15 +1141,15 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
           ))}
         </div>
       ) : (
-        <div className="text-center py-6 text-muted-foreground text-[13px] italic mb-4">{isEn ? "No KPI movements recorded." : "No se registraron movimientos de KPI."}</div>
+        <div className="text-center py-6 text-muted-foreground text-[13px] italic mb-4">{t("scenarioDashboard.noKpiMovementsRecorded")}</div>
       )}
 
-      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{isEn ? "Course framework application — turn by turn" : "Aplicación de marcos del curso — turno por turno"}</div>
+      <div className="text-[12px] font-medium text-muted-foreground mb-2 mt-4 pt-4 border-t">{t("scenarioDashboard.courseFrameworkApplicationTurnBy")}</div>
       <div className="border border-dashed border-border rounded-lg p-3" data-testid="framework-application">
         {turns.map((turn) => (
           <div key={turn.number}>
             <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 mt-2.5 first:mt-0">
-              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (isEn ? "Free response" : "Respuesta libre")}
+              {isEn ? `Turn ${turn.number}` : `Turno ${turn.number}`} · {turn.type === "mcq" ? "MCQ" : (t("scenarioDashboard.freeResponse"))}
             </div>
             {turn.frameworkApplications?.length > 0 ? (
               turn.frameworkApplications.map((fw, i) => (
@@ -1154,7 +1160,7 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
                 </div>
               ))
             ) : (
-              <div className="text-[11px] text-muted-foreground/40 italic mb-1.5">{isEn ? "No framework detections this turn" : "Sin detecciones de marcos en este turno"}</div>
+              <div className="text-[11px] text-muted-foreground/40 italic mb-1.5">{t("scenarioDashboard.noFrameworkDetectionsThisTurn")}</div>
             )}
           </div>
         ))}

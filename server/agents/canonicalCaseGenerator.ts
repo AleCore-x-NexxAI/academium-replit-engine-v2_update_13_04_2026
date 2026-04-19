@@ -564,8 +564,8 @@ export async function generateCanonicalCase(
     : buildCanonicalPromptEs(effectiveSteps);
 
   const userPrompt = isEn
-    ? `Create a canonical business case based on this topic/industry:\n\nTOPIC: ${topic}${contextAddition}\n\nGenerate a COMPLETE business case following the canonical structure, ALL in English.\nCase duration: ${durationMin}-${durationMax} minutes.\nRemember: exactly ${effectiveSteps} decision points, no preferred answers, mentoring tone.`
-    : `Crea un caso de negocios canónico basado en este tema/industria:\n\nTEMA: ${topic}${contextAddition}\n\nGenera un caso de negocios COMPLETO siguiendo la estructura canónica, TODO en español latinoamericano.\nEl caso debe durar ${durationMin}-${durationMax} minutos para completar.\nRecuerda: ${effectiveSteps} puntos de decisión exactamente, sin respuestas correctas, tono de mentoría.`;
+    ? `Create a canonical business case based on this topic/industry:\n\nTOPIC: ${topic}${contextAddition}\n\nGenerate a COMPLETE business case following the canonical structure, ALL in English.\nCase duration: ${durationMin}-${durationMax} minutes.\nRemember: exactly ${effectiveSteps} decision points, no preferred answer, mentoring tone.`
+    : `Crea un caso de negocios canónico basado en este tema/industria:\n\nTEMA: ${topic}${contextAddition}\n\nGenera un caso de negocios COMPLETO siguiendo la estructura canónica, TODO en español latinoamericano.\nEl caso debe durar ${durationMin}-${durationMax} minutos para completar.\nRecuerda: ${effectiveSteps} puntos de decisión exactamente, sin respuesta preferida, tono de mentoría.`;
 
   const callLLM = async () => generateChatCompletion(
     [
