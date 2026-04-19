@@ -20,7 +20,7 @@
       "endpoint": { "path": "/api/scenarios/:scenarioId/module-health", "method": "POST" },
       "stateField": "currentState.framework_detections",
       "writtenBy": "server/routes.ts",
-      "validatedFields": ["framework_detections", "dashboard_summary"]
+      "validatedFields": ["framework_detections", "dashboard_summary", "target", "suggested", "detection_method_distribution"]
     },
     {
       "id": "depth-trajectory.chart",

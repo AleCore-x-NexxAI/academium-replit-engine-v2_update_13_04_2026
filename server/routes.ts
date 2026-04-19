@@ -1047,6 +1047,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           regulatoryEnvironment: initialState?.regulatoryEnvironment,
           subjectMatterContext: initialState?.subjectMatterContext,
           frameworks: initialState?.frameworks,
+          // Phase 6 §6 + §7: pipe pedagogical intent into AgentContext so
+          // narrator/debrief/summary/consistency can scope to professor targets.
+          pedagogicalIntent: session.scenario?.pedagogicalIntent ?? null,
         },
       };
 
@@ -4210,15 +4213,22 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
       const frameworkResults = await Promise.all(frameworks.map(async (fw: any) => {
         let appliedCount = 0;
         const evidenceTexts: string[] = [];
+        // Phase 6 §6: detection_method_distribution per framework, aggregated
+        // across every detection across every completed session.
+        const methodDist: Record<string, number> = {};
         for (const s of completed) {
           const state = s.session.currentState as any;
           const fwDetections: any[][] = state?.framework_detections || [];
           let applied = false;
           for (const turnDets of fwDetections) {
             const det = turnDets?.find((d: any) => d.framework_id === fw.id);
-            if (det && (det.level === "explicit" || det.level === "implicit")) {
-              applied = true;
-              if (det.evidence) evidenceTexts.push(det.evidence);
+            if (det) {
+              const m = det.detection_method || "keyword";
+              methodDist[m] = (methodDist[m] || 0) + 1;
+              if (det.level === "explicit" || det.level === "implicit") {
+                applied = true;
+                if (det.evidence) evidenceTexts.push(det.evidence);
+              }
             }
           }
           if (applied) appliedCount++;
@@ -4252,8 +4262,30 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
           deeperDescription = await generateClean(deepPrompt, isEn, "moduleHealthDeeperDescription", 400, description);
         }
 
-        return { id: fw.id, name: fw.name, status, description, deeperDescription };
+        return {
+          id: fw.id,
+          name: fw.name,
+          status,
+          description,
+          deeperDescription,
+          canonicalId: fw.canonicalId || fw.id,
+          detection_method_distribution: methodDist,
+        };
       }));
+
+      // Phase 6 §6: target/suggested split based on pedagogicalIntent.
+      // Defensive: collect every plausible identifier (canonicalId, name) from
+      // intent targets so case frameworks lacking a canonicalId still match.
+      const intent = (scenario as any).pedagogicalIntent as { targetFrameworks?: Array<{ canonicalId?: string; name?: string }> } | null | undefined;
+      const targetIds = new Set<string>();
+      for (const t of (intent?.targetFrameworks ?? [])) {
+        if (t?.canonicalId) targetIds.add(t.canonicalId);
+        if (t?.name) targetIds.add(t.name);
+      }
+      const isTarget = (f: { id: string; canonicalId?: string; name: string }) =>
+        targetIds.has(f.canonicalId || "") || targetIds.has(f.id) || targetIds.has(f.name);
+      const targetList = targetIds.size > 0 ? frameworkResults.filter(isTarget) : [];
+      const suggestedList = targetIds.size > 0 ? frameworkResults.filter(f => !isTarget(f)) : [];
 
       // Class debrief opener — connect lowest competency + lowest framework + worst turn
       const compMap: Record<string, { name: string; nameEs: string; rate: number; worstTurn: number | null }> = {
@@ -4311,7 +4343,12 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         classDebriefOpener = await generateClean(openerPrompt, isEn, "classDebriefOpener", 200, openerFallback);
       }
 
-      const result = { frameworks: frameworkResults, classDebriefOpener };
+      const result = {
+        frameworks: frameworkResults,
+        target: targetList,
+        suggested: suggestedList,
+        classDebriefOpener,
+      };
       setCache(`module-health-${scenarioId}`, result);
       res.json(result);
     } catch (error) {

@@ -17,6 +17,7 @@ export enum RDSBand {
 export interface SignalScore {
   quality: SignalQuality;
   extracted_text: string;
+  marginal_evidence?: string;
 }
 
 export interface SignalExtractionResult {
@@ -142,6 +143,9 @@ export interface AgentContext {
     regulatoryEnvironment?: string;
     subjectMatterContext?: string;
     frameworks?: import("@shared/schema").CaseFramework[];
+    // Phase 6 §6: pedagogical intent piped in so narrator/debrief/summary/
+    // consistency can scope behavior to the professor's targets.
+    pedagogicalIntent?: import("@shared/schema").PedagogicalIntent | null;
   };
 }
 

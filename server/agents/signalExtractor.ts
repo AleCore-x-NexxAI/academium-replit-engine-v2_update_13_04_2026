@@ -10,6 +10,54 @@ import {
   mapCompetencyEvidence,
 } from "./types";
 import { getLanguageDirective } from "./guardrails";
+import { DIMENSION_TO_SIGNAL, type AcademicDimension } from "@shared/schema";
+
+/**
+ * Phase 6 §2: dimension-weighted marginal-evidence promotion. When the LLM
+ * scores the dimension-mapped signal as WEAK (1) but the student input
+ * contains marginal evidence cues for that dimension, promote to PRESENT (2).
+ * Hard cap at 2 — never above. Non-mapped signals are untouched.
+ */
+const MARGINAL_CUES: Record<AcademicDimension, { es: RegExp[]; en: RegExp[] }> = {
+  analytical: {
+    es: [/\b(porque|debido a|dado que|los datos|la evidencia|el análisis|según|indica|sugiere|tendencia|patrón|causa|efecto|correlación|impacto)\b/i],
+    en: [/\b(because|due to|since|the data|the evidence|the analysis|according to|indicates|suggests|trend|pattern|cause|effect|correlation|impact)\b/i],
+  },
+  strategic: {
+    es: [/\b(prioridad|priorizar|enfocar|elegir|decidir|alternativa|opción|dirección|objetivo|meta|primero|principalmente|en lugar de)\b/i],
+    en: [/\b(priority|prioritize|focus|choose|decide|alternative|option|direction|goal|objective|first|primarily|instead of)\b/i],
+  },
+  stakeholder: {
+    es: [/\b(equipo|cliente|empleado|inversionista|usuario|comunidad|proveedor|junta|gerencia|familia|ingeniería|marketing|ventas|operaciones|el personal)\b/i],
+    en: [/\b(team|customer|employee|investor|user|community|supplier|board|management|family|engineering|marketing|sales|operations|the staff)\b/i],
+  },
+  ethical: {
+    es: [/\b(justo|injusto|correcto|incorrecto|ético|deber|obligación|responsabilidad|transparencia|honestidad|integridad|principio|valor|debería)\b/i],
+    en: [/\b(fair|unfair|right|wrong|ethical|duty|obligation|responsibility|transparency|honesty|integrity|principle|value|ought)\b/i],
+  },
+  tradeoff: {
+    es: [/\b(pero|aunque|sin embargo|costo|sacrificio|a cambio|perder|ceder|riesgo|consecuencia|implicación|por otro lado|desventaja|contrapartida)\b/i],
+    en: [/\b(but|although|however|cost|sacrifice|in exchange|lose|give up|risk|consequence|implication|on the other hand|downside|tradeoff)\b/i],
+  },
+};
+
+function detectMarginalEvidence(
+  studentInput: string,
+  dim: AcademicDimension,
+  language: "es" | "en",
+): { found: boolean; snippet: string } {
+  const cues = MARGINAL_CUES[dim]?.[language] ?? [];
+  for (const re of cues) {
+    const m = studentInput.match(re);
+    if (m) {
+      const idx = m.index ?? 0;
+      const start = Math.max(0, idx - 20);
+      const end = Math.min(studentInput.length, idx + m[0].length + 40);
+      return { found: true, snippet: studentInput.slice(start, end).trim() };
+    }
+  }
+  return { found: false, snippet: "" };
+}
 
 function getSignalExtractionPrompt(language: "es" | "en"): string {
   if (language === "en") {
@@ -250,6 +298,29 @@ Extract the 5 signals. Return JSON only.`;
 
     const parsed = JSON.parse(response);
     const signals = parseSignalResult(parsed);
+
+    // Phase 6 §2: dimension-weighted promotion. Look up the decision's primary
+    // dimension; if the mapped signal scored exactly WEAK (1) and we find a
+    // marginal-evidence cue in the student input, promote that signal to
+    // PRESENT (2) and populate marginal_evidence. Hard cap at 2.
+    const currentDecisionNum = context.currentDecision || context.turnCount + 1;
+    const decisionPoint = context.decisionPoints?.find(dp => dp.number === currentDecisionNum);
+    const primaryDim = decisionPoint?.primaryDimension as AcademicDimension | undefined;
+    if (primaryDim) {
+      const sigKey = DIMENSION_TO_SIGNAL[primaryDim] as keyof SignalExtractionResult;
+      const sig = signals[sigKey];
+      if (sig && sig.quality === SignalQuality.WEAK) {
+        const { found, snippet } = detectMarginalEvidence(context.studentInput, primaryDim, language);
+        if (found) {
+          signals[sigKey] = {
+            ...sig,
+            quality: SignalQuality.PRESENT,
+            marginal_evidence: snippet,
+          };
+        }
+      }
+    }
+
     const rds = computeRDS(signals);
     const rdsBand = classifyRDSBand(rds);
     const competencyEvidence = mapCompetencyEvidence(signals);

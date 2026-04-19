@@ -65,10 +65,14 @@ interface FrameworkHealth {
   status: string;
   description: string;
   deeperDescription: string;
+  canonicalId?: string;
+  detection_method_distribution?: Record<string, number>;
 }
 
 interface ModuleHealth {
   frameworks: FrameworkHealth[];
+  target?: FrameworkHealth[];
+  suggested?: FrameworkHealth[];
   classDebriefOpener: string | null;
 }
 
@@ -466,15 +470,52 @@ function AnalyticsTab({
           </div>
         ) : moduleHealth?.frameworks?.length > 0 ? (
           <>
-            <div className="grid grid-cols-4 gap-2 mb-4" data-testid="framework-grid">
-              {moduleHealth.frameworks.map((fw) => (
-                <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
-                  <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
-                  <StatusBadge status={fw.status} />
-                  <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
-                </div>
-              ))}
-            </div>
+            {((moduleHealth.target?.length ?? 0) + (moduleHealth.suggested?.length ?? 0)) > 0 ? (
+              <div className="space-y-3 mb-4" data-testid="framework-grid">
+                {(moduleHealth.target?.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5" data-testid="label-target-frameworks">
+                      {t("scenarioDashboard.targetFrameworks")}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {moduleHealth.target!.map((fw) => (
+                        <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
+                          <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
+                          <StatusBadge status={fw.status} />
+                          <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(moduleHealth.suggested?.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5" data-testid="label-suggested-frameworks">
+                      {t("scenarioDashboard.suggestedFrameworks")}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {moduleHealth.suggested!.map((fw) => (
+                        <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
+                          <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
+                          <StatusBadge status={fw.status} />
+                          <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-2 mb-4" data-testid="framework-grid">
+                {moduleHealth.frameworks.map((fw) => (
+                  <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
+                    <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
+                    <StatusBadge status={fw.status} />
+                    <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="h-px bg-border my-3.5" />
             <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
               <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{t("scenarioDashboard.classDebriefOpener")}</div>

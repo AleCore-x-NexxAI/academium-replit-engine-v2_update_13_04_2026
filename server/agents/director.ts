@@ -1,6 +1,7 @@
 import type { AgentContext, DirectorOutput, DecisionEvidenceLog, SignalExtractionResult, TurnPosition, CausalExplanation, DisplayKPI } from "./types";
 import { RDSBand, SignalQuality, computeRDS, classifyRDSBand, mapCompetencyEvidence } from "./types";
 import type { KPIs, SimulationState, TurnResponse, HistoryEntry, DecisionPoint, CausalExplanationEntry, DisplayKPIEntry } from "@shared/schema";
+import { DIMENSION_TO_SIGNAL } from "@shared/schema";
 import { evaluateDecision } from "./evaluator";
 import { calculateKPIImpact } from "./domainExpert";
 import { generateNarrative, generateFinalOutcome } from "./narrator";
@@ -795,6 +796,9 @@ export async function processStudentTurn(
   const { detectFrameworks } = await import("./frameworkDetector");
   const { checkConsistency } = await import("./frameworkConsistency");
   const scenarioFrameworks = context.scenario?.frameworks || [];
+  // Phase 6 §2: when narrator reads context.framework_detections[turnCount]
+  // for the framework-response directive, it must see the CURRENT turn's
+  // detections, not stale history. We append below after detection runs.
   let frameworkDetections = !isMcq && scenarioFrameworks.length > 0
     ? await detectFrameworks(context.studentInput, evidenceLog.signals_detected, scenarioFrameworks, context.language)
     : [];
@@ -804,15 +808,14 @@ export async function processStudentTurn(
   // primary dimension shows PRESENT/STRONG signals. Never demotes. Logs a
   // disagreement event for observability.
   if (!isMcq && scenarioFrameworks.length > 0) {
-    // Phase 3 will pipe pedagogicalIntent into the director context and forward
-    // it here so checkConsistency can scope eligibility to targetFrameworks.
-    // Until then, we pass undefined and the consistency check falls back to
-    // the provenance==="explicit" eligibility rule (Phase-2 default).
+    // Phase 6 §7: pedagogicalIntent now flows through AgentContext.scenario
+    // and is forwarded to checkConsistency, which uses targetFrameworks to
+    // scope strict consistency-promotion eligibility (Apéndice D §3).
     const { detections: promoted, promotions } = checkConsistency(
       evidenceLog.signals_detected,
       frameworkDetections,
       scenarioFrameworks,
-      undefined,
+      context.scenario.pedagogicalIntent ?? undefined,
     );
     frameworkDetections = promoted;
     if (promotions.length > 0) {
@@ -832,6 +835,13 @@ export async function processStudentTurn(
   }
 
   const turnPosition = determineTurnPosition(context);
+
+  // Phase 6 §2: append the current turn's (post-consistency) detections so
+  // the narrator's framework-response directive reads the right turn slot.
+  contextWithRDS.framework_detections = [
+    ...(context.framework_detections ?? []),
+    frameworkDetections,
+  ];
 
   let narrativeFailed = false;
   let kpiFailed = false;
@@ -1347,6 +1357,39 @@ async function generateDebriefQuestion(
   const lowestName = lowestSignal[0];
   const intentText = signals.intent.extracted_text || context.studentInput.substring(0, 80);
 
+  // Phase 6 §4: intent-anchored debrief. When this turn's mapped signal
+  // (per the decision's primaryDimension) scored 0/1, ground the question
+  // in that dimension and the primary target framework name (without
+  // implying a "right answer").
+  const decisionPoint = context.decisionPoints?.find(dp => dp.number === turnNumber);
+  const primaryDim = decisionPoint?.primaryDimension as keyof typeof DIMENSION_TO_SIGNAL | undefined;
+  const intent = context.scenario.pedagogicalIntent;
+  const targetFwName = intent?.targetFrameworks?.[0]?.name;
+  let intentAnchor = "";
+  if (primaryDim) {
+    const mappedSignalKey = DIMENSION_TO_SIGNAL[primaryDim] as string;
+    const mappedQuality = signalMap[mappedSignalKey];
+    if (typeof mappedQuality === "number" && mappedQuality <= 1) {
+      const dimLabelEn: Record<string, string> = {
+        analytical: "analytical (data, causal evidence)",
+        strategic: "strategic (priority, direction, alternatives)",
+        stakeholder: "stakeholder (interests, reactions)",
+        ethical: "ethical (obligations, fairness)",
+        tradeoff: "tradeoff (costs, sacrifices)",
+      };
+      const dimLabelEs: Record<string, string> = {
+        analytical: "analítica (datos, evidencia causal)",
+        strategic: "estratégica (prioridad, dirección, alternativas)",
+        stakeholder: "stakeholder (intereses, reacciones)",
+        ethical: "ética (obligaciones, justicia)",
+        tradeoff: "tradeoff (costos, sacrificios)",
+      };
+      intentAnchor = isEn
+        ? `\nINTENT ANCHOR: This decision targets the ${dimLabelEn[primaryDim]} dimension${targetFwName ? ` and the ${targetFwName} lens` : ""}. Ground the question in that dimension. Do NOT name any framework directly in the question; instead, ask about the kind of reasoning the lens calls for. Do not imply a correct framework was missed.`
+        : `\nANCLA DE INTENCIÓN: Esta decisión apunta a la dimensión ${dimLabelEs[primaryDim]}${targetFwName ? ` y a la lente ${targetFwName}` : ""}. Ancla la pregunta en esa dimensión. NO nombres ningún marco directamente en la pregunta; pregunta sobre el tipo de razonamiento que esa lente exige. No insinúes que se omitió un marco correcto.`;
+    }
+  }
+
   const prompt = isEn
     ? `Generate ONE debrief question for a professor to ask a student about Turn ${turnNumber}.
 Student wrote: "${context.studentInput.substring(0, 200)}"
@@ -1361,6 +1404,7 @@ Rules:
 - Must NOT imply the student was wrong
 - Maximum 1 sentence
 - Write in English
+${intentAnchor}
 
 Return ONLY the question text, nothing else.`
     : `Genera UNA pregunta de debriefing para que un profesor le haga a un estudiante sobre el Turno ${turnNumber}.
@@ -1376,8 +1420,20 @@ Reglas:
 - NO debe implicar que el estudiante se equivocó
 - Máximo 1 oración
 - Escribe en español
+${intentAnchor}
 
 Devuelve SOLO el texto de la pregunta, nada más.`;
+
+  // Phase 6 §4: dynamically forbid leakage of any target framework name into
+  // the question. The intent anchor passes the name into the prompt as
+  // pedagogical context only — the question itself must never name it.
+  const dynamicProhibited: RegExp[] = [];
+  for (const fw of (intent?.targetFrameworks ?? [])) {
+    if (fw?.name) {
+      const escaped = fw.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      dynamicProhibited.push(new RegExp(`\\b${escaped}\\b`, "i"));
+    }
+  }
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -1387,7 +1443,8 @@ Devuelve SOLO el texto de la pregunta, nada más.`;
         { maxTokens: 128, model: "gpt-4o-mini", agentName: "debriefQuestionGenerator" }
       );
       const question = response.trim().replace(/^["']|["']$/g, "");
-      const hasProhibited = DEBRIEF_PROHIBITED.some(p => p.test(question));
+      const hasProhibited = DEBRIEF_PROHIBITED.some(p => p.test(question))
+        || dynamicProhibited.some(p => p.test(question));
       if (!hasProhibited) return question;
     } catch (err) {
       console.error(`[DebriefQuestion] Attempt ${attempt + 1} failed:`, err);
@@ -1472,8 +1529,23 @@ export async function generateDashboardSummary(
 
   const bandSummary = evidenceLogs.map((l, i) => `Turn ${i + 1}: ${l.rds_band || "SURFACE"}`).join(", ");
 
-  const highestSignal = Object.entries(signalAverages).sort(([,a], [,b]) => b - a)[0];
-  const lowestSignal = Object.entries(signalAverages).sort(([,a], [,b]) => a - b)[0];
+  // Phase 6 §5: intent-aware headline weighting. When the scenario has
+  // targetCompetencies, restrict highest/lowest selection to the signal
+  // dimensions those competencies map to (C1→analytical, C2→strategic,
+  // C3→stakeholder, C4→ethical, C5→tradeoff). Falls back to all signals
+  // when targetCompetencies is empty or unmapped.
+  const COMP_TO_DIM: Record<string, keyof typeof signalAverages> = {
+    C1: "analytical", C2: "strategic", C3: "stakeholder", C4: "ethical", C5: "tradeoff",
+  };
+  const intent = context.scenario.pedagogicalIntent;
+  const targetedDims = (intent?.targetCompetencies ?? [])
+    .map(c => COMP_TO_DIM[c]).filter(Boolean) as Array<keyof typeof signalAverages>;
+  const candidateEntries = (targetedDims.length > 0
+    ? targetedDims.map(d => [d, signalAverages[d]] as [string, number])
+    : Object.entries(signalAverages)
+  );
+  const highestSignal = [...candidateEntries].sort(([,a], [,b]) => b - a)[0];
+  const lowestSignal = [...candidateEntries].sort(([,a], [,b]) => a - b)[0];
 
   // Phase 1b: explicit superlative ban for session_headline (en + es).
   const BANNED_SUPERLATIVES_EN = ["excellent", "amazing", "great", "fantastic", "outstanding", "brilliant", "superb", "wonderful", "perfect"];
@@ -1647,9 +1719,23 @@ export function buildFallbackDashboardSummary(
   }
   const dominantBand = Object.entries(bandCounts).sort(([, a], [, b]) => b - a)[0]?.[0] || "SURFACE";
 
+  // Phase 6 §5: intent-aware fallback. When targetCompetencies is set, name
+  // the targeted dimension with the lowest average so the fallback still
+  // points at the intent rather than a generic dominant-band statement.
+  const COMP_TO_DIM_FB: Record<string, keyof typeof signalAverages> = {
+    C1: "analytical", C2: "strategic", C3: "stakeholder", C4: "ethical", C5: "tradeoff",
+  };
+  const intentFb = context.scenario.pedagogicalIntent;
+  const targetedDimsFb = (intentFb?.targetCompetencies ?? [])
+    .map(c => COMP_TO_DIM_FB[c]).filter(Boolean) as Array<keyof typeof signalAverages>;
+  const fbCandidates = targetedDimsFb.length > 0
+    ? targetedDimsFb.map(d => [d, signalAverages[d]] as [string, number])
+    : Object.entries(signalAverages);
+  const fbLowest = [...fbCandidates].sort(([,a], [,b]) => a - b)[0];
+
   const sessionHeadline = isEn
-    ? `Session reasoning was predominantly ${dominantBand.toLowerCase()} across ${evidenceLogs.length} turns. Generated summary unavailable; deterministic fallback shown.`
-    : `El razonamiento de la sesión fue predominantemente ${dominantBand.toLowerCase()} en ${evidenceLogs.length} turnos. Resumen generado no disponible; se muestra un respaldo determinista.`;
+    ? `Session reasoning was predominantly ${dominantBand.toLowerCase()} across ${evidenceLogs.length} turns${fbLowest ? `; ${fbLowest[0]} averaged ${fbLowest[1]}` : ""}. Generated summary unavailable; deterministic fallback shown.`
+    : `El razonamiento de la sesión fue predominantemente ${dominantBand.toLowerCase()} en ${evidenceLogs.length} turnos${fbLowest ? `; ${fbLowest[0]} promedió ${fbLowest[1]}` : ""}. Resumen generado no disponible; se muestra un respaldo determinista.`;
 
   return { session_headline: sessionHeadline, signal_averages: signalAverages, framework_summary: frameworkSummary, generation_status: "fallback" };
 }

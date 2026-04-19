@@ -159,6 +159,73 @@ function getRDSComplexity(rdsBand: RDSBand | undefined): string {
   }
 }
 
+/**
+ * Phase 6 §1: framework-responsive consequence directive. Returns ONE of three
+ * variants based on the latest turn's framework detections relative to the
+ * decision's primary academic dimension. Critical: the narrator never names
+ * a framework — the difference between variants is which information surfaces
+ * (acknowledgment of reasoning vs surfacing the missed dimension), not tone.
+ */
+function buildFrameworkResponseDirective(context: AgentContext): string {
+  const isEn = context.language === "en";
+  const currentDecisionNum = context.currentDecision || context.turnCount + 1;
+  const decisionPoint = context.decisionPoints?.find(dp => dp.number === currentDecisionNum);
+  const primaryDimension = decisionPoint?.primaryDimension;
+
+  // Last turn's detections live at framework_detections[turnCount] for the
+  // turn currently being processed (current decision is appended after).
+  const turnIdx = context.turnCount;
+  const lastTurnDetections = context.framework_detections?.[turnIdx] || [];
+
+  // Find the strongest detection for the decision's primary dimension when
+  // available; otherwise consider any explicit/implicit-medium-or-high.
+  type Detected = { level: "explicit" | "implicit" | "not_evidenced"; confidence?: "low" | "medium" | "high" };
+  let best: Detected | null = null;
+  const rank = (d: Detected) => {
+    const lvl = d.level === "explicit" ? 3 : d.level === "implicit" ? 2 : 0;
+    const conf = d.confidence === "high" ? 2 : d.confidence === "medium" ? 1 : 0;
+    return lvl * 10 + conf;
+  };
+  for (const det of lastTurnDetections as Detected[]) {
+    if (!best || rank(det) > rank(best)) best = det;
+  }
+
+  const acknowledgedExplicit = best?.level === "explicit";
+  const acknowledgedImplicitStrong = best?.level === "implicit" && (best.confidence === "medium" || best.confidence === "high");
+  const acknowledged = acknowledgedExplicit || acknowledgedImplicitStrong;
+
+  if (acknowledged) {
+    return isEn
+      ? `FRAMEWORK RESPONSE: The student's reasoning shows evidence of an analytical lens. Produce a coherent consequence chain that ACKNOWLEDGES the direction implied by their reasoning (without naming any framework, theory, model, or analytical approach). Do not praise. Do not evaluate. Do not say "good", "right", "well-reasoned". Just narrate consequences that follow plausibly from the lens they applied.`
+      : `RESPUESTA AL MARCO: El razonamiento del estudiante muestra evidencia de una lente analítica. Produce una cadena de consecuencias coherente que RECONOZCA la dirección implícita en su razonamiento (sin nombrar ningún marco, teoría, modelo o enfoque analítico). No elogies. No evalúes. No digas "bien", "correcto", "bien razonado". Solo narra consecuencias que se sigan plausiblemente de la lente que aplicaron.`;
+  }
+
+  // Not evidenced or only implicit-low: surface ONE dimension-anchored piece
+  // of information without shaming or correcting.
+  const dimensionHintEn: Record<string, string> = {
+    analytical: "surface ONE concrete data point or causal observation that the student did not address in their reasoning",
+    strategic: "surface ONE option, priority, or directional consideration the student did not weigh",
+    stakeholder: "surface ONE stakeholder reaction or interest that did not appear in the student's reasoning",
+    ethical: "surface ONE obligation, fairness consideration, or principle that the student did not raise",
+    tradeoff: "surface ONE cost or sacrifice that follows from the chosen direction and was not named",
+  };
+  const dimensionHintEs: Record<string, string> = {
+    analytical: "haz emerger UN dato concreto o una observación causal que el estudiante no abordó en su razonamiento",
+    strategic: "haz emerger UNA opción, prioridad o consideración direccional que el estudiante no sopesó",
+    stakeholder: "haz emerger UNA reacción o interés de un stakeholder que no apareció en el razonamiento",
+    ethical: "haz emerger UNA obligación, consideración de justicia o principio que el estudiante no planteó",
+    tradeoff: "haz emerger UN costo o sacrificio que se sigue de la dirección elegida y que no fue nombrado",
+  };
+  const dimHint = primaryDimension
+    ? (isEn ? dimensionHintEn[primaryDimension] : dimensionHintEs[primaryDimension])
+    : (isEn ? "surface ONE piece of information that complicates the decision in a dimension the student did not address"
+            : "haz emerger UNA pieza de información que complica la decisión en una dimensión no abordada");
+
+  return isEn
+    ? `FRAMEWORK RESPONSE: The student's reasoning did not surface a recognizable analytical lens for this decision. Produce a coherent consequence chain AND ${dimHint}. Do not name any framework, theory, model, or analytical approach. Do not shame. Do not correct. Do not say "you should have", "you missed", "consider". Surface the missed dimension as part of the new information element of the narrative.`
+    : `RESPUESTA AL MARCO: El razonamiento del estudiante no hizo aparecer una lente analítica reconocible para esta decisión. Produce una cadena de consecuencias coherente Y ${dimHint}. No nombres ningún marco, teoría, modelo o enfoque analítico. No avergüences. No corrijas. No digas "deberías haber", "te faltó", "considera". Haz emerger la dimensión omitida como parte del elemento de información nueva de la narrativa.`;
+}
+
 function buildTradeoffDirective(context: AgentContext): string {
   const decisionPoint = context.decisionPoints?.find(
     dp => dp.number === (context.currentDecision || context.turnCount + 1)
@@ -224,6 +291,7 @@ export async function generateNarrative(
   const isEn = context.language === "en";
   const complexity = getRDSComplexity(rdsBand);
   const tradeoffDirective = buildTradeoffDirective(context);
+  const frameworkResponseDirective = buildFrameworkResponseDirective(context);
 
   const scenarioContext = [];
   if (context.scenario.companyName) scenarioContext.push(`Empresa: ${context.scenario.companyName}`);
@@ -258,6 +326,8 @@ DECISIÓN: ${context.turnCount + 1}${context.totalDecisions ? ` de ${context.tot
 ${positionDirective}
 
 ${tradeoffDirective}
+
+${frameworkResponseDirective}
 
 RIQUEZA NARRATIVA (${rdsBand || "SURFACE"}): ${wordRange.min}-${wordRange.max} palabras.
 ${complexity}
