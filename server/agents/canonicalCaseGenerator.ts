@@ -741,8 +741,10 @@ async function checkFrameworkCoverage(
     }
     return { ok: false, missingPrimary: primaryFw.name };
   } catch (err) {
-    console.warn("[canonicalCaseGenerator] checkFrameworkCoverage skipped due to error:", err);
-    return { ok: true, missingPrimary: null };
+    // Detector failure must NOT silently bypass the gate. Surface as an
+    // explicit failure so the caller flags it for the professor review.
+    console.warn("[canonicalCaseGenerator] checkFrameworkCoverage detector error — failing gate:", err);
+    return { ok: false, missingPrimary: primaryFw.name };
   }
 }
 

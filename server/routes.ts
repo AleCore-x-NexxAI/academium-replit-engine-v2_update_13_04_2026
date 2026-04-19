@@ -2027,7 +2027,11 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
       // constraint, no-correct-answer lexicon) is injected by the generator
       // itself. The route only forwards tradeoff-focus / additional context.
       const canonicalCase = await generateCanonicalCase(topic, pedagogicalIntent, builtContext || undefined, stepCount, caseLang);
-      const scenarioData = convertCanonicalToScenarioData(canonicalCase, caseLang);
+      // Phase 5: persist the RESOLVED effective language (never undefined)
+      // so downstream regenerate flows can read it deterministically from
+      // generatedScenario.language / initialState.language.
+      const resolvedLang: "es" | "en" = caseLang === "en" ? "en" : "es";
+      const scenarioData = convertCanonicalToScenarioData(canonicalCase, resolvedLang);
       // Carry the intent forward through draft so publish can persist it.
       scenarioData.pedagogicalIntent = pedagogicalIntent;
 
