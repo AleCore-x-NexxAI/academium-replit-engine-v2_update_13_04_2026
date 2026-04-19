@@ -512,23 +512,23 @@ function AnalyticsTab({
             <Skeleton className="h-24" />
             <Skeleton className="h-24" />
           </div>
-        ) : moduleHealth?.frameworks?.length > 0 ? (
+        ) : (moduleHealth?.frameworks?.length ?? 0) > 0 ? (
           <>
-            {((moduleHealth.target?.length ?? 0) + (moduleHealth.suggested?.length ?? 0)) > 0 ? (
+            {((moduleHealth!.target?.length ?? 0) + (moduleHealth!.suggested?.length ?? 0)) > 0 ? (
               <div className="space-y-3 mb-4" data-testid="framework-grid">
-                {(moduleHealth.target?.length ?? 0) > 0 && (
+                {(moduleHealth!.target?.length ?? 0) > 0 && (
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                       <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide" data-testid="label-target-frameworks">
                         {t("scenarioDashboard.targetFrameworks")}
                       </div>
                       <DistributionStrip
-                        dist={moduleHealth.targetSection?.detection_method_distribution}
+                        dist={moduleHealth!.targetSection?.detection_method_distribution}
                         testid="dist-target-section"
                       />
                     </div>
                     <div className="grid grid-cols-4 gap-2">
-                      {moduleHealth.target!.map((fw) => (
+                      {moduleHealth!.target!.map((fw) => (
                         <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
                           <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
                           <StatusBadge status={fw.status} />
@@ -539,19 +539,19 @@ function AnalyticsTab({
                     </div>
                   </div>
                 )}
-                {(moduleHealth.suggested?.length ?? 0) > 0 && (
+                {(moduleHealth!.suggested?.length ?? 0) > 0 && (
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                       <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide" data-testid="label-suggested-frameworks">
                         {t("scenarioDashboard.suggestedFrameworks")}
                       </div>
                       <DistributionStrip
-                        dist={moduleHealth.suggestedSection?.detection_method_distribution}
+                        dist={moduleHealth!.suggestedSection?.detection_method_distribution}
                         testid="dist-suggested-section"
                       />
                     </div>
                     <div className="grid grid-cols-4 gap-2">
-                      {moduleHealth.suggested!.map((fw) => (
+                      {moduleHealth!.suggested!.map((fw) => (
                         <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
                           <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
                           <StatusBadge status={fw.status} />
@@ -565,7 +565,7 @@ function AnalyticsTab({
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-2 mb-4" data-testid="framework-grid">
-                {moduleHealth.frameworks.map((fw) => (
+                {moduleHealth!.frameworks!.map((fw) => (
                   <div key={fw.id} className="p-3 rounded-lg border border-dashed border-border bg-muted/30" data-testid={`framework-${fw.id}`}>
                     <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
                     <StatusBadge status={fw.status} />
@@ -577,7 +577,7 @@ function AnalyticsTab({
             <div className="h-px bg-border my-3.5" />
             <div className="p-3 bg-muted/30 rounded-lg border border-dashed border-border">
               <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{t("scenarioDashboard.classDebriefOpener")}</div>
-              <div className="text-[12px] text-muted-foreground/80 leading-relaxed italic" data-testid="text-debrief-opener">{moduleHealth.classDebriefOpener}</div>
+              <div className="text-[12px] text-muted-foreground/80 leading-relaxed italic" data-testid="text-debrief-opener">{moduleHealth!.classDebriefOpener}</div>
             </div>
             <button
               className="text-[12px] text-muted-foreground underline underline-offset-2 mt-2.5 block bg-transparent border-none p-0 cursor-pointer"
@@ -591,7 +591,7 @@ function AnalyticsTab({
             </button>
             {showFullBreakdown && (
               <div className="grid grid-cols-3 gap-2.5 mt-3 pt-3 border-t">
-                {moduleHealth.frameworks.map((fw) => (
+                {moduleHealth!.frameworks!.map((fw) => (
                   <div key={fw.id} className="p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
                     <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">{fw.name} — {t("scenarioDashboard.deeperView")}</div>
                     <div className="text-[11px] text-muted-foreground/70 leading-snug italic">{fw.deeperDescription}</div>
@@ -616,11 +616,11 @@ function AnalyticsTab({
           </div>
           {dtLoading ? (
             <Skeleton className="h-[115px] mb-2.5" />
-          ) : depthTrajectory?.points?.length > 0 ? (
+          ) : (depthTrajectory?.points?.length ?? 0) > 0 ? (
             <>
               <div className="h-[115px] mb-2.5">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={depthTrajectory.points}>
+                  <LineChart data={depthTrajectory!.points}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                     <XAxis dataKey="turn" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `T${v}`} />
                     <YAxis domain={[0, 3]} ticks={[1, 2, 3]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v === 1 ? t("scenarioDashboard.depthSurface") : v === 2 ? t("scenarioDashboard.depthEngaged") : t("scenarioDashboard.depthIntegrated")} width={65} />
@@ -635,7 +635,7 @@ function AnalyticsTab({
                 </ResponsiveContainer>
               </div>
               <div className="flex gap-1.5" data-testid="depth-annotations">
-                {depthTrajectory.annotations?.map((anno) => (
+                {depthTrajectory!.annotations?.map((anno) => (
                   <div key={anno.turn} className="flex-1 text-center p-2 bg-muted/30 rounded-lg border border-dashed border-border/50">
                     <div className="text-[11px] font-medium text-muted-foreground mb-0.5">{t("scenarioDashboard.turnLabel")} {anno.turn}</div>
                     <div className="text-[10px] text-muted-foreground/70 italic leading-snug">{anno.description}</div>
@@ -659,10 +659,10 @@ function AnalyticsTab({
             <div className="space-y-3">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-16" />)}
             </div>
-          ) : classPatterns?.patterns?.length > 0 ? (
+          ) : (classPatterns?.patterns?.length ?? 0) > 0 ? (
             <div>
-              {classPatterns.patterns.map((p, i) => (
-                <div key={p.id} className={`py-2.5 ${i < classPatterns.patterns.length - 1 ? "border-b" : ""}`}>
+              {classPatterns!.patterns!.map((p, i) => (
+                <div key={p.id} className={`py-2.5 ${i < classPatterns!.patterns!.length - 1 ? "border-b" : ""}`}>
                   <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-[12px] font-medium text-muted-foreground">{p.name}</span>
                     <StatusBadge status={p.status} />
