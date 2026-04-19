@@ -370,6 +370,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
     },
   });
 
+  const [unreviewedDecisions, setUnreviewedDecisions] = useState<number[]>([]);
+
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!draftId || !scenarioData) throw new Error("No draft to publish");
@@ -386,12 +388,54 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
       return response.json();
     },
     onSuccess: () => {
+      setUnreviewedDecisions([]);
       toast({
         title: t("canonicalCase.casePublished"),
         description: t("canonicalCase.casePublishedDesc"),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/scenarios/authored"] });
       onScenarioPublished();
+    },
+    onError: (error: Error) => {
+      const match = error.message.match(/^409:\s*(.+)$/);
+      if (match) {
+        try {
+          const body = JSON.parse(match[1]);
+          if (Array.isArray(body.unreviewedDecisionNumbers) && body.unreviewedDecisionNumbers.length > 0) {
+            setUnreviewedDecisions(body.unreviewedDecisionNumbers);
+            const nums = body.unreviewedDecisionNumbers.join(", ");
+            toast({
+              title: t("common.error"),
+              description: t("canonicalCase.unreviewedDecisions").replace("{numbers}", nums),
+              variant: "destructive",
+            });
+            return;
+          }
+        } catch { /* fall through to generic */ }
+      }
+      toast({
+        title: t("common.error"),
+        description: t("canonicalCase.couldNotPublish"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const markAllReviewedMutation = useMutation({
+    mutationFn: async () => {
+      if (!draftId) throw new Error("No draft");
+      const decisions = unreviewedDecisions.length > 0
+        ? unreviewedDecisions
+        : ((scenarioData?.initialState as any)?.decisionPoints || [])
+            .filter((d: any) => !d?.reviewCompleted)
+            .map((d: any) => d.number as number);
+      for (const num of decisions) {
+        await apiRequest("PATCH", `/api/drafts/${draftId}/decisions/${num}/review`, { reviewCompleted: true });
+      }
+    },
+    onSuccess: () => {
+      setUnreviewedDecisions([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/canonical-case", draftId] });
     },
     onError: () => {
       toast({
@@ -1481,9 +1525,26 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
               <Edit2 className="w-4 h-4 mr-2" />
               {t("canonicalCase.editMode")}
             </Button>
+            {unreviewedDecisions.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => markAllReviewedMutation.mutate()}
+                disabled={markAllReviewedMutation.isPending}
+                data-testid="button-mark-all-reviewed"
+              >
+                {markAllReviewedMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 mr-2" />
+                )}
+                {markAllReviewedMutation.isPending
+                  ? t("canonicalCase.markingReviewed")
+                  : t("canonicalCase.markAllReviewed")}
+              </Button>
+            )}
             <Button
               onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
+              disabled={publishMutation.isPending || markAllReviewedMutation.isPending}
               className="ml-auto"
               data-testid="button-publish-case"
             >

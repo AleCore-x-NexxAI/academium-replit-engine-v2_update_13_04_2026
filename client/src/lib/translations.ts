@@ -698,6 +698,9 @@ const translations = {
     editMode: { es: "Modo Edición", en: "Edit Mode" },
     saveChanges: { es: "Guardar Cambios", en: "Save Changes" },
     publishCase: { es: "Publicar Caso", en: "Publish Case" },
+    unreviewedDecisions: { es: "Revisa las decisiones {numbers} antes de publicar.", en: "Please review decisions {numbers} before publishing." },
+    markAllReviewed: { es: "Marcar todas como revisadas", en: "Mark all reviewed" },
+    markingReviewed: { es: "Marcando…", en: "Marking…" },
   },
 
   scenarioObjectives: {
