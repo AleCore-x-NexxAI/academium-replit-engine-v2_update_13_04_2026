@@ -1,0 +1,99 @@
+{
+  "$schema": "./compatibility-manifest.schema.json",
+  "version": "v3.0-phase-1c",
+  "description": "Compatibility manifest binding dashboard UI surfaces to engine endpoints, state fields, and writers. Phase 1c first draft. Each later phase extends this file as new fields are added. Validate via `npx tsx scripts/validate-manifest.ts`.",
+  "notes": [
+    "reasoning-arc and key-pattern were not split into their own endpoints in this phase; they are computed inline within /api/sessions/:sessionId/summary and /api/scenarios/:scenarioId/students-summary. Documented as part of session-summary.modal and students-summary.table per task adjustment.",
+    "regenerate-summary.endpoint covers acceptance 14.1 punto 2 — gate that ensures stale dashboard summaries can always be rebuilt on demand."
+  ],
+  "entries": [
+    {
+      "id": "class-stats.cards",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: AnalyticsTab StatCards",
+      "endpoint": { "path": "/api/scenarios/:scenarioId/class-stats", "method": "POST" },
+      "stateField": "currentState.decisionEvidenceLogs",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["decisionEvidenceLogs", "framework_detections"]
+    },
+    {
+      "id": "module-health.framework-card",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: AnalyticsTab Module Health",
+      "endpoint": { "path": "/api/scenarios/:scenarioId/module-health", "method": "POST" },
+      "stateField": "currentState.framework_detections",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["framework_detections", "dashboard_summary"]
+    },
+    {
+      "id": "depth-trajectory.chart",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: AnalyticsTab Depth Trajectory",
+      "endpoint": { "path": "/api/scenarios/:scenarioId/depth-trajectory", "method": "POST" },
+      "stateField": "currentState.decisionEvidenceLogs",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["decisionEvidenceLogs"]
+    },
+    {
+      "id": "class-patterns.heatmap",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: AnalyticsTab Class Patterns",
+      "endpoint": { "path": "/api/scenarios/:scenarioId/class-patterns", "method": "POST" },
+      "stateField": "currentState.decisionEvidenceLogs",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["decisionEvidenceLogs", "framework_detections"]
+    },
+    {
+      "id": "students-summary.table",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: AnalyticsTab Students Summary (includes inline reasoning-arc + key-pattern columns)",
+      "endpoint": { "path": "/api/scenarios/:scenarioId/students-summary", "method": "GET" },
+      "stateField": "currentState.decisionEvidenceLogs",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["decisionEvidenceLogs", "dashboard_summary"]
+    },
+    {
+      "id": "session-summary.modal",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: StudentSessionModal Summary tab (includes inline reasoning-arc and dashboard headline)",
+      "endpoint": { "path": "/api/sessions/:sessionId/summary", "method": "GET" },
+      "stateField": "currentState.dashboard_summary",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["dashboard_summary", "framework_summary", "session_headline", "generation_status"]
+    },
+    {
+      "id": "chat-history.list",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: StudentSessionModal Chat History tab",
+      "endpoint": { "path": "/api/sessions/:sessionId/chat-history", "method": "GET" },
+      "stateField": "turns",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["turns"]
+    },
+    {
+      "id": "debrief-prep.cards",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: StudentSessionModal Debrief Prep tab",
+      "endpoint": { "path": "/api/sessions/:sessionId/debrief-prep", "method": "GET" },
+      "stateField": "currentState.decisionEvidenceLogs",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["decisionEvidenceLogs", "displayKPIs"]
+    },
+    {
+      "id": "reasoning-signals.rows",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: StudentSessionModal Reasoning Signals tab",
+      "endpoint": { "path": "/api/sessions/:sessionId/reasoning-signals", "method": "GET" },
+      "stateField": "currentState.decisionEvidenceLogs",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["decisionEvidenceLogs", "SignalScoreEntry"]
+    },
+    {
+      "id": "kpi-frameworks.tab",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: KpiFrameworksTab (renders dashboard_reasoning_link per KPI cell)",
+      "endpoint": { "path": "/api/sessions/:sessionId/kpi-frameworks", "method": "GET" },
+      "stateField": "currentState.framework_detections",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["framework_detections", "displayKPIs", "dashboard_reasoning_link", "FrameworkDetection"]
+    },
+    {
+      "id": "regenerate-summary.endpoint",
+      "uiSurface": "client/src/pages/ScenarioDashboard.tsx :: StudentSessionModal regenerate affordance (gated by generation_status)",
+      "endpoint": { "path": "/api/sessions/:sessionId/regenerate-summary", "method": "POST" },
+      "stateField": "currentState.dashboard_summary",
+      "writtenBy": "server/routes.ts",
+      "validatedFields": ["dashboard_summary", "generation_status"]
+    }
+  ]
+}

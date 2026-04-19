@@ -344,6 +344,12 @@ export interface FrameworkDetection {
   framework_name: string;
   level: "explicit" | "implicit" | "not_evidenced";
   evidence: string;
+  // Phase 1c (Section 6.2): optional fields populated by Phase 2 semantic detector.
+  // Legacy detections (pre-v3.0) are read-time backfilled with defaults.
+  confidence?: "high" | "medium" | "low";
+  detection_method?: "keyword" | "semantic" | "signal_pattern" | "none" | "consistency_promoted";
+  reasoning?: string;
+  canonicalId?: string;
 }
 
 export interface DashboardSummary {
@@ -359,6 +365,21 @@ export interface DashboardSummary {
     framework_id: string;
     best_level: "explicit" | "implicit" | "not_evidenced";
     turn_of_best_application: number | null;
+    // Phase 1c (Section 6.2): aggregate counts and provenance per framework.
+    // Lazily backfilled at dashboard read-time when missing.
+    explicit_turns?: number;
+    implicit_turns?: number;
+    not_evidenced_turns?: number;
+    framework_name?: string;
+    canonicalId?: string;
+    provenance?: "course_target" | "inferred" | "consistency_promoted";
+    detection_method_distribution?: {
+      keyword?: number;
+      semantic?: number;
+      signal_pattern?: number;
+      none?: number;
+      consistency_promoted?: number;
+    };
   }>;
   // Phase 1a: explicit generation status. "ok" = LLM headline succeeded;
   // "fallback" = deterministic headline (LLM threw); "regenerated" = produced
@@ -409,6 +430,9 @@ export interface HistoryEntry {
 export interface SignalScoreEntry {
   quality: 0 | 1 | 2 | 3;
   extracted_text: string;
+  // Phase 1c (Section 6.5): optional fields. Phase 4 will populate.
+  confidence?: "high" | "medium" | "low";
+  marginal_evidence?: string;
 }
 
 export interface SignalExtractionEntry {

@@ -30,6 +30,32 @@ function mergeReflectionAnalytics(target: SimulationState, prior: SimulationStat
   }
   if (!target.dashboard_summary && prior.dashboard_summary) {
     target.dashboard_summary = prior.dashboard_summary;
+  } else if (target.dashboard_summary && prior.dashboard_summary) {
+    // Phase 1c (Section 6.4): defensive per-entry merge of framework_summary so
+    // any new optional fields (counts, framework_name, canonicalId, provenance,
+    // detection_method_distribution) that exist on the prior version survive
+    // when the reflection step writes a partial summary.
+    const tgt = target.dashboard_summary;
+    const prv = prior.dashboard_summary;
+    if (tgt.framework_summary && prv.framework_summary) {
+      tgt.framework_summary = tgt.framework_summary.map((entry) => {
+        const priorEntry = prv.framework_summary.find((p) => p.framework_id === entry.framework_id);
+        if (!priorEntry) return entry;
+        return {
+          ...priorEntry,
+          ...entry,
+          // For optional aggregate fields, prefer non-undefined values.
+          explicit_turns: entry.explicit_turns ?? priorEntry.explicit_turns,
+          implicit_turns: entry.implicit_turns ?? priorEntry.implicit_turns,
+          not_evidenced_turns: entry.not_evidenced_turns ?? priorEntry.not_evidenced_turns,
+          framework_name: entry.framework_name ?? priorEntry.framework_name,
+          canonicalId: entry.canonicalId ?? priorEntry.canonicalId,
+          provenance: entry.provenance ?? priorEntry.provenance,
+          detection_method_distribution:
+            entry.detection_method_distribution ?? priorEntry.detection_method_distribution,
+        };
+      });
+    }
   }
   if (
     (!target.indicatorAccumulation || Object.keys(target.indicatorAccumulation).length === 0) &&
@@ -4053,6 +4079,64 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
         return { turn: i + 1, band: band.toLowerCase(), color };
       });
 
+      // Phase 1c (Section 6.2): lazy backfill of new framework_summary fields
+      // for sessions completed before v3.0. Recomputes counts/distribution from
+      // framework_detections and persists if anything was missing.
+      let dashboardSummary = state?.dashboard_summary || null;
+      if (dashboardSummary?.framework_summary?.length) {
+        const fwDets: any[][] = state?.framework_detections || [];
+        const scenarioForBackfill = await storage.getScenario(session.scenarioId);
+        const scenarioFrameworks = ((scenarioForBackfill?.initialState as any)?.frameworks || []) as Array<{ id: string; name: string }>;
+        let mutated = false;
+        const backfilled = dashboardSummary.framework_summary.map((entry: any) => {
+          const needsBackfill =
+            entry.explicit_turns === undefined ||
+            entry.implicit_turns === undefined ||
+            entry.not_evidenced_turns === undefined ||
+            entry.framework_name === undefined ||
+            entry.canonicalId === undefined ||
+            entry.provenance === undefined ||
+            entry.detection_method_distribution === undefined;
+          if (!needsBackfill) return entry;
+          let explicit = 0, implicit = 0, notEv = 0;
+          const methodDist: Record<string, number> = {};
+          for (const turnDets of fwDets) {
+            const det = (turnDets || []).find((d: any) => d.framework_id === entry.framework_id);
+            if (det) {
+              if (det.level === "explicit") explicit++;
+              else if (det.level === "implicit") implicit++;
+              else notEv++;
+              const m = det.detection_method || "keyword";
+              methodDist[m] = (methodDist[m] || 0) + 1;
+            } else {
+              notEv++;
+            }
+          }
+          const fwMeta = scenarioFrameworks.find((f) => f.id === entry.framework_id);
+          mutated = true;
+          return {
+            ...entry,
+            explicit_turns: entry.explicit_turns ?? explicit,
+            implicit_turns: entry.implicit_turns ?? implicit,
+            not_evidenced_turns: entry.not_evidenced_turns ?? notEv,
+            framework_name: entry.framework_name ?? fwMeta?.name ?? entry.framework_id,
+            canonicalId: entry.canonicalId ?? entry.framework_id,
+            provenance: entry.provenance ?? "course_target",
+            detection_method_distribution: entry.detection_method_distribution ?? methodDist,
+          };
+        });
+        if (mutated) {
+          dashboardSummary = { ...dashboardSummary, framework_summary: backfilled };
+          try {
+            await storage.updateSimulationSession(sessionId, {
+              currentState: { ...state, dashboard_summary: dashboardSummary },
+            });
+          } catch (persistErr) {
+            console.warn("[SessionSummary] Lazy backfill persist failed (non-fatal):", persistErr);
+          }
+        }
+      }
+
       const isComplete = session.status === "completed";
       res.json({
         studentName: (session as any).user?.firstName
@@ -4062,7 +4146,7 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
         status: session.status,
         isComplete,
         completedAt: isComplete ? session.updatedAt : null,
-        dashboardSummary: state?.dashboard_summary || null,
+        dashboardSummary,
         arc,
       });
     } catch (error) {
@@ -4269,12 +4353,18 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
           reasoningLink: kpi.dashboard_reasoning_link || "",
         }));
 
+        // Phase 1c (Section 6.2): defensive fill of legacy FrameworkDetection
+        // fields on read so Phase 2/4 consumers always see the new shape.
         const turnFwDets = fwDetections[idx] || [];
         const frameworkApplications = turnFwDets.map((d: any) => ({
           frameworkId: d.framework_id,
           name: d.framework_name,
           level: d.level,
           evidence: d.evidence || "",
+          confidence: d.confidence ?? "low",
+          detection_method: d.detection_method ?? "keyword",
+          reasoning: d.reasoning ?? "legacy detection (pre-v3.0)",
+          canonicalId: d.canonicalId ?? d.framework_id,
         }));
 
         return {

@@ -148,26 +148,43 @@ function clampQuality(val: any): SignalQuality {
 }
 
 function parseSignalResult(parsed: any): SignalExtractionResult {
+  // Phase 1c (Section 6.5): pass through optional confidence and marginal_evidence
+  // when the model returns them. Phase 4 wires the populator end-to-end.
+  const passOptional = (raw: any) => {
+    const out: { confidence?: "high" | "medium" | "low"; marginal_evidence?: string } = {};
+    if (raw?.confidence === "high" || raw?.confidence === "medium" || raw?.confidence === "low") {
+      out.confidence = raw.confidence;
+    }
+    if (typeof raw?.marginal_evidence === "string" && raw.marginal_evidence.length > 0) {
+      out.marginal_evidence = raw.marginal_evidence;
+    }
+    return out;
+  };
   return {
     intent: {
       quality: clampQuality(parsed.intent?.quality),
       extracted_text: parsed.intent?.extracted_text || "",
+      ...passOptional(parsed.intent),
     },
     justification: {
       quality: clampQuality(parsed.justification?.quality),
       extracted_text: parsed.justification?.extracted_text || "",
+      ...passOptional(parsed.justification),
     },
     tradeoffAwareness: {
       quality: clampQuality(parsed.tradeoffAwareness?.quality),
       extracted_text: parsed.tradeoffAwareness?.extracted_text || "",
+      ...passOptional(parsed.tradeoffAwareness),
     },
     stakeholderAwareness: {
       quality: clampQuality(parsed.stakeholderAwareness?.quality),
       extracted_text: parsed.stakeholderAwareness?.extracted_text || "",
+      ...passOptional(parsed.stakeholderAwareness),
     },
     ethicalAwareness: {
       quality: clampQuality(parsed.ethicalAwareness?.quality),
       extracted_text: parsed.ethicalAwareness?.extracted_text || "",
+      ...passOptional(parsed.ethicalAwareness),
     },
   };
 }

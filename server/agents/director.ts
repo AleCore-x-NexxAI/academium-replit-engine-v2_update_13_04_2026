@@ -1401,15 +1401,40 @@ export async function generateDashboardSummary(
     let bestLevel: "explicit" | "implicit" | "not_evidenced" = "not_evidenced";
     let bestTurn: number | null = null;
     const levelPriority = { explicit: 3, implicit: 2, not_evidenced: 1 };
+    // Phase 1c (Section 6.2): per-framework counts and detection-method distribution.
+    let explicitTurns = 0;
+    let implicitTurns = 0;
+    let notEvidencedTurns = 0;
+    const methodDist: Record<string, number> = {};
     for (let turnIdx = 0; turnIdx < frameworkDetections.length; turnIdx++) {
       const turnDetections = frameworkDetections[turnIdx] || [];
       const det = turnDetections.find(d => d.framework_id === fw.id);
-      if (det && levelPriority[det.level] > levelPriority[bestLevel]) {
-        bestLevel = det.level;
-        bestTurn = turnIdx + 1;
+      if (det) {
+        if (levelPriority[det.level] > levelPriority[bestLevel]) {
+          bestLevel = det.level;
+          bestTurn = turnIdx + 1;
+        }
+        if (det.level === "explicit") explicitTurns++;
+        else if (det.level === "implicit") implicitTurns++;
+        else notEvidencedTurns++;
+        const method = det.detection_method || "keyword";
+        methodDist[method] = (methodDist[method] || 0) + 1;
+      } else {
+        notEvidencedTurns++;
       }
     }
-    return { framework_id: fw.id, best_level: bestLevel, turn_of_best_application: bestTurn };
+    return {
+      framework_id: fw.id,
+      best_level: bestLevel,
+      turn_of_best_application: bestTurn,
+      explicit_turns: explicitTurns,
+      implicit_turns: implicitTurns,
+      not_evidenced_turns: notEvidencedTurns,
+      framework_name: fw.name,
+      canonicalId: fw.id, // Phase 2 will replace via framework registry resolution.
+      provenance: "course_target" as const,
+      detection_method_distribution: methodDist,
+    };
   });
 
   const bandSummary = evidenceLogs.map((l, i) => `Turn ${i + 1}: ${l.rds_band || "SURFACE"}`).join(", ");
@@ -1546,15 +1571,40 @@ export function buildFallbackDashboardSummary(
     let bestLevel: "explicit" | "implicit" | "not_evidenced" = "not_evidenced";
     let bestTurn: number | null = null;
     const levelPriority = { explicit: 3, implicit: 2, not_evidenced: 1 };
+    // Phase 1c (Section 6.2): per-framework counts and detection-method distribution.
+    let explicitTurns = 0;
+    let implicitTurns = 0;
+    let notEvidencedTurns = 0;
+    const methodDist: Record<string, number> = {};
     for (let turnIdx = 0; turnIdx < frameworkDetections.length; turnIdx++) {
       const turnDetections = frameworkDetections[turnIdx] || [];
       const det = turnDetections.find(d => d.framework_id === fw.id);
-      if (det && levelPriority[det.level] > levelPriority[bestLevel]) {
-        bestLevel = det.level;
-        bestTurn = turnIdx + 1;
+      if (det) {
+        if (levelPriority[det.level] > levelPriority[bestLevel]) {
+          bestLevel = det.level;
+          bestTurn = turnIdx + 1;
+        }
+        if (det.level === "explicit") explicitTurns++;
+        else if (det.level === "implicit") implicitTurns++;
+        else notEvidencedTurns++;
+        const method = det.detection_method || "keyword";
+        methodDist[method] = (methodDist[method] || 0) + 1;
+      } else {
+        notEvidencedTurns++;
       }
     }
-    return { framework_id: fw.id, best_level: bestLevel, turn_of_best_application: bestTurn };
+    return {
+      framework_id: fw.id,
+      best_level: bestLevel,
+      turn_of_best_application: bestTurn,
+      explicit_turns: explicitTurns,
+      implicit_turns: implicitTurns,
+      not_evidenced_turns: notEvidencedTurns,
+      framework_name: fw.name,
+      canonicalId: fw.id, // Phase 2 will replace via framework registry resolution.
+      provenance: "course_target" as const,
+      detection_method_distribution: methodDist,
+    };
   });
 
   const bandCounts: Record<string, number> = { INTEGRATED: 0, ENGAGED: 0, SURFACE: 0 };
