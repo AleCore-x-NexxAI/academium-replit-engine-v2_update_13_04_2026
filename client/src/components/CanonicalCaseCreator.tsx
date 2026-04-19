@@ -426,9 +426,9 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
       if (!draftId) throw new Error("No draft");
       const decisions = unreviewedDecisions.length > 0
         ? unreviewedDecisions
-        : ((scenarioData?.initialState as any)?.decisionPoints || [])
-            .filter((d: any) => !d?.reviewCompleted)
-            .map((d: any) => d.number as number);
+        : (scenarioData?.initialState?.decisionPoints || [])
+            .filter((d) => !d.reviewCompleted)
+            .map((d) => d.number);
       for (const num of decisions) {
         await apiRequest("PATCH", `/api/drafts/${draftId}/decisions/${num}/review`, { reviewCompleted: true });
       }
