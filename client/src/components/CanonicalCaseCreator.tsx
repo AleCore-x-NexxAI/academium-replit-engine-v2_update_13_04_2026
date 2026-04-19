@@ -256,7 +256,11 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
       setSuggestingKeywords(prev => ({ ...prev, [fw.id]: false }));
     }
   }, [language, scenarioData, toast]);
-  const { t } = useTranslation();
+  const { t, language: appLanguage } = useTranslation();
+
+  useEffect(() => {
+    setLanguage(appLanguage as "es" | "en");
+  }, [appLanguage]);
 
   useImperativeHandle(ref, () => ({
     handleBack: () => {
