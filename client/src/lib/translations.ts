@@ -701,6 +701,7 @@ const translations = {
     unreviewedDecisions: { es: "Revisa las decisiones {numbers} antes de publicar.", en: "Please review decisions {numbers} before publishing." },
     markAllReviewed: { es: "Marcar todas como revisadas", en: "Mark all reviewed" },
     markingReviewed: { es: "Marcando…", en: "Marking…" },
+    couldNotMarkReviewed: { es: "No se pudieron marcar las decisiones como revisadas.", en: "Could not mark decisions as reviewed." },
   },
 
   scenarioObjectives: {

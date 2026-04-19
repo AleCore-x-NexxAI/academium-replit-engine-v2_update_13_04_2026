@@ -453,7 +453,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
     onError: () => {
       toast({
         title: t("common.error"),
-        description: t("canonicalCase.couldNotPublish"),
+        description: t("canonicalCase.couldNotMarkReviewed"),
         variant: "destructive",
       });
     },
