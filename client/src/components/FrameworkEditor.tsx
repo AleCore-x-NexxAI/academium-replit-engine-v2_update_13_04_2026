@@ -49,19 +49,9 @@ interface ResolverResponse {
   aliases?: string[];
 }
 
-// Browser-friendly stable hash for unresolved framework names. Mirrors the
-// server-side customCanonicalId() result format ("custom_" + 10-hex). Uses a
-// FNV-1a 32-bit hash hex-padded — collisions are acceptable here because the
-// same name will always produce the same id within a single scenario.
-function clientCustomCanonicalId(name: string): string {
-  const norm = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-  let h = 0x811c9dc5;
-  for (let i = 0; i < norm.length; i++) {
-    h ^= norm.charCodeAt(i);
-    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
-  }
-  return `custom_${h.toString(16).padStart(8, "0")}00`;
-}
+// Phase 2: canonicalId for both registry hits and unresolved names is now
+// always issued by the server (POST /api/scenarios/resolve-framework-name)
+// to guarantee a single source of truth for dedup semantics.
 
 interface FrameworkEditorProps {
   value: CaseFramework[];
@@ -106,7 +96,13 @@ export function FrameworkEditor({
         caseContext: caseContext || undefined,
         language,
       });
-      const data = await res.json();
+      const data = (await res.json()) as {
+        keywords?: string[];
+        signalPattern?: NonNullable<CaseFramework["signalPattern"]>;
+        coreConcepts?: string[];
+        conceptualDescription?: string;
+        recognitionSignals?: string[];
+      };
       const kw: string[] = Array.isArray(data?.keywords) ? data.keywords : [];
       const sp = data?.signalPattern;
       onChange(
@@ -115,7 +111,22 @@ export function FrameworkEditor({
           const merged = Array.from(
             new Set([...f.domainKeywords, ...kw.map((k) => k.toLowerCase())])
           );
-          return { ...f, domainKeywords: merged, signalPattern: f.signalPattern || sp };
+          return {
+            ...f,
+            domainKeywords: merged,
+            signalPattern: f.signalPattern || sp,
+            // Phase 2 (Step 12): persist semantic fields onto custom frameworks
+            // so detector tiers 2/3 have something to work with.
+            coreConcepts: (f.coreConcepts && f.coreConcepts.length > 0)
+              ? f.coreConcepts
+              : (Array.isArray(data?.coreConcepts) ? data.coreConcepts : f.coreConcepts),
+            conceptualDescription: (f.conceptualDescription && f.conceptualDescription.trim().length > 0)
+              ? f.conceptualDescription
+              : (typeof data?.conceptualDescription === "string" ? data.conceptualDescription : f.conceptualDescription),
+            recognitionSignals: (f.recognitionSignals && f.recognitionSignals.length > 0)
+              ? f.recognitionSignals
+              : (Array.isArray(data?.recognitionSignals) ? data.recognitionSignals : f.recognitionSignals),
+          };
         })
       );
     } catch {
@@ -166,7 +177,7 @@ export function FrameworkEditor({
     }
 
     let resolved: ResolverResponse | null = prefetched;
-    if (!resolved && canonicalId.startsWith("custom_") === false) {
+    if (!resolved && !canonicalId.startsWith("custom_")) {
       try {
         const res = await apiRequest("POST", "/api/scenarios/resolve-framework-name", {
           name: nameToAdd,
@@ -199,20 +210,24 @@ export function FrameworkEditor({
       }
       if (data?.canonicalId) {
         const finalName = data.name || name;
-        await addByCanonical(finalName, data.canonicalId, data);
+        const added = await addByCanonical(finalName, data.canonicalId, data);
         setNameInput("");
-      } else {
-        // Unresolved — assign stable custom_<hash> canonicalId and AI-fill keywords.
-        const customId = clientCustomCanonicalId(name);
-        const added = await addByCanonical(name, customId, null);
-        setNameInput("");
-        if (added) void fetchKeywords(added.id, name);
+        // For server-issued custom ids (no registry semantics), pull AI keywords + semantic fields.
+        if (added && (data as ResolverResponse & { isCustom?: boolean }).isCustom) {
+          void fetchKeywords(added.id, finalName);
+        }
       }
     } catch {
-      // Network failure — still assign a custom canonical id so dedup works.
-      const customId = clientCustomCanonicalId(name);
-      if (!value.some((f) => f.canonicalId === customId)) {
-        const fw = buildFramework(name, customId, null);
+      // Network failure — fall back to a name-only entry without canonicalId.
+      // Dedup still works on subsequent online resolves.
+      if (!value.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+        const fw: CaseFramework = {
+          id: `fw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name,
+          domainKeywords: [],
+          provenance: "explicit",
+          accepted_by_professor: true,
+        };
         update([...value, fw]);
         setNameInput("");
         void fetchKeywords(fw.id, name);

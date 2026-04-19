@@ -1906,7 +1906,15 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
 
       const resolved = resolveFrameworkName(name, lang);
       if (!resolved) {
-        return res.json({ canonicalId: null, ambiguous: false });
+        // Phase 2: unresolved names still get a stable server-issued
+        // custom_<sha1[:10]> id so client and server share dedup semantics.
+        const { customCanonicalId } = await import("./agents/frameworkBootMigration");
+        return res.json({
+          canonicalId: customCanonicalId(name),
+          ambiguous: false,
+          isCustom: true,
+          name: name.trim(),
+        });
       }
       res.json({
         canonicalId: resolved.canonicalId,
