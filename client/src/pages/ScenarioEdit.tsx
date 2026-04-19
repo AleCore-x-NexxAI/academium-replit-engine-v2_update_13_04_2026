@@ -55,6 +55,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTranslation } from "@/contexts/LanguageContext";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import type { Scenario, AgentPrompts, DecisionPoint, CaseFramework, PedagogicalIntent } from "@shared/schema";
+import { DecisionDimensionsEditor } from "@/components/DecisionDimensionsEditor";
 
 // Phase 3: response shape for /api/scenarios/:id/pedagogical-intent
 interface PedagogicalIntentResponse {
@@ -277,18 +278,29 @@ export default function ScenarioEdit() {
     }
     try {
       const res = await apiRequest("POST", "/api/scenarios/resolve-framework-name", { name });
-      const data = await res.json() as { canonicalId: string | null; name: string };
+      const data = await res.json() as { canonicalId: string | null; name: string; ambiguous?: boolean };
+      // Phase 3 hard rule: never store a framework without a canonical id.
+      if (!data.canonicalId) {
+        toast({
+          title: language === "en" ? "Framework needs disambiguation" : "El framework necesita aclararse",
+          description: language === "en"
+            ? `"${name}" matches multiple frameworks. Type a more specific name.`
+            : `"${name}" coincide con varios frameworks. Escribe un nombre más específico.`,
+          variant: "destructive",
+        });
+        return;
+      }
       setIntentDraft({
         ...intentDraft,
-        targetFrameworks: [...intentDraft.targetFrameworks, { canonicalId: data.canonicalId ?? null, name: data.name || name }],
+        targetFrameworks: [...intentDraft.targetFrameworks, { canonicalId: data.canonicalId, name: data.name || name }],
       });
-    } catch {
-      setIntentDraft({
-        ...intentDraft,
-        targetFrameworks: [...intentDraft.targetFrameworks, { canonicalId: null, name }],
-      });
-    } finally {
       setIntentFwInput("");
+    } catch (err) {
+      toast({
+        title: language === "en" ? "Could not resolve framework" : "No se pudo resolver el framework",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
     }
   };
 
@@ -616,6 +628,15 @@ export default function ScenarioEdit() {
                   />
                 </div>
               </div>
+              {/* Phase 3: per-decision academic dimensions. */}
+              <DecisionDimensionsEditor
+                value={intentDraft.decisionDimensions ?? []}
+                onChange={(next) => setIntentDraft({ ...intentDraft, decisionDimensions: next })}
+                language={language}
+                stepCount={decisionPoints.length || undefined}
+                disabled={intentLocked}
+                testIdPrefix="edit"
+              />
               <div className="flex justify-end">
                 <Button
                   type="button"
@@ -623,6 +644,9 @@ export default function ScenarioEdit() {
                     teachingGoal: intentDraft.teachingGoal,
                     targetFrameworks: intentDraft.targetFrameworks,
                     targetCompetencies: intentDraft.targetCompetencies,
+                    decisionDimensions: intentDraft.decisionDimensions && intentDraft.decisionDimensions.length > 0
+                      ? intentDraft.decisionDimensions
+                      : undefined,
                     courseContext: intentDraft.courseContext || undefined,
                     reasoningConstraint: intentDraft.reasoningConstraint || undefined,
                   })}

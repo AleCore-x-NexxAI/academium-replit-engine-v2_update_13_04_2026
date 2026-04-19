@@ -36,8 +36,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { HelpIcon } from "@/components/HelpIcon";
+import { DecisionDimensionsEditor } from "@/components/DecisionDimensionsEditor";
 import { useTranslation } from "@/contexts/LanguageContext";
-import type { GeneratedScenarioData, DecisionPoint, Indicator, CaseFramework } from "@shared/schema";
+import type { GeneratedScenarioData, DecisionPoint, Indicator, CaseFramework, AcademicDimension } from "@shared/schema";
 import { Trash2, BookMarked } from "lucide-react";
 
 interface CanonicalCaseCreatorProps {
@@ -134,6 +135,10 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
   const [intentFrameworks, setIntentFrameworks] = useState<Array<{ canonicalId: string | null; name: string }>>([]);
   const [intentFrameworkInput, setIntentFrameworkInput] = useState("");
   const [intentCompetencies, setIntentCompetencies] = useState<Array<"C1" | "C2" | "C3" | "C4" | "C5">>([]);
+  // Phase 3: per-decision academic dimensions chosen by the professor.
+  const [intentDimensions, setIntentDimensions] = useState<
+    Array<{ decisionNumber: number; primaryDimension: AcademicDimension; secondaryDimension?: AcademicDimension }>
+  >([]);
   const [courseContext, setCourseContext] = useState("");
   const [reasoningConstraint, setReasoningConstraint] = useState("");
   const [discipline, setDiscipline] = useState("Negocios");
@@ -222,14 +227,28 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
     }
     try {
       const res = await apiRequest("POST", "/api/scenarios/resolve-framework-name", { name });
-      const data = await res.json() as { canonicalId: string | null; name: string };
-      setIntentFrameworks(prev => [...prev, { canonicalId: data.canonicalId ?? null, name: data.name || name }]);
-    } catch {
-      setIntentFrameworks(prev => [...prev, { canonicalId: null, name }]);
-    } finally {
+      const data = await res.json() as { canonicalId: string | null; name: string; ambiguous?: boolean };
+      // Phase 3 hard rule: never store a framework without a canonical id.
+      if (!data.canonicalId) {
+        toast({
+          title: language === "en" ? "Framework needs disambiguation" : "El framework necesita aclararse",
+          description: language === "en"
+            ? `"${name}" matches multiple frameworks. Type a more specific name (e.g., "Porter Five Forces").`
+            : `"${name}" coincide con varios frameworks. Escribe un nombre más específico (p. ej., "Porter Cinco Fuerzas").`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setIntentFrameworks(prev => [...prev, { canonicalId: data.canonicalId, name: data.name || name }]);
       setIntentFrameworkInput("");
+    } catch (err) {
+      toast({
+        title: language === "en" ? "Could not resolve framework" : "No se pudo resolver el framework",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
     }
-  }, [intentFrameworkInput, intentFrameworks]);
+  }, [intentFrameworkInput, intentFrameworks, language, toast]);
 
   const COMPETENCY_LABELS: Record<"C1" | "C2" | "C3" | "C4" | "C5", string> = {
     C1: language === "en" ? "C1 Analytical" : "C1 Analítica",
@@ -261,6 +280,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
           teachingGoal: teachingGoal.trim(),
           targetFrameworks: intentFrameworks,
           targetCompetencies: intentCompetencies,
+          decisionDimensions: intentDimensions.length > 0 ? intentDimensions : undefined,
           courseContext: courseContext.trim() || undefined,
           reasoningConstraint: reasoningConstraint.trim() || undefined,
         },
@@ -621,6 +641,15 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   />
                 </div>
               </div>
+
+              {/* Phase 3: per-decision academic dimensions. */}
+              <DecisionDimensionsEditor
+                value={intentDimensions}
+                onChange={setIntentDimensions}
+                language={language}
+                stepCount={stepCount}
+                testIdPrefix="creator"
+              />
             </Card>
 
             <div className="space-y-3">
