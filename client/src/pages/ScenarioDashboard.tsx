@@ -746,29 +746,39 @@ function StudentSessionModal({ sessionId, isEn, onClose }: { sessionId: string; 
             <div className="flex-1 p-2.5 bg-muted/30 rounded-lg border border-dashed border-border">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{isEn ? "Session summary" : "Resumen de sesión"}</div>
-                {!summaryLoading && summaryData && !summaryData.dashboardSummary?.session_headline && summaryData.isComplete && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => regenerateSummary.mutate()}
-                    disabled={regenerateSummary.isPending}
-                    data-testid="button-regenerate-summary"
-                  >
-                    {regenerateSummary.isPending
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                      : <RefreshCw className="w-3 h-3" />}
-                    <span className="ml-1.5 text-[11px]">
-                      {isEn ? "Regenerate" : "Regenerar"}
-                    </span>
-                  </Button>
+                {!summaryLoading && summaryData && summaryData.isComplete && (
+                  (!summaryData.dashboardSummary?.session_headline ||
+                   (summaryData.dashboardSummary as any)?.generation_status === "fallback") && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => regenerateSummary.mutate()}
+                      disabled={regenerateSummary.isPending}
+                      data-testid="button-regenerate-summary"
+                    >
+                      {regenerateSummary.isPending
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <RefreshCw className="w-3 h-3" />}
+                      <span className="ml-1.5 text-[11px]">
+                        {isEn ? "Regenerate" : "Regenerar"}
+                      </span>
+                    </Button>
+                  )
                 )}
               </div>
               <div className="text-[11px] text-muted-foreground/80 leading-relaxed italic" data-testid="text-session-summary">
                 {summaryLoading ? (
                   <Skeleton className="h-8 w-full" />
                 ) : summaryData?.dashboardSummary?.session_headline ? (
-                  summaryData.dashboardSummary.session_headline
-                ) : summaryData?.completedAt ? (
+                  <>
+                    {summaryData.dashboardSummary.session_headline}
+                    {(summaryData.dashboardSummary as any)?.generation_status === "fallback" && (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 not-italic" data-testid="badge-summary-fallback">
+                        {isEn ? "(fallback)" : "(respaldo)"}
+                      </span>
+                    )}
+                  </>
+                ) : summaryData?.isComplete ? (
                   isEn
                     ? "Summary generation did not complete for this session. Click Regenerate to try again."
                     : "La generación del resumen no se completó para esta sesión. Haz clic en Regenerar para intentarlo de nuevo."

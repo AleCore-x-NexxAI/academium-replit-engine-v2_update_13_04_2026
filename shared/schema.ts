@@ -360,6 +360,10 @@ export interface DashboardSummary {
     best_level: "explicit" | "implicit" | "not_evidenced";
     turn_of_best_application: number | null;
   }>;
+  // Phase 1a: explicit generation status. "ok" = LLM headline succeeded;
+  // "fallback" = deterministic headline (LLM threw); "regenerated" = produced
+  // by /regenerate-summary. UI uses this to expose retry affordances.
+  generation_status?: "ok" | "fallback" | "regenerated";
 }
 
 export interface Stakeholder {

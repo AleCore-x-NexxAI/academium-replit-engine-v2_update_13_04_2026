@@ -1441,7 +1441,7 @@ Reglas: Solo observación. Identifica UNA fortaleza O UNA brecha (no ambas). Sin
       : `La sesión mostró ${highestSignal[0]} como el patrón de razonamiento dominante en ${evidenceLogs.length} turnos.`;
   }
 
-  return { session_headline: sessionHeadline, signal_averages: signalAverages, framework_summary: frameworkSummary };
+  return { session_headline: sessionHeadline, signal_averages: signalAverages, framework_summary: frameworkSummary, generation_status: "ok" };
 }
 
 /**
@@ -1501,5 +1501,5 @@ export function buildFallbackDashboardSummary(
     ? `Session reasoning was predominantly ${dominantBand.toLowerCase()} across ${evidenceLogs.length} turns. Generated summary unavailable; deterministic fallback shown.`
     : `El razonamiento de la sesión fue predominantemente ${dominantBand.toLowerCase()} en ${evidenceLogs.length} turnos. Resumen generado no disponible; se muestra un respaldo determinista.`;
 
-  return { session_headline: sessionHeadline, signal_averages: signalAverages, framework_summary: frameworkSummary };
+  return { session_headline: sessionHeadline, signal_averages: signalAverages, framework_summary: frameworkSummary, generation_status: "fallback" };
 }

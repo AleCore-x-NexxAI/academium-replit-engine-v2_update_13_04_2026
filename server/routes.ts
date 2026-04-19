@@ -4107,8 +4107,9 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
       };
 
       const newSummary = await generateDashboardSummary(ctx, logs, fwDetections, frameworks);
+      const taggedSummary = { ...newSummary, generation_status: "regenerated" as const };
 
-      const mergedState = { ...state, dashboard_summary: newSummary };
+      const mergedState = { ...state, dashboard_summary: taggedSummary };
       await storage.updateSimulationSession(sessionId, { currentState: mergedState });
       invalidateDashboardCache(session.scenarioId);
 
