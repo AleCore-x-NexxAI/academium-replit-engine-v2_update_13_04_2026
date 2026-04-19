@@ -670,7 +670,7 @@ export async function generateCanonicalCase(
   const indicators: Indicator[] = (parsed.indicators || []).length >= 4 
     ? parsed.indicators.map((ind: any) => ({
         id: ind.id || "indicator",
-        label: ind.label || "Indicador",
+        label: ind.label || (isEn ? "Indicator" : "Indicador"),
         value: typeof ind.value === "number" ? ind.value : 50,
         description: ind.description,
         direction: ind.direction || directionDefaults[ind.id] || "up_better",

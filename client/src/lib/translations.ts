@@ -188,6 +188,7 @@ const translations = {
     noTurnsRecorded: { es: "No hay turnos registrados.", en: "No turns recorded." },
     noKpiMovements: { es: "No se registraron movimientos de KPI.", en: "No KPI movements recorded." },
     couldNotRegenerateSummary: { es: "No se pudo regenerar el resumen", en: "Could not regenerate summary" },
+    studentsEnrolled: { es: "estudiantes inscritos", en: "students enrolled" },
   },
 
   simulation: {

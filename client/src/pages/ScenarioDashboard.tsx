@@ -315,7 +315,7 @@ export default function ScenarioDashboard() {
           <div>
             <div className="text-[15px] font-medium text-muted-foreground italic" data-testid="text-scenario-title">{scenarioTitle}</div>
             <div className="text-[12px] text-muted-foreground/70" data-testid="text-scenario-meta">
-              {enrolledCount} {isEn ? "students enrolled" : "estudiantes inscritos"}
+              {enrolledCount} {t("professorDashboard.studentsEnrolled")}
             </div>
           </div>
         </div>
