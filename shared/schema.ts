@@ -405,7 +405,7 @@ export interface CaseFramework {
   conceptualDescription?: string;
   recognitionSignals?: string[];
   primaryDimension?: FrameworkPrimaryDimension;
-  provenance?: "explicit" | "inferred";
+  provenance?: "explicit" | "inferred" | "inferred_from_anchor" | "inferred_from_context";
   inference_reason?: string;
   accepted_by_professor?: boolean;
   accepted_at?: string;

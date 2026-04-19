@@ -647,12 +647,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const updated = await storage.updateScenario(req.params.id, updateData);
+      // Phase 4: if intent changed, regenerate inferred frameworks.
+      if (updateData.pedagogicalIntent) {
+        const sessionCount = await storage.countScenarioSessions(req.params.id);
+        await runInferenceAndPersist(req.params.id, updateData.pedagogicalIntent, sessionCount);
+      }
       res.json(updated);
     } catch (error) {
       console.error("Error updating scenario:", error);
       res.status(500).json({ message: "Failed to update scenario" });
     }
   });
+
+  // Phase 4: shared helper. Runs framework inference for a scenario whose
+  // intent just changed, merges the suggestions into initialState.frameworks
+  // (cap of 3 inferred at all times, accepted_by_professor=false), and
+  // persists the merged initialState. Safe to call after any intent write.
+  // Skips silently when there are already sessions (lock) or when inference
+  // returns nothing.
+  async function runInferenceAndPersist(
+    scenarioId: string,
+    intent: PedagogicalIntent,
+    sessionCount: number,
+  ): Promise<void> {
+    if (sessionCount > 0) return;
+    try {
+      const fresh = await storage.getScenario(scenarioId);
+      if (!fresh) return;
+      const initialState = (fresh.initialState ?? {}) as InitialState;
+      const existing = (initialState.frameworks ?? []) as InitialState["frameworks"];
+      const language: "es" | "en" = fresh.language === "en" ? "en" : "es";
+      const { inferFrameworks } = await import("./agents/frameworkInference");
+      const suggestions = await inferFrameworks(
+        {
+          topic: fresh.title,
+          domain: fresh.domain,
+          caseContext: initialState.caseContext ?? initialState.situationBackground ?? "",
+        },
+        intent,
+        existing ?? [],
+        language,
+      );
+      if (!suggestions.length) return;
+      const merged = [...(existing ?? []), ...suggestions];
+      await storage.updateScenario(scenarioId, {
+        initialState: { ...initialState, frameworks: merged },
+      });
+    } catch (err) {
+      console.error("[Phase4] runInferenceAndPersist failed:", err);
+    }
+  }
 
   // Phase 3: server-side canonicalization of pedagogical intent. Every
   // targetFrameworks entry must either (a) match a curated registry id, or
@@ -772,6 +816,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const updated = await storage.updateScenario(req.params.id, { pedagogicalIntent: finalParsed.data });
+      // Phase 4: fire-and-await inference so suggestions are visible on the
+      // next GET. Failures are logged but never block the intent write.
+      await runInferenceAndPersist(req.params.id, finalParsed.data, sessionCount);
       res.json({ pedagogicalIntent: updated?.pedagogicalIntent ?? finalParsed.data });
     } catch (error) {
       console.error("Error updating pedagogical intent:", error);
@@ -972,7 +1019,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const frameworkCount = (initialState?.frameworks ?? []).length;
       if (frameworkCount > 0) {
-        console.log(`[Engine] Turn ${context.turnCount + 1} — scenario "${context.scenario.title}" has ${frameworkCount} framework(s): ${(initialState.frameworks ?? []).map((f: any) => f.name).join(", ")}`);
+        console.log(`[Engine] Turn ${context.turnCount + 1} — scenario "${context.scenario.title}" has ${frameworkCount} framework(s): ${(initialState?.frameworks ?? []).map((f: any) => f.name).join(", ")}`);
       } else {
         console.log(`[Engine] Turn ${context.turnCount + 1} — no frameworks configured for scenario "${context.scenario.title}"`);
       }

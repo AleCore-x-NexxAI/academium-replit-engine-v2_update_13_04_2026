@@ -608,6 +608,11 @@ const translations = {
     frameworkAlreadyAdded: { es: "Ya agregado", en: "Already added" },
     frameworkAlreadyAddedDesc: { es: "Este marco ya está en la lista (mismo marco canónico).", en: "This framework is already in the list (same canonical framework)." },
     frameworkDisambig: { es: "¿Cuál de estos marcos?", en: "Which of these frameworks?" },
+    frameworkSuggestionsHeader: { es: "Sugerencias del sistema", en: "System suggestions" },
+    frameworkSuggestedBadge: { es: "Sugerido", en: "Suggested" },
+    frameworkSuggestionNoReason: { es: "Marco sugerido por el sistema según el contexto del caso.", en: "Framework suggested by the system based on case context." },
+    frameworkAcceptSuggestion: { es: "Agregar", en: "Add" },
+    frameworkSuggestionsCount: { es: "sugeridos", en: "suggested" },
   },
 
   canonicalCase: {

@@ -34,6 +34,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ResolverResponse {
   canonicalId: string | null;
@@ -322,6 +328,35 @@ export function FrameworkEditor({
     ethicalAwareness: "manualCase.signalEthical",
   };
 
+  // Phase 4: split accepted vs suggested. A framework is "suggested" when it
+  // was inferred by the server and the professor has not opted in yet
+  // (accepted_by_professor === false). The original index is preserved so
+  // every existing handler (move/remove/keyword/signal) keeps working.
+  const isSuggested = (fw: CaseFramework): boolean =>
+    fw.accepted_by_professor === false &&
+    (fw.provenance === "inferred_from_anchor" ||
+      fw.provenance === "inferred_from_context" ||
+      fw.provenance === "inferred");
+
+  const acceptedEntries = value
+    .map((fw, idx) => ({ fw, idx }))
+    .filter(({ fw }) => !isSuggested(fw));
+  // Hard cap on display per Phase 4 §7.4.
+  const suggestedEntries = value
+    .map((fw, idx) => ({ fw, idx }))
+    .filter(({ fw }) => isSuggested(fw))
+    .slice(0, 3);
+
+  const acceptSuggestion = (i: number) => {
+    const next = [...value];
+    next[i] = {
+      ...next[i],
+      accepted_by_professor: true,
+      accepted_at: new Date().toISOString(),
+    };
+    update(next);
+  };
+
   return (
     <div className="space-y-3" data-testid="framework-editor">
       <p className="text-xs text-muted-foreground">{t("manualCase.frameworksDesc")}</p>
@@ -378,9 +413,9 @@ export function FrameworkEditor({
         </DialogContent>
       </Dialog>
 
-      {value.length > 0 && (
+      {acceptedEntries.length > 0 && (
         <div className="space-y-2">
-          {value.map((fw, idx) => (
+          {acceptedEntries.map(({ fw, idx }) => (
             <div
               key={fw.id}
               className="border rounded-md p-3 space-y-2"
@@ -575,8 +610,76 @@ export function FrameworkEditor({
           ))}
         </div>
       )}
+
+      {suggestedEntries.length > 0 && (
+        <div className="space-y-2 pt-2" data-testid="fwedit-suggestions">
+          <p className="text-xs font-medium text-muted-foreground">
+            {t("manualCase.frameworkSuggestionsHeader")}
+          </p>
+          <TooltipProvider>
+            {suggestedEntries.map(({ fw, idx }) => (
+              <div
+                key={fw.id}
+                className="border border-dashed rounded-md p-3 flex items-start justify-between gap-3"
+                data-testid={`fwedit-suggestion-${idx}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm truncate">{fw.name}</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="secondary"
+                          className="cursor-default"
+                          data-testid={`badge-fwedit-suggested-${idx}`}
+                        >
+                          {t("manualCase.frameworkSuggestedBadge")}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-xs">
+                          {fw.inference_reason || t("manualCase.frameworkSuggestionNoReason")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {fw.conceptualDescription && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {fw.conceptualDescription}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    disabled={disabled || acceptedEntries.length >= maxFrameworks}
+                    onClick={() => acceptSuggestion(idx)}
+                    data-testid={`button-fwedit-accept-${idx}`}
+                  >
+                    {t("manualCase.frameworkAcceptSuggestion")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    disabled={disabled}
+                    onClick={() => removeFramework(idx)}
+                    data-testid={`button-fwedit-dismiss-${idx}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </TooltipProvider>
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
-        {value.length}/{maxFrameworks}
+        {acceptedEntries.length}/{maxFrameworks}
+        {suggestedEntries.length > 0 ? ` (+${suggestedEntries.length} ${t("manualCase.frameworkSuggestionsCount")})` : ""}
       </p>
     </div>
   );
