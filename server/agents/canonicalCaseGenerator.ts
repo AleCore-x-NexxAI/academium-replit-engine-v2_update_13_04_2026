@@ -1143,20 +1143,12 @@ export async function generateCanonicalCase(
   // framework list. The fallback path seeded these from intent.canonicalId
   // values (and the LLM may also emit canonicalIds), but downstream review
   // and detection use the framework's real `id`. Map canonicalId → id when
-  // possible, drop ids that don't resolve to any final framework.
-  const idsByCanonical = new Map<string, string>();
-  const idsById = new Set<string>();
-  for (const fw of finalFrameworks) {
-    idsById.add(fw.id);
-    if (fw.canonicalId) idsByCanonical.set(fw.canonicalId, fw.id);
-  }
-  for (const dp of decisionPoints) {
-    const raw = Array.isArray(dp.targetFrameworkIds) ? dp.targetFrameworkIds : [];
-    const normalized = raw
-      .map((v) => (idsById.has(v) ? v : idsByCanonical.get(v)))
-      .filter((v): v is string => typeof v === "string" && v.length > 0);
-    dp.targetFrameworkIds = Array.from(new Set(normalized));
-  }
+  // possible, drop ids that don't resolve to any final framework. This is
+  // re-applied after every gate-triggered regen below so regenerated
+  // decisions cannot reintroduce stale/canonical ids.
+  const normalizeAllDecisionFrameworkIds = () =>
+    normalizeTargetFrameworkIds(decisionPoints, finalFrameworks);
+  normalizeAllDecisionFrameworkIds();
 
   // Phase 5 (§9.4): post-generation quality gates. Each gate either passes
   // silently or attaches a qualityFlag to the affected decision(s). The
@@ -1186,10 +1178,20 @@ export async function generateCanonicalCase(
       const idx = decisionPoints.findIndex((d) => d.number === dpNum);
       if (idx >= 0) decisionPoints[idx].qualityFlags = [...(decisionPoints[idx].qualityFlags ?? []), flagOnFail];
     }
+    // Re-normalize after every regen so a regenerated decision cannot
+    // reintroduce canonicalIds or unresolved framework ids.
+    normalizeAllDecisionFrameworkIds();
   };
 
-  // Gate 4: dimension coverage — flag-only (would require multi-decision
-  // re-assignment, which is what the per-decision regen flow handles).
+  // Gate 4: dimension coverage — EXEMPT from the §9.4 "one regen per gate"
+  // rule by design. Dimensions are pre-assigned deterministically by
+  // `assignDecisionDimensions` (§10.2 templates) BEFORE the LLM call, with
+  // `no_consecutive_same` and competency promotion already enforced. The
+  // only way Gate 4 can fail is if `effectiveSteps` itself yields fewer
+  // distinct dimensions than required — that is a structural property of
+  // the case length, not a regenerable LLM output. Regenerating any single
+  // decision cannot alter the global dimension distribution. We therefore
+  // surface this as a quality flag for the professor review checkpoint.
   const covG = checkDimensionCoverage(dimensions, effectiveSteps);
   if (!covG.ok) {
     console.warn(`[canonicalCaseGenerator] Gate4 dimension coverage failed: ${covG.distinctCount}/${covG.required}`);
@@ -1407,6 +1409,32 @@ export async function regenerateSingleDecision(args: {
   };
 }
 
+/**
+ * Phase 5: shared helper that maps each decision's targetFrameworkIds to
+ * the FINAL framework list's real `id`s, mapping canonicalId→id when
+ * possible and dropping any value that doesn't resolve. Exported so the
+ * regenerate-decision route can re-apply normalization after a single
+ * decision is regenerated.
+ */
+export function normalizeTargetFrameworkIds(
+  decisions: DecisionPoint[],
+  frameworks: CaseFramework[],
+): void {
+  const idsByCanonical = new Map<string, string>();
+  const idsById = new Set<string>();
+  for (const fw of frameworks) {
+    idsById.add(fw.id);
+    if (fw.canonicalId) idsByCanonical.set(fw.canonicalId, fw.id);
+  }
+  for (const dp of decisions) {
+    const raw = Array.isArray(dp.targetFrameworkIds) ? dp.targetFrameworkIds : [];
+    const normalized = raw
+      .map((v) => (idsById.has(v) ? v : idsByCanonical.get(v)))
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
+    dp.targetFrameworkIds = Array.from(new Set(normalized));
+  }
+}
+
 export function convertCanonicalToScenarioData(
   canonical: CanonicalCaseData,
   language?: "es" | "en"
@@ -1464,5 +1492,6 @@ ${canonical.coreChallenge}`;
     rubric: defaultRubric,
     isComplete: true,
     confidence: canonical.confidence,
+    language,
   };
 }

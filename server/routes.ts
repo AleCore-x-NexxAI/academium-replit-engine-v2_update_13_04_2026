@@ -2405,6 +2405,14 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
       });
 
       const updatedDecisions = decisions.map((d) => (d.number === decisionNumber ? newDecision : d));
+      // Phase 5: re-apply framework-id normalization so a regenerated
+      // decision cannot reintroduce canonicalIds or stale ids that don't
+      // resolve against the case's persisted framework list.
+      const persistedFrameworks = Array.isArray(initial.frameworks) ? initial.frameworks : [];
+      if (persistedFrameworks.length > 0) {
+        const { normalizeTargetFrameworkIds } = await import("./agents/canonicalCaseGenerator");
+        normalizeTargetFrameworkIds(updatedDecisions as any, persistedFrameworks as any);
+      }
       const nextScenario: GeneratedScenarioData = {
         ...generated,
         initialState: { ...initial, decisionPoints: updatedDecisions },
