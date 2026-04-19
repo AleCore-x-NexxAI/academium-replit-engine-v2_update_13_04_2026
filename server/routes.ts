@@ -2385,7 +2385,8 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
       }
 
       const { regenerateSingleDecision } = await import("./agents/canonicalCaseGenerator");
-      const language = (draft.language as "es" | "en") ?? "es";
+      const user = await storage.getUser(userId);
+      const language: "es" | "en" = (user?.language === "en" ? "en" : "es");
       const newDecision = await regenerateSingleDecision({
         caseContext: initial.caseContext ?? generated.description ?? "",
         coreChallenge: initial.coreChallenge ?? "",

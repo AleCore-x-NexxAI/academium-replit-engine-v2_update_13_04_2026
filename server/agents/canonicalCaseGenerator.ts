@@ -820,10 +820,20 @@ export async function generateCanonicalCase(
 
   // Phase 5: stamp the pre-assigned dimension onto every decision so the
   // server-side metadata is authoritative even if the LLM omits/overrides it.
+  // dimensionRationale and targetFrameworkIds get safe fallbacks so the
+  // persisted decision always has the new metadata fields populated.
   const dimByNumber = new Map(dimensions.map((d) => [d.decisionNumber, d]));
+  const intentTargetIds = (pedagogicalIntent.targetFrameworks ?? [])
+    .map((f) => f.canonicalId)
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+  const fallbackRationale = (dim: AcademicDimension) =>
+    isEn
+      ? `Auto-assigned: this decision exercises the "${dim}" dimension per the case's pedagogical intent.`
+      : `Asignación automática: esta decisión ejercita la dimensión "${dim}" según la intención pedagógica del caso.`;
   const decisionPoints: DecisionPoint[] = (parsed.decisionPoints || []).map((dp: any, index: number) => {
     const number = dp.number || index + 1;
     const dim = dimByNumber.get(number);
+    const primary = dim?.primaryDimension ?? "strategic";
     const ts = dp.tradeoffSignature && typeof dp.tradeoffSignature === "object"
       ? {
           dimension: String(dp.tradeoffSignature.dimension ?? "").trim(),
@@ -831,6 +841,9 @@ export async function generateCanonicalCase(
           benefit: String(dp.tradeoffSignature.benefit ?? "").trim(),
         } as TradeoffSignature
       : undefined;
+    const llmFwIds = Array.isArray(dp.targetFrameworkIds)
+      ? dp.targetFrameworkIds.filter((s: any) => typeof s === "string" && s.trim()).map((s: string) => s.trim())
+      : [];
     return {
       number,
       format: dp.format || (index === 0 ? "multiple_choice" : "written"),
@@ -841,14 +854,12 @@ export async function generateCanonicalCase(
       focusCue: dp.focusCue || defaultFocusCues[index % defaultFocusCues.length],
       thinkingScaffold: Array.isArray(dp.thinkingScaffold) ? dp.thinkingScaffold : undefined,
       tradeoffSignature: ts && (ts.cost || ts.benefit || ts.dimension) ? ts : undefined,
-      primaryDimension: dim?.primaryDimension,
+      primaryDimension: primary,
       secondaryDimension: dim?.secondaryDimension,
       dimensionRationale: typeof dp.dimensionRationale === "string" && dp.dimensionRationale.trim()
         ? dp.dimensionRationale.trim()
-        : undefined,
-      targetFrameworkIds: Array.isArray(dp.targetFrameworkIds)
-        ? dp.targetFrameworkIds.filter((s: any) => typeof s === "string" && s.trim()).map((s: string) => s.trim())
-        : undefined,
+        : fallbackRationale(primary),
+      targetFrameworkIds: llmFwIds.length > 0 ? llmFwIds : intentTargetIds,
       reviewCompleted: false,
       qualityFlags: [],
     };

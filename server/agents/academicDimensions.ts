@@ -65,7 +65,7 @@ function promoteByCompetencies(
   }
   const present = new Set(assigned);
   const out = assigned.slice();
-  for (const dim of desired) {
+  for (const dim of Array.from(desired)) {
     if (present.has(dim)) continue;
     // find a slot whose dimension isn't in `desired` and isn't the last (strategic) slot
     const swapIdx = out.findIndex((d, i) => i !== out.length - 1 && !desired.has(d));
@@ -136,8 +136,6 @@ export function assignDecisionDimensions(
     return { decisionNumber: i + 1, primaryDimension: primary };
   });
 }
-
-export type DecisionDimension = ReturnType<typeof assignDecisionDimensions>[number];
 
 /**
  * Per-dimension constraint text (§10.3) injected into prompts. The strings
