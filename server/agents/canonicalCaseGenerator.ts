@@ -701,28 +701,71 @@ function checkDimensionCoverage(
 async function checkFrameworkCoverage(
   decisionPoints: DecisionPoint[],
   frameworks: CaseFramework[],
+  primaryTargetCanonicalId: string | undefined,
   language: "es" | "en",
-): Promise<{ ok: boolean }> {
-  if (frameworks.length === 0) return { ok: true }; // no frameworks → no coverage required
+): Promise<{ ok: boolean; missingPrimary: string | null }> {
+  if (frameworks.length === 0) return { ok: true, missingPrimary: null };
   try {
     const { detectFrameworksSync } = await import("./frameworkDetector");
+    // The "primary" target is the first targetFramework declared by the
+    // professor's intent, mapped to a CaseFramework entry by canonicalId.
+    const primaryFw = primaryTargetCanonicalId
+      ? frameworks.find((f) => f.canonicalId === primaryTargetCanonicalId) ?? frameworks[0]
+      : frameworks[0];
+    const emptySignals: any = {
+      intent: { quality: "WEAK", detected: false, evidence: "" },
+      justification: { quality: "WEAK", detected: false, evidence: "" },
+      tradeoffAwareness: { quality: "WEAK", detected: false, evidence: "" },
+      stakeholderAwareness: { quality: "WEAK", detected: false, evidence: "" },
+      ethicalAwareness: { quality: "WEAK", detected: false, evidence: "" },
+    };
+    let primaryHit = false;
     for (const dp of decisionPoints) {
       const text = `${dp.prompt}\n${(dp.options ?? []).join("\n")}\n${dp.focusCue ?? ""}`;
-      const emptySignals: any = {
-        intent: { quality: "WEAK", detected: false, evidence: "" },
-        justification: { quality: "WEAK", detected: false, evidence: "" },
-        tradeoffAwareness: { quality: "WEAK", detected: false, evidence: "" },
-        stakeholderAwareness: { quality: "WEAK", detected: false, evidence: "" },
-        ethicalAwareness: { quality: "WEAK", detected: false, evidence: "" },
-      };
       const detections = detectFrameworksSync(text, emptySignals, frameworks, language);
-      if (detections.some((d: any) => d.level !== "not_evidenced")) return { ok: true };
+      if (detections.some((d: any) => d.frameworkId === primaryFw.id && d.level !== "not_evidenced")) {
+        primaryHit = true;
+        break;
+      }
     }
-    return { ok: false };
+    return primaryHit
+      ? { ok: true, missingPrimary: null }
+      : { ok: false, missingPrimary: primaryFw.name };
   } catch (err) {
     console.warn("[canonicalCaseGenerator] checkFrameworkCoverage skipped due to error:", err);
-    return { ok: true };
+    return { ok: true, missingPrimary: null };
   }
+}
+
+/**
+ * Backfill semantic completeness on every framework returned by the LLM.
+ * Per Phase 5 spec, every framework MUST have non-empty `coreConcepts`,
+ * `conceptualDescription`, and `recognitionSignals`. When the LLM omits
+ * them, we synthesize minimal but coherent stubs so downstream detectors
+ * never receive an empty record.
+ */
+function backfillFrameworkSemanticFields(
+  frameworks: CaseFramework[],
+  language: "es" | "en",
+): CaseFramework[] {
+  const isEn = language === "en";
+  return frameworks.map((fw) => {
+    const coreConcepts = Array.isArray(fw.coreConcepts) && fw.coreConcepts.length > 0
+      ? fw.coreConcepts
+      : (fw.domainKeywords?.slice(0, 3) ?? [
+          isEn ? "key concept" : "concepto clave",
+          isEn ? "core idea" : "idea central",
+        ]);
+    const conceptualDescription = typeof fw.conceptualDescription === "string" && fw.conceptualDescription.trim()
+      ? fw.conceptualDescription
+      : (isEn
+          ? `${fw.name}: an analytical framework students can apply to reason about this case.`
+          : `${fw.name}: un marco analítico que los estudiantes pueden aplicar para razonar sobre este caso.`);
+    const recognitionSignals = Array.isArray(fw.recognitionSignals) && fw.recognitionSignals.length > 0
+      ? fw.recognitionSignals
+      : (fw.domainKeywords?.slice(0, 5) ?? coreConcepts);
+    return { ...fw, coreConcepts, conceptualDescription, recognitionSignals };
+  });
 }
 
 export async function generateCanonicalCase(
@@ -868,6 +911,7 @@ export async function generateCanonicalCase(
   while (decisionPoints.length < effectiveSteps) {
     const num = decisionPoints.length + 1;
     const dim = dimByNumber.get(num);
+    const primary = dim?.primaryDimension ?? "strategic";
     decisionPoints.push({
       number: num,
       format: num === 1 ? "multiple_choice" : "written",
@@ -877,8 +921,10 @@ export async function generateCanonicalCase(
       includesReflection: false,
       focusCue: defaultFocusCues[(num - 1) % defaultFocusCues.length],
       thinkingScaffold: scaffoldFallback,
-      primaryDimension: dim?.primaryDimension,
+      primaryDimension: primary,
       secondaryDimension: dim?.secondaryDimension,
+      dimensionRationale: fallbackRationale(primary),
+      targetFrameworkIds: intentTargetIds,
       reviewCompleted: false,
       qualityFlags: ["fallback_decision_point"],
     });
@@ -1010,44 +1056,100 @@ export async function generateCanonicalCase(
     }
   }
 
-  // Drop frameworks that ended up with fewer than 2 usable keywords.
-  const finalFrameworks = cleanedFrameworks.filter((f) => f.domainKeywords.length >= 2);
+  // Drop frameworks that ended up with fewer than 2 usable keywords, then
+  // backfill the semantic-completeness fields so every persisted framework
+  // has coreConcepts/conceptualDescription/recognitionSignals populated.
+  const finalFrameworks = backfillFrameworkSemanticFields(
+    cleanedFrameworks.filter((f) => f.domainKeywords.length >= 2),
+    effectiveLang,
+  );
 
   // Phase 5 (§9.4): post-generation quality gates. Each gate either passes
   // silently or attaches a qualityFlag to the affected decision(s). The
   // language gate already ran upstream; framework dedup/field completeness
   // already ran during framework parsing. Remaining gates (4–7) below.
 
-  // Gate 4: dimension coverage
+  // Phase 5 (§9.4): each failing structural gate gets ONE focused regen
+  // attempt at the per-decision level. We retain qualityFlags as the
+  // surface to the professor when a regen attempt does not resolve the
+  // failure, so the review checkpoint can still highlight residual issues.
+  const primaryTargetCanonical = pedagogicalIntent.targetFrameworks?.[0]?.canonicalId;
+  const runRegenForDecision = async (dpNum: number, hint: string, flagOnFail: string) => {
+    try {
+      const fresh = await regenerateSingleDecision({
+        caseContext: parsed.caseContext ?? "",
+        coreChallenge: parsed.coreChallenge ?? "",
+        pedagogicalIntent,
+        existingDecisions: decisionPoints,
+        decisionNumber: dpNum,
+        language: effectiveLang,
+        hint,
+      });
+      const idx = decisionPoints.findIndex((d) => d.number === dpNum);
+      if (idx >= 0) decisionPoints[idx] = fresh;
+    } catch (err) {
+      console.warn(`[canonicalCaseGenerator] regen for decision ${dpNum} failed:`, err);
+      const idx = decisionPoints.findIndex((d) => d.number === dpNum);
+      if (idx >= 0) decisionPoints[idx].qualityFlags = [...(decisionPoints[idx].qualityFlags ?? []), flagOnFail];
+    }
+  };
+
+  // Gate 4: dimension coverage — flag-only (would require multi-decision
+  // re-assignment, which is what the per-decision regen flow handles).
   const covG = checkDimensionCoverage(dimensions, effectiveSteps);
   if (!covG.ok) {
-    console.warn(`[canonicalCaseGenerator] Gate4 dimension coverage failed: ${covG.distinctCount}/${covG.required} distinct dimensions`);
+    console.warn(`[canonicalCaseGenerator] Gate4 dimension coverage failed: ${covG.distinctCount}/${covG.required}`);
     decisionPoints[0].qualityFlags = [...(decisionPoints[0].qualityFlags ?? []), `dimension_coverage_low_${covG.distinctCount}_of_${covG.required}`];
   }
 
-  // Gate 5: framework coverage (lightweight detector pass)
-  const frG = await checkFrameworkCoverage(decisionPoints, finalFrameworks, effectiveLang);
+  // Gate 5: framework coverage — must surface the PRIMARY target framework.
+  // If it doesn't, regenerate the first decision with an explicit hint.
+  const frG = await checkFrameworkCoverage(decisionPoints, finalFrameworks, primaryTargetCanonical, effectiveLang);
   if (!frG.ok) {
-    console.warn("[canonicalCaseGenerator] Gate5 framework coverage failed: no decision surfaced any tracked framework");
-    decisionPoints[0].qualityFlags = [...(decisionPoints[0].qualityFlags ?? []), "framework_coverage_zero"];
+    console.warn(`[canonicalCaseGenerator] Gate5 primary framework "${frG.missingPrimary}" not surfaced — regenerating decision 1`);
+    const hint = isEn
+      ? `IMPORTANT: explicitly surface concepts from the primary framework "${frG.missingPrimary}" in the prompt and options.`
+      : `IMPORTANTE: surfacea explícitamente conceptos del framework principal "${frG.missingPrimary}" en el prompt y opciones.`;
+    await runRegenForDecision(1, hint, "framework_coverage_primary_missing");
+    const reCheck = await checkFrameworkCoverage(decisionPoints, finalFrameworks, primaryTargetCanonical, effectiveLang);
+    if (!reCheck.ok) {
+      decisionPoints[0].qualityFlags = [...(decisionPoints[0].qualityFlags ?? []), "framework_coverage_primary_missing"];
+    }
   }
 
-  // Gate 6: tradeoff realism — flag every tradeoff decision missing cost/benefit
+  // Gate 6: tradeoff realism — regenerate each failing tradeoff decision.
   const trG = checkTradeoffRealism(decisionPoints, dimensions);
   if (!trG.ok) {
-    console.warn(`[canonicalCaseGenerator] Gate6 tradeoff realism failed for decisions: ${trG.failingNumbers.join(", ")}`);
+    console.warn(`[canonicalCaseGenerator] Gate6 tradeoff realism failed for: ${trG.failingNumbers.join(", ")}`);
+    const hint = isEn
+      ? `IMPORTANT: name a concrete cost AND a concrete benefit in the prompt; populate tradeoffSignature fully.`
+      : `IMPORTANTE: nombra un costo concreto Y un beneficio concreto en el prompt; completa tradeoffSignature.`;
+    for (const num of trG.failingNumbers) {
+      await runRegenForDecision(num, hint, "tradeoff_signature_incomplete");
+    }
+    // residual flagging
+    const reTrG = checkTradeoffRealism(decisionPoints, dimensions);
     for (const dp of decisionPoints) {
-      if (trG.failingNumbers.includes(dp.number)) {
+      if (reTrG.failingNumbers.includes(dp.number)) {
         dp.qualityFlags = [...(dp.qualityFlags ?? []), "tradeoff_signature_incomplete"];
       }
     }
   }
 
-  // Gate 7: no-correct-answer telegraphing — scan prompts/options/focusCue
+  // Gate 7: no-correct-answer telegraphing — single full-case regen would
+  // be expensive; instead regenerate decision 1 with a strong hint and
+  // re-scan. Persistent failures are flagged.
   const tel = detectTelegraphing({ decisionPoints }, effectiveLang);
   if (tel.hit) {
     console.warn(`[canonicalCaseGenerator] Gate7 telegraphing detected: ${tel.samples.join(" | ")}`);
-    decisionPoints[0].qualityFlags = [...(decisionPoints[0].qualityFlags ?? []), "telegraphing_detected"];
+    const hint = isEn
+      ? `Avoid all directive language: 'best', 'correct', 'optimal', 'should have', 'right answer'. Frame every option as defensible.`
+      : `Evita lenguaje directivo: 'mejor', 'correcto', 'óptimo', 'debería haber', 'respuesta correcta'. Plantea cada opción como defendible.`;
+    await runRegenForDecision(1, hint, "telegraphing_detected");
+    const reTel = detectTelegraphing({ decisionPoints }, effectiveLang);
+    if (reTel.hit) {
+      decisionPoints[0].qualityFlags = [...(decisionPoints[0].qualityFlags ?? []), "telegraphing_detected"];
+    }
   }
 
   const isEnFallback = effectiveLang === "en";
