@@ -190,27 +190,49 @@ function buildFrameworkResponseDirective(context: AgentContext): string {
     if (!best || rank(det) > rank(best)) best = det;
   }
 
-  const acknowledgedExplicit = best?.level === "explicit";
-  const acknowledgedImplicitStrong = best?.level === "implicit" && (best.confidence === "medium" || best.confidence === "high");
-  const acknowledged = acknowledgedExplicit || acknowledgedImplicitStrong;
+  // Dimension-appropriate label for the kind of reasoning the decision rewards.
+  const dimLensEn: Record<string, string> = {
+    analytical: "analytical reasoning (data, evidence, causal logic)",
+    strategic: "strategic reasoning (priority, direction, alternatives)",
+    stakeholder: "stakeholder reasoning (interests, reactions, relationships)",
+    ethical: "ethical reasoning (obligations, fairness, principles)",
+    tradeoff: "tradeoff reasoning (costs, sacrifices, what is given up)",
+  };
+  const dimLensEs: Record<string, string> = {
+    analytical: "razonamiento analítico (datos, evidencia, lógica causal)",
+    strategic: "razonamiento estratégico (prioridad, dirección, alternativas)",
+    stakeholder: "razonamiento de stakeholders (intereses, reacciones, relaciones)",
+    ethical: "razonamiento ético (obligaciones, justicia, principios)",
+    tradeoff: "razonamiento de tradeoffs (costos, sacrificios, lo que se cede)",
+  };
+  const lensLabel = primaryDimension
+    ? (isEn ? dimLensEn[primaryDimension] : dimLensEs[primaryDimension])
+    : (isEn ? "the kind of reasoning this decision rewards" : "el tipo de razonamiento que esta decisión recompensa");
 
-  if (acknowledged) {
+  // Variant A: explicit detection — strongest acknowledgment.
+  if (best?.level === "explicit") {
     return isEn
-      ? `FRAMEWORK RESPONSE: The student's reasoning shows evidence of an analytical lens. Produce a coherent consequence chain that ACKNOWLEDGES the direction implied by their reasoning (without naming any framework, theory, model, or analytical approach). Do not praise. Do not evaluate. Do not say "good", "right", "well-reasoned". Just narrate consequences that follow plausibly from the lens they applied.`
-      : `RESPUESTA AL MARCO: El razonamiento del estudiante muestra evidencia de una lente analítica. Produce una cadena de consecuencias coherente que RECONOZCA la dirección implícita en su razonamiento (sin nombrar ningún marco, teoría, modelo o enfoque analítico). No elogies. No evalúes. No digas "bien", "correcto", "bien razonado". Solo narra consecuencias que se sigan plausiblemente de la lente que aplicaron.`;
+      ? `FRAMEWORK RESPONSE (explicit lens): The student's reasoning explicitly engages ${lensLabel}. Produce a consequence chain that follows naturally from that lens and ALLOWS its logic to play out clearly in the world (e.g. the data they cited shapes outcomes, the priority they named drives reactions, the stakeholder they considered behaves accordingly, the principle they invoked changes who responds, the tradeoff they accepted materializes). Do not name any framework, theory, model, or analytical approach. Do not praise. Do not evaluate. Do not say "good", "right", "well-reasoned".`
+      : `RESPUESTA AL MARCO (lente explícita): El razonamiento del estudiante involucra explícitamente ${lensLabel}. Produce una cadena de consecuencias que se siga naturalmente de esa lente y PERMITA que su lógica se desarrolle claramente en el mundo (p. ej. los datos que citó dan forma a los resultados, la prioridad que nombró impulsa reacciones, el stakeholder que consideró se comporta en consecuencia, el principio que invocó cambia quién responde, el tradeoff que aceptó se materializa). No nombres ningún marco, teoría, modelo o enfoque analítico. No elogies. No evalúes. No digas "bien", "correcto", "bien razonado".`;
   }
 
-  // Not evidenced or only implicit-low: surface ONE dimension-anchored piece
-  // of information without shaming or correcting.
+  // Variant B: implicit + medium/high confidence — partial acknowledgment.
+  if (best?.level === "implicit" && (best.confidence === "medium" || best.confidence === "high")) {
+    return isEn
+      ? `FRAMEWORK RESPONSE (implicit lens): The student's reasoning shows partial engagement with ${lensLabel} without making the lens explicit. Produce a consequence chain that follows from the direction they implied AND surfaces ONE additional element that would have been visible if the lens were applied more fully (a missing data point if analytical, an unweighed alternative if strategic, an additional stakeholder reaction if stakeholder, an unstated principle if ethical, an unnamed cost if tradeoff). Do not name any framework, theory, model, or analytical approach. Do not say "missed", "should have", "consider". Frame the additional element as something the world brings up next, not as correction.`
+      : `RESPUESTA AL MARCO (lente implícita): El razonamiento del estudiante muestra un compromiso parcial con ${lensLabel} sin hacer la lente explícita. Produce una cadena de consecuencias que se siga de la dirección que implicaron Y haz emerger UN elemento adicional que habría sido visible si la lente se hubiera aplicado más plenamente (un dato faltante si analítica, una alternativa no sopesada si estratégica, una reacción adicional de stakeholder si stakeholder, un principio no enunciado si ética, un costo no nombrado si tradeoff). No nombres ningún marco, teoría, modelo o enfoque analítico. No digas "faltó", "deberías haber", "considera". Plantea el elemento adicional como algo que el mundo trae a continuación, no como corrección.`;
+  }
+
+  // Variant C: not evidenced or only implicit-low — surface the missed dimension.
   const dimensionHintEn: Record<string, string> = {
-    analytical: "surface ONE concrete data point or causal observation that the student did not address in their reasoning",
+    analytical: "surface ONE concrete data point or causal observation that the student did not address",
     strategic: "surface ONE option, priority, or directional consideration the student did not weigh",
-    stakeholder: "surface ONE stakeholder reaction or interest that did not appear in the student's reasoning",
-    ethical: "surface ONE obligation, fairness consideration, or principle that the student did not raise",
+    stakeholder: "surface ONE stakeholder reaction or interest that did not appear in the reasoning",
+    ethical: "surface ONE obligation, fairness consideration, or principle the student did not raise",
     tradeoff: "surface ONE cost or sacrifice that follows from the chosen direction and was not named",
   };
   const dimensionHintEs: Record<string, string> = {
-    analytical: "haz emerger UN dato concreto o una observación causal que el estudiante no abordó en su razonamiento",
+    analytical: "haz emerger UN dato concreto o una observación causal que el estudiante no abordó",
     strategic: "haz emerger UNA opción, prioridad o consideración direccional que el estudiante no sopesó",
     stakeholder: "haz emerger UNA reacción o interés de un stakeholder que no apareció en el razonamiento",
     ethical: "haz emerger UNA obligación, consideración de justicia o principio que el estudiante no planteó",
@@ -222,8 +244,8 @@ function buildFrameworkResponseDirective(context: AgentContext): string {
             : "haz emerger UNA pieza de información que complica la decisión en una dimensión no abordada");
 
   return isEn
-    ? `FRAMEWORK RESPONSE: The student's reasoning did not surface a recognizable analytical lens for this decision. Produce a coherent consequence chain AND ${dimHint}. Do not name any framework, theory, model, or analytical approach. Do not shame. Do not correct. Do not say "you should have", "you missed", "consider". Surface the missed dimension as part of the new information element of the narrative.`
-    : `RESPUESTA AL MARCO: El razonamiento del estudiante no hizo aparecer una lente analítica reconocible para esta decisión. Produce una cadena de consecuencias coherente Y ${dimHint}. No nombres ningún marco, teoría, modelo o enfoque analítico. No avergüences. No corrijas. No digas "deberías haber", "te faltó", "considera". Haz emerger la dimensión omitida como parte del elemento de información nueva de la narrativa.`;
+    ? `FRAMEWORK RESPONSE (no lens evidenced): The student's reasoning did not surface ${lensLabel} for this decision. Produce a coherent consequence chain AND ${dimHint}. Do not name any framework, theory, model, or analytical approach. Do not shame. Do not correct. Do not say "you should have", "you missed", "consider". Surface the missed element as part of the new information the world delivers, not as feedback on the student.`
+    : `RESPUESTA AL MARCO (sin lente evidenciada): El razonamiento del estudiante no hizo emerger ${lensLabel} para esta decisión. Produce una cadena de consecuencias coherente Y ${dimHint}. No nombres ningún marco, teoría, modelo o enfoque analítico. No avergüences. No corrijas. No digas "deberías haber", "te faltó", "considera". Haz emerger el elemento omitido como parte de la nueva información que el mundo entrega, no como retroalimentación al estudiante.`;
 }
 
 function buildTradeoffDirective(context: AgentContext): string {

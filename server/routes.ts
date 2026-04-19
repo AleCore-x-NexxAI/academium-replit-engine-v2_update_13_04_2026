@@ -4287,6 +4287,24 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
       const targetList = targetIds.size > 0 ? frameworkResults.filter(isTarget) : [];
       const suggestedList = targetIds.size > 0 ? frameworkResults.filter(f => !isTarget(f)) : [];
 
+      // Phase 6 §6: per-section aggregate detection_method_distribution.
+      const aggregateDist = (list: typeof frameworkResults): Record<string, number> => {
+        const agg: Record<string, number> = { explicit: 0, implicit: 0, marginal: 0 };
+        for (const fw of list) {
+          const d = fw.detection_method_distribution || {};
+          for (const k of Object.keys(agg)) agg[k] += (d[k] ?? 0);
+        }
+        return agg;
+      };
+      const targetSection = {
+        frameworks: targetList,
+        detection_method_distribution: aggregateDist(targetList),
+      };
+      const suggestedSection = {
+        frameworks: suggestedList,
+        detection_method_distribution: aggregateDist(suggestedList),
+      };
+
       // Class debrief opener — connect lowest competency + lowest framework + worst turn
       const compMap: Record<string, { name: string; nameEs: string; rate: number; worstTurn: number | null }> = {
         C1: { name: "Analytical reasoning", nameEs: "Razonamiento analítico", rate: 0, worstTurn: null },
@@ -4347,6 +4365,8 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         frameworks: frameworkResults,
         target: targetList,
         suggested: suggestedList,
+        targetSection,
+        suggestedSection,
         classDebriefOpener,
       };
       setCache(`module-health-${scenarioId}`, result);

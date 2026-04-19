@@ -1357,19 +1357,26 @@ async function generateDebriefQuestion(
   const lowestName = lowestSignal[0];
   const intentText = signals.intent.extracted_text || context.studentInput.substring(0, 80);
 
-  // Phase 6 §4: intent-anchored debrief. When this turn's mapped signal
-  // (per the decision's primaryDimension) scored 0/1, ground the question
-  // in that dimension and the primary target framework name (without
-  // implying a "right answer").
+  // Phase 6 §4: intent-anchored debrief with PRECEDENCE. When the decision's
+  // primary-dimension mapped signal scored 0/1, the primary-dimension anchor
+  // becomes the DOMINANT targeting rule (overrides "lowest signal" framing).
+  // Otherwise we fall back to the historical lowest-signal targeting.
   const decisionPoint = context.decisionPoints?.find(dp => dp.number === turnNumber);
   const primaryDim = decisionPoint?.primaryDimension as keyof typeof DIMENSION_TO_SIGNAL | undefined;
   const intent = context.scenario.pedagogicalIntent;
   const targetFwName = intent?.targetFrameworks?.[0]?.name;
-  let intentAnchor = "";
+  let useIntentAnchor = false;
+  let dimLabelEnUsed = "";
+  let dimLabelEsUsed = "";
+  let mappedSignalKeyUsed = "";
+  let mappedQualityUsed = 0;
   if (primaryDim) {
     const mappedSignalKey = DIMENSION_TO_SIGNAL[primaryDim] as string;
     const mappedQuality = signalMap[mappedSignalKey];
     if (typeof mappedQuality === "number" && mappedQuality <= 1) {
+      useIntentAnchor = true;
+      mappedSignalKeyUsed = mappedSignalKey;
+      mappedQualityUsed = mappedQuality;
       const dimLabelEn: Record<string, string> = {
         analytical: "analytical (data, causal evidence)",
         strategic: "strategic (priority, direction, alternatives)",
@@ -1384,14 +1391,49 @@ async function generateDebriefQuestion(
         ethical: "ética (obligaciones, justicia)",
         tradeoff: "tradeoff (costos, sacrificios)",
       };
-      intentAnchor = isEn
-        ? `\nINTENT ANCHOR: This decision targets the ${dimLabelEn[primaryDim]} dimension${targetFwName ? ` and the ${targetFwName} lens` : ""}. Ground the question in that dimension. Do NOT name any framework directly in the question; instead, ask about the kind of reasoning the lens calls for. Do not imply a correct framework was missed.`
-        : `\nANCLA DE INTENCIÓN: Esta decisión apunta a la dimensión ${dimLabelEs[primaryDim]}${targetFwName ? ` y a la lente ${targetFwName}` : ""}. Ancla la pregunta en esa dimensión. NO nombres ningún marco directamente en la pregunta; pregunta sobre el tipo de razonamiento que esa lente exige. No insinúes que se omitió un marco correcto.`;
+      dimLabelEnUsed = dimLabelEn[primaryDim];
+      dimLabelEsUsed = dimLabelEs[primaryDim];
     }
   }
 
-  const prompt = isEn
-    ? `Generate ONE debrief question for a professor to ask a student about Turn ${turnNumber}.
+  const prompt = useIntentAnchor
+    ? (isEn
+      ? `Generate ONE debrief question for a professor to ask a student about Turn ${turnNumber}.
+Student wrote: "${context.studentInput.substring(0, 200)}"
+Intent: "${intentText}"
+
+PRIMARY TARGETING RULE (this turn's pedagogical intent):
+This decision was designed to reward the ${dimLabelEnUsed} dimension${targetFwName ? ` (the lens behind it: ${targetFwName})` : ""}. The student's mapped signal here scored ${mappedQualityUsed}/3 (${mappedSignalKeyUsed}). Ground the question in THIS dimension. Do NOT default to the lowest overall signal; the dimension-anchor takes precedence. Do NOT name any framework directly in the question; ask about the kind of reasoning the lens calls for.
+
+Rules:
+- Reference something the student actually wrote (paraphrase or short quote)
+- Target the ${dimLabelEnUsed} dimension as defined above (this overrides any other signal-targeting heuristic)
+- Genuine open question, no leading, no implied "right answer"
+- No prohibited language: correct/incorrect, good/bad, should have, would have been better, missed the opportunity, exclamation marks
+- Must NOT imply the student was wrong
+- Maximum 1 sentence
+- Write in English
+
+Return ONLY the question text, nothing else.`
+      : `Genera UNA pregunta de debriefing para que un profesor le haga a un estudiante sobre el Turno ${turnNumber}.
+El estudiante escribió: "${context.studentInput.substring(0, 200)}"
+Intención: "${intentText}"
+
+REGLA PRIMARIA DE FOCO (intención pedagógica de este turno):
+Esta decisión fue diseñada para premiar la dimensión ${dimLabelEsUsed}${targetFwName ? ` (la lente detrás: ${targetFwName})` : ""}. La señal mapeada del estudiante aquí obtuvo ${mappedQualityUsed}/3 (${mappedSignalKeyUsed}). Ancla la pregunta en ESTA dimensión. NO recurras por defecto a la señal más baja; el ancla dimensional tiene precedencia. NO nombres ningún marco directamente en la pregunta; pregunta sobre el tipo de razonamiento que esa lente exige.
+
+Reglas:
+- Referencia algo que el estudiante realmente escribió (paráfrasis o cita corta)
+- Apunta a la dimensión ${dimLabelEsUsed} tal como se define arriba (esto sobreescribe cualquier otra heurística de señal)
+- Pregunta abierta genuina, sin inducción, sin "respuesta correcta" implícita
+- Sin lenguaje prohibido: correcto/incorrecto, bueno/malo, debería haber, hubiera sido mejor, perdió la oportunidad, signos de exclamación
+- NO debe implicar que el estudiante se equivocó
+- Máximo 1 oración
+- Escribe en español
+
+Devuelve SOLO el texto de la pregunta, nada más.`)
+    : (isEn
+      ? `Generate ONE debrief question for a professor to ask a student about Turn ${turnNumber}.
 Student wrote: "${context.studentInput.substring(0, 200)}"
 Lowest signal: ${lowestName} (score ${lowestSignal[1]}/3)
 Intent: "${intentText}"
@@ -1404,10 +1446,9 @@ Rules:
 - Must NOT imply the student was wrong
 - Maximum 1 sentence
 - Write in English
-${intentAnchor}
 
 Return ONLY the question text, nothing else.`
-    : `Genera UNA pregunta de debriefing para que un profesor le haga a un estudiante sobre el Turno ${turnNumber}.
+      : `Genera UNA pregunta de debriefing para que un profesor le haga a un estudiante sobre el Turno ${turnNumber}.
 El estudiante escribió: "${context.studentInput.substring(0, 200)}"
 Señal más baja: ${lowestName} (puntaje ${lowestSignal[1]}/3)
 Intención: "${intentText}"
@@ -1420,9 +1461,8 @@ Reglas:
 - NO debe implicar que el estudiante se equivocó
 - Máximo 1 oración
 - Escribe en español
-${intentAnchor}
 
-Devuelve SOLO el texto de la pregunta, nada más.`;
+Devuelve SOLO el texto de la pregunta, nada más.`);
 
   // Phase 6 §4: dynamically forbid leakage of any target framework name into
   // the question. The intent anchor passes the name into the prompt as

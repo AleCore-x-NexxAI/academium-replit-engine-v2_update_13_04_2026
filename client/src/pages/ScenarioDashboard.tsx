@@ -69,10 +69,17 @@ interface FrameworkHealth {
   detection_method_distribution?: Record<string, number>;
 }
 
+interface FrameworkSection {
+  frameworks: FrameworkHealth[];
+  detection_method_distribution?: Record<string, number>;
+}
+
 interface ModuleHealth {
   frameworks: FrameworkHealth[];
   target?: FrameworkHealth[];
   suggested?: FrameworkHealth[];
+  targetSection?: FrameworkSection;
+  suggestedSection?: FrameworkSection;
   classDebriefOpener: string | null;
 }
 
@@ -226,6 +233,36 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${style.bg} ${style.text} border ${style.border}`} data-testid={`badge-status-${status}`}>
       {label}
     </span>
+  );
+}
+
+function DistributionStrip({
+  dist,
+  testid,
+  className = "",
+}: {
+  dist?: Record<string, number>;
+  testid?: string;
+  className?: string;
+}) {
+  if (!dist) return null;
+  const explicit = dist.explicit ?? 0;
+  const implicit = dist.implicit ?? 0;
+  const marginal = dist.marginal ?? 0;
+  const total = explicit + implicit + marginal;
+  if (total === 0) return null;
+  return (
+    <div
+      className={`flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground ${className}`}
+      data-testid={testid}
+    >
+      <span className="font-medium">E</span>
+      <span data-testid={`${testid}-explicit`}>{explicit}</span>
+      <span className="font-medium">I</span>
+      <span data-testid={`${testid}-implicit`}>{implicit}</span>
+      <span className="font-medium">M</span>
+      <span data-testid={`${testid}-marginal`}>{marginal}</span>
+    </div>
   );
 }
 
@@ -474,8 +511,14 @@ function AnalyticsTab({
               <div className="space-y-3 mb-4" data-testid="framework-grid">
                 {(moduleHealth.target?.length ?? 0) > 0 && (
                   <div>
-                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5" data-testid="label-target-frameworks">
-                      {t("scenarioDashboard.targetFrameworks")}
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide" data-testid="label-target-frameworks">
+                        {t("scenarioDashboard.targetFrameworks")}
+                      </div>
+                      <DistributionStrip
+                        dist={moduleHealth.targetSection?.detection_method_distribution}
+                        testid="dist-target-section"
+                      />
                     </div>
                     <div className="grid grid-cols-4 gap-2">
                       {moduleHealth.target!.map((fw) => (
@@ -483,6 +526,7 @@ function AnalyticsTab({
                           <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
                           <StatusBadge status={fw.status} />
                           <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
+                          <DistributionStrip dist={fw.detection_method_distribution} testid={`dist-${fw.id}`} className="mt-1.5" />
                         </div>
                       ))}
                     </div>
@@ -490,8 +534,14 @@ function AnalyticsTab({
                 )}
                 {(moduleHealth.suggested?.length ?? 0) > 0 && (
                   <div>
-                    <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5" data-testid="label-suggested-frameworks">
-                      {t("scenarioDashboard.suggestedFrameworks")}
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide" data-testid="label-suggested-frameworks">
+                        {t("scenarioDashboard.suggestedFrameworks")}
+                      </div>
+                      <DistributionStrip
+                        dist={moduleHealth.suggestedSection?.detection_method_distribution}
+                        testid="dist-suggested-section"
+                      />
                     </div>
                     <div className="grid grid-cols-4 gap-2">
                       {moduleHealth.suggested!.map((fw) => (
@@ -499,6 +549,7 @@ function AnalyticsTab({
                           <div className="text-[11px] font-medium text-muted-foreground mb-1.5">{fw.name}</div>
                           <StatusBadge status={fw.status} />
                           <div className="text-[11px] text-muted-foreground/80 mt-1.5 leading-snug italic">{fw.description}</div>
+                          <DistributionStrip dist={fw.detection_method_distribution} testid={`dist-${fw.id}`} className="mt-1.5" />
                         </div>
                       ))}
                     </div>
