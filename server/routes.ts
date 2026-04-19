@@ -2385,8 +2385,13 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
       }
 
       const { regenerateSingleDecision } = await import("./agents/canonicalCaseGenerator");
-      const user = await storage.getUser(userId);
-      const language: "es" | "en" = (user?.language === "en" ? "en" : "es");
+      // Phase 5: language MUST come from the draft/case itself, not the
+      // professor's account language. A professor on an ES account may have
+      // generated an EN case (or vice versa); using user.language here
+      // would corrupt language consistency on regeneration.
+      const draftLang: "es" | "en" =
+        generated.language === "en" || (initial?.language === "en") ? "en" : "es";
+      const language: "es" | "en" = draftLang;
       const newDecision = await regenerateSingleDecision({
         caseContext: initial.caseContext ?? generated.description ?? "",
         coreChallenge: initial.coreChallenge ?? "",
