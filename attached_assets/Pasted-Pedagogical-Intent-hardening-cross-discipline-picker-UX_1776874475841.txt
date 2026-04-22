@@ -1,0 +1,211 @@
+Pedagogical Intent hardening, cross-discipline picker UX, framework-anchoring coreConcepts, superlative expansion, auto-inference short-circuit
+Context
+The wizard (from commits 060df97 and 41d1f83) renders the right fields — discipline accordion picker with cross-discipline counter, "Other" per discipline, professorNotes, courseContext, reasoningConstraint, DecisionDimensionsEditor — but it does not enforce the required-field rules we decided in the call. The frameworkInference.ts subsystem exists but is auto-invoked; we are explicitly dropping auto-inference (professors choose). The buildIntentBlock in canonicalCaseGenerator.ts builds the framework anchoring block but does not surface each framework's coreConcepts, which §9.2 of the packet requires. The narrator's PROHIBITED_PATTERNS list is missing the §3.4 expansion. The cross-discipline picker has a UX bug: toggling a framework that's already selected in another discipline removes it entirely instead of showing it as disabled with a tooltip.
+This task fixes all of the above as a single coherent change set.
+Scope
+A1. Wizard required-field enforcement (client + server)
+Target file: client/src/components/CanonicalCaseCreator.tsx.
+Define REQUIRED_FIELDS rules:
+
+teachingGoal: required, minimum 20 trimmed characters.
+selectedDisciplines.length >= 1: required. A discipline alone (no specific framework selected within it) is valid. You cannot proceed with zero disciplines.
+selectedFrameworks: optional. A professor may select one or more specific frameworks from within any selected discipline, or select none and let the generator pick from the discipline pool. Do not require any specific framework.
+courseContext: required, minimum 20 trimmed characters.
+reasoningConstraint: optional. No minimum length.
+professorNotes: optional, existing 500-char cap preserved.
+decisionDimensions (from DecisionDimensionsEditor): optional.
+
+UI behavior:
+
+Disable the "Generate" button whenever any required field is unmet. Do not submit.
+Under each unmet required field, render a small red inline error message (not a toast). Text:
+
+For teachingGoal: EN "Teaching goal is required (at least 20 characters)." / ES "El objetivo pedagógico es obligatorio (mínimo 20 caracteres)."
+For disciplines: EN "Select at least one discipline." / ES "Selecciona al menos una disciplina."
+For courseContext: EN "Course context is required (at least 20 characters)." / ES "El contexto del curso es obligatorio (mínimo 20 caracteres)."
+
+
+The existing framework counter cap (MAX_FRAMEWORKS) stays.
+Route the error strings through client/src/lib/translations.ts using new keys canonicalCase.validation.teachingGoalRequired, canonicalCase.validation.disciplineRequired, canonicalCase.validation.courseContextRequired. Add both EN and ES.
+
+Server-side enforcement in server/routes.ts, on the POST /api/canonical-case/generate handler:
+
+Validate the same rules at request time. If any required field is missing or too short, return HTTP 400 with response body { errors: { field: messageKey } } where messageKey is the same translation key used on the client.
+Do this validation BEFORE calling generateCanonicalCase.
+
+A2. Cross-discipline picker UX: disable instead of toggle
+Target file: client/src/components/CanonicalCaseCreator.tsx.
+Current behavior (confirmed at line 278-283): clicking SWOT's checkbox in the Marketing accordion when SWOT is already selected under Strategy removes SWOT globally. Intended behavior: the Marketing checkbox is disabled and visually grayed when SWOT is selected under another discipline.
+Changes:
+
+In the framework row rendering loop (currently around line 690, inside fws.map((fw) => ...)), compute two new booleans:
+
+selectedInThisDiscipline: the framework is in selectedFrameworks AND its discipline field equals the current accordion's disc. This is the "checked here" state.
+selectedElsewhere: the framework is in selectedFrameworks AND its discipline field does NOT equal disc. This is the "already picked under another discipline" state.
+
+
+Update the Checkbox props:
+
+checked={selectedInThisDiscipline} (not the old fwSelected which was discipline-agnostic).
+disabled={disabled || selectedElsewhere} (where disabled is the existing !discSelected || (!fwSelected && fwAtCap)).
+
+
+When selectedElsewhere is true, wrap the row in a Tooltip whose content reads:
+
+EN: "Already selected under {other_discipline_label}. Remove it there first to add it here."
+ES: "Ya seleccionado en {other_discipline_label}. Elimínalo allí primero para agregarlo aquí."
+{other_discipline_label} is the human label of the discipline where the framework is currently stored, looked up via DISCIPLINE_LABELS_MAP[selectedFramework.discipline][language].
+
+
+Keep the existing HelpCircle tooltip for the framework's description (this is separate from the new disabled-row tooltip).
+Route the new tooltip strings through translations.ts as canonicalCase.frameworkAlreadySelectedElsewhere.
+Apply className="opacity-40" to the row (or the framework name span) when selectedElsewhere is true.
+
+A3. Skip automatic framework inference
+Target file: server/routes.ts and any other file that calls inferFrameworks during scenario creation.
+
+Grep for all call sites of inferFrameworks or equivalent exports from server/agents/frameworkInference.ts. Expected in routes.ts near scenario-creation or canonical-case-generate handlers.
+Remove every AUTOMATIC invocation. Do not delete frameworkInference.ts.
+Replace automatic invocation with a comment: // §7 skipped per call decision 2026-04-22: professors explicitly choose frameworks; no auto-inference.
+Do not expose an "AI suggest frameworks" UI button. If one exists, hide it. Confirm via grep that no UI button or backend route triggers inference as a user-accessible feature after this change.
+
+A4. buildIntentBlock: add coreConcepts to framework anchoring
+Target file: server/agents/canonicalCaseGenerator.ts, function buildIntentBlock (currently line 553).
+In both the English block (starting line 559) and the Spanish block (starting line 601), after iterating intent.targetFrameworks and emitting • ${fw.name} (canonicalId=${fw.canonicalId}), also emit the framework's coreConcepts if available. To get coreConcepts:
+
+Import FRAMEWORK_REGISTRY and resolveByCanonicalId (or equivalent lookup) from ./frameworkRegistry.
+For each fw in intent.targetFrameworks, look up the registry entry by fw.canonicalId. If found and the entry has coreConcepts populated (all registry entries have this per RegistryEntry type), emit an additional indented line:
+
+EN:     ↳ Core concepts to surface: ${entry.coreConcepts.join(", ")}
+ES:     ↳ Conceptos centrales a destacar: ${entry.coreConcepts.join(", ")}
+
+
+If the framework is custom (no registry match), skip the coreConcepts line — do not fabricate concepts.
+
+This makes the prompt §9.2-compliant: "Core concepts to surface: <coreConcepts>."
+A5. buildIntentBlock: pass discipline context as a first-class anchor
+When intent.targetFrameworks is empty but the scenario was created with selected disciplines, the generator must still anchor on those disciplines. Today the wizard passes selectedDisciplines to the server but it is not injected into the prompt.
+
+Extend PedagogicalIntent in shared/schema.ts to include targetDisciplines?: string[] (array of discipline IDs: business | marketing | finance | operations | human_resources | strategy). Populate from the wizard on submit.
+Extend pedagogicalIntentSchema (Zod) to accept the new field as optional.
+In buildIntentBlock, after the framework anchoring block (or in its place when targetFrameworks is empty), emit a discipline anchoring block:
+
+EN: DISCIPLINE ANCHORING — the case MUST exercise frameworks and reasoning patterns native to the following discipline(s): ${disciplines.join(", ")}. When the pedagogical intent has no specific target frameworks, pull frameworks from within these disciplines into the generated \frameworks` array.`
+ES: equivalent translation.
+
+
+Generator output: if targetFrameworks is empty and targetDisciplines is non-empty, the generated frameworks array must contain at least one framework whose registry entry has the discipline in its disciplines[] field. Add a post-generation check: look up each generated framework's canonicalId in FRAMEWORK_REGISTRY; at least one must match a selected discipline. If none do, flag on decisionPoints[0].qualityFlags as discipline_coverage_missing.
+
+A6. Narrator prohibited-superlatives expansion
+Target file: server/agents/narrator.ts, constant PROHIBITED_PATTERNS.
+Add the following regex entries per §3.4:
+/\bimpressive\b/i,
+/\bimpresionante\b/i,
+/\bremarkable\b/i,
+/\bnotable\b/i,
+/\bsophisticated\b/i,
+/\bsofisticad[oa]\b/i,
+/\bthoughtful\b/i,
+/\breflexiv[oa]\b/i,
+/\bthorough\b/i,
+/\bexhaustiv[oa]\b/i,
+/\bnuanced\b/i,
+/\bmatizad[oa]\b/i,
+/\bdeep\b(?=\s+(analysis|reasoning|understanding|thinking|insight))/i,
+/\bprofund[oa]\b(?=\s+(análisis|razonamiento|comprensión|pensamiento))/i,
+Note: deep and profundo are only prohibited when immediately modifying analysis/reasoning/understanding/thinking/insight — they're fine in general prose.
+Apply the same list (as a literal string array for the prompt text, not regex) to the generateDashboardSummary system prompt in director.ts at the locations flagged in packet §3.4 (line references 1418 and 1423 per the packet — these may be slightly different in current repo; grep for "impressive" to find current additions or the closest equivalent section). Add to the "PROHIBITED LANGUAGE" block: "impressive", "remarkable", "sophisticated", "thoughtful", "thorough", "deep analysis", "nuanced" (and Spanish equivalents).
+A7. §9.2 tradeoff realism block as explicit prompt line
+Target: buildIntentBlock in canonicalCaseGenerator.ts.
+The packet's §9.2 lists a "Tradeoff realism block" among the intent-driven blocks. The current intentBlock doesn't include an explicit tradeoff-realism directive as a standalone block — it mentions tradeoffSignature in the output-format addition. Add an explicit block:
+
+EN: TRADEOFF REALISM — whenever a decision's primaryDimension is "tradeoff", the decision prompt MUST name a concrete cost AND a concrete benefit in the student-visible text. \tradeoffSignature.dimension`, `tradeoffSignature.cost`, and `tradeoffSignature.benefit` are all required and non-empty.`
+ES: equivalent.
+
+Place after the decision design block and before the reasoning-constraint block.
+Preserve (do not change)
+
+frameworkInference.ts file itself (keep source, only disable auto-calls).
+dashboardCache TTL at 5 * 60 * 1000 in server/routes.ts:275. Do not reduce to 60s.
+buildEligibleSet legacy fallback in server/agents/frameworkConsistency.ts:59 using provenance === "explicit".
+Porter regression fail-loud behavior in server/__tests__/frameworkDetection.regression.test.ts (must assert.fail on missing OPENAI key, never skip).
+No .github/workflows/ directory — do not create one.
+MAX_FRAMEWORKS and MAX_DISCIPLINES caps in the wizard (currently 3 each or whatever they are — don't change the numeric values).
+The "Other" per-discipline custom framework input (commit 41d1f83) must continue to work.
+The counter split between disciplines and frameworks (commit 41d1f83).
+Cache version-token race guard (getCacheVersion / setCacheIfVersionUnchanged).
+All of §4 semantic detection, all of §9.4 quality gates, all of §11.1–11.4 calibration.
+The cross-discipline data-layer dedup in toggleFramework — you're only changing what the UI shows, not the dedup rule itself.
+
+Acceptance gate (run these before reporting success)
+
+Required-field enforcement (client)
+
+Open the wizard. Leave teachingGoal blank. Select 1 discipline. Fill courseContext. The Generate button is disabled and an inline error shows under teachingGoal.
+Fill teachingGoal (25+ chars). Deselect all disciplines. Error under the discipline counter appears. Generate stays disabled.
+Fill goal + 1 discipline. Leave courseContext blank. Error under courseContext. Generate disabled.
+Fill goal + 1 discipline + courseContext. No errors. Generate enabled. Click → scenario generates.
+
+
+Required-field enforcement (server)
+
+POST /api/canonical-case/generate with { teachingGoal: "short", ... } (under 20 chars). Response: HTTP 400 with body { errors: { teachingGoal: "canonicalCase.validation.teachingGoalRequired" } }.
+POST with goal OK, targetDisciplines: []. HTTP 400 with errors.targetDisciplines key.
+POST with goal OK, disciplines OK, courseContext: "". HTTP 400 with errors.courseContext.
+
+
+Frameworks optional within discipline
+
+Wizard: fill goal + Strategy discipline + courseContext. No specific frameworks selected. Generate. Case generates. Inspect the generated case's frameworks array: at least one entry has a canonicalId whose registry entry has "strategy" in its disciplines[].
+Repeat with Marketing discipline. Generated frameworks include at least one marketing-discipline entry.
+
+
+Cross-discipline UX
+
+Select Strategy + Marketing. Expand Strategy accordion. Check SWOT. The Marketing accordion's SWOT checkbox is now disabled and grayed. Hovering the Marketing SWOT row shows the tooltip "Already selected under Strategy. Remove it there first to add it here."
+Uncheck SWOT in Strategy. The Marketing SWOT checkbox re-enables.
+Check SWOT in Marketing. Now it's the Strategy SWOT that shows disabled with a "Already selected under Marketing" tooltip.
+
+
+Auto-inference off
+
+grep -rn "inferFrameworks" server/ returns only calls inside explicit UI-triggered handlers (there should be none after this change) and the source file frameworkInference.ts itself.
+Create a scenario with goal + 1 discipline + 1 framework + courseContext. Inspect the resulting scenario. The framework_detections / scenario frameworks list contains ONLY the one framework the professor chose. No "suggested" or "inferred" frameworks appear.
+
+
+coreConcepts in prompt
+
+Trigger case generation with targetFrameworks = [{ canonicalId: "porters_generic_strategies", name: "Porter's Generic Strategies" }].
+Add a temporary console.log in generateCanonicalCase that prints the final user prompt. Verify the framework anchoring block contains a line like ↳ Core concepts to surface: cost leadership, differentiation, focus strategy. Remove the log before committing.
+
+
+Discipline anchoring in prompt
+
+Generate with targetFrameworks: [] and targetDisciplines: ["marketing"]. Verify prompt contains the "DISCIPLINE ANCHORING" block and generated case has at least one framework whose registry disciplines[] includes "marketing".
+
+
+Tradeoff realism block
+
+Inspect the prompt rendered for any case generation. Confirm the "TRADEOFF REALISM" block is present immediately before the reasoning-constraint block.
+
+
+Superlative bans
+
+Trigger a narrator call with a student input that would normally elicit enthusiastic feedback. The narrator output, if it accidentally contains "sophisticated" or "impressive" or "thoughtful", triggers the re-prompt path. Confirm scanProhibitedLanguage catches the new patterns: add a one-line unit test that asserts scanProhibitedLanguage("Your impressive analysis showed nuanced thinking.") returns at least 2 violations.
+Generate a dashboard summary; confirm the prompt's prohibited-language list contains the new words.
+
+
+Regression
+
+npm test passes (including Porter 3-case regression).
+Create a scenario fully, complete it as a student, open the dashboard — no UI regression.
+
+
+
+Report
+
+File-by-file diff summary.
+Screenshot or data-testid DOM output proving the cross-discipline disabled state.
+Paste of one generated case's user prompt proving coreConcepts and discipline anchoring are present.
+Confirmation that gate items 1–10 pass.
+Any item that required judgment (e.g., where to place the discipline anchoring block when targetFrameworks is empty vs non-empty) — document the decision.
