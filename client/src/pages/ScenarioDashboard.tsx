@@ -168,9 +168,10 @@ interface DebriefTurn {
 }
 
 interface SignalEntry {
-  name: string;
-  level: string;
-  explanation: string;
+  key: string;
+  quality: number;
+  extracted_text: string;
+  sessionLanguage: "es" | "en";
 }
 
 interface SignalTurn {
@@ -180,6 +181,7 @@ interface SignalTurn {
 
 interface ReasoningSignalsData {
   signalAverages: Record<string, number>;
+  sessionLanguage: "es" | "en";
   turns: SignalTurn[];
 }
 
@@ -1059,7 +1061,7 @@ function DebriefPrepTab({ data, loading, isEn }: { data: { turns: DebriefTurn[] 
 }
 
 function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsData | undefined; loading: boolean; isEn: boolean }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   if (loading) return <div className="space-y-3"><Skeleton className="h-[230px]" /><Skeleton className="h-32" /></div>;
 
   const signalAverages = data?.signalAverages || {};
@@ -1072,6 +1074,18 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsDa
     { signal: t("scenarioDashboard.stakeholder"), value: signalAverages.stakeholder || 0, fullMark: 3 },
     { signal: t("scenarioDashboard.ethical"), value: signalAverages.ethical || 0, fullMark: 3 },
   ];
+
+  function getSignalName(key: string): string {
+    const k = `scenarioDashboard.signalName_${key}` as Parameters<typeof t>[0];
+    const result = t(k);
+    return result !== k ? result : key;
+  }
+
+  function getSignalLevel(quality: number): string {
+    if (quality >= 2) return t("scenarioDashboard.levelDemonstrated");
+    if (quality >= 1) return t("scenarioDashboard.levelEmerging");
+    return t("scenarioDashboard.levelNotEvidenced");
+  }
 
   return (
     <div>
@@ -1103,18 +1117,39 @@ function ReasoningSignalsTab({ data, loading, isEn }: { data: ReasoningSignalsDa
         </TableHeader>
         <TableBody>
           {turns.flatMap((turn) =>
-            turn.signals.map((sig, si) => (
-              <TableRow key={`${turn.number}-${si}`}>
-                {si === 0 && <TableCell rowSpan={turn.signals.length} className="text-[11px] font-medium text-muted-foreground align-top">T{turn.number}</TableCell>}
-                <TableCell className="text-[11px] text-muted-foreground">{sig.name}</TableCell>
-                <TableCell>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                    {sig.level}
-                  </span>
-                </TableCell>
-                <TableCell className="text-[11px] text-muted-foreground/70 italic">{sig.explanation}</TableCell>
-              </TableRow>
-            ))
+            turn.signals.map((sig, si) => {
+              const hasQuote = !!sig.extracted_text;
+              const quoteLangDiffers = hasQuote && sig.sessionLanguage !== language;
+              return (
+                <TableRow key={`${turn.number}-${si}`}>
+                  {si === 0 && <TableCell rowSpan={turn.signals.length} className="text-[11px] font-medium text-muted-foreground align-top">T{turn.number}</TableCell>}
+                  <TableCell className="text-[11px] text-muted-foreground">{getSignalName(sig.key)}</TableCell>
+                  <TableCell>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                      {getSignalLevel(sig.quality)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-[11px] text-muted-foreground/70 italic">
+                    {hasQuote ? (
+                      <span className="inline-flex items-center gap-1.5 flex-wrap">
+                        <span>{sig.extracted_text}</span>
+                        {quoteLangDiffers && (
+                          <span
+                            className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground border border-border not-italic font-medium shrink-0"
+                            title={t("scenarioDashboard.quoteLanguageIndicatorTooltip")}
+                            data-testid="badge-quote-language"
+                          >
+                            {sig.sessionLanguage.toUpperCase()}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      t("scenarioDashboard.noEvidenceExtracted")
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })
           )}
         </TableBody>
       </Table>
@@ -1196,7 +1231,12 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
             <div className="p-2 border-r border-dashed border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{t("scenarioDashboard.kpiHeader")}</div>
             {turns.map((turn) => (
               <div key={turn.number} className="p-2 border-r border-dashed border-border last:border-r-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                {t("scenarioDashboard.turnLabel")} {turn.number} · {turn.depth?.charAt(0).toUpperCase()}{turn.depth?.slice(1)}
+                {t("scenarioDashboard.turnLabel")} {turn.number} · {
+                  turn.depth === "surface" ? t("scenarioDashboard.depthSurface") :
+                  turn.depth === "engaged" ? t("scenarioDashboard.depthEngaged") :
+                  turn.depth === "integrated" ? t("scenarioDashboard.depthIntegrated") :
+                  turn.depth ?? ""
+                }
               </div>
             ))}
           </div>
@@ -1258,7 +1298,11 @@ function KpiFrameworksTab({ data, loading, isEn }: { data: KpiFrameworksData | u
               turn.frameworkApplications.map((fw, i) => (
                 <div key={i} className="flex gap-2 items-start mb-1.5">
                   <span className="text-[11px] text-muted-foreground/70 italic min-w-[130px] shrink-0">{fw.name}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border shrink-0">{fw.level}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border shrink-0">
+                    {fw.level === "explicit" ? t("scenarioDashboard.levelExplicit") :
+                     fw.level === "implicit" ? t("scenarioDashboard.levelImplicit") :
+                     fw.level ?? ""}
+                  </span>
                   <span className="text-[11px] text-muted-foreground/50 italic leading-snug">{fw.evidence}</span>
                 </div>
               ))

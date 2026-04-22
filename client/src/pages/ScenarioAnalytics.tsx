@@ -705,7 +705,7 @@ interface CohortAnalyticsData {
     topExamples: string[];
   }>;
   reasoningPatterns?: Array<{
-    pattern: string;
+    key: string;
     percentage: number;
     count: number;
   }>;
@@ -922,26 +922,36 @@ function ReasoningPatternsSection({ reasoningPatterns }: { reasoningPatterns?: C
         {t("scenarioAnalytics.reasoningPatternsDesc")}
       </p>
       <div className="space-y-3">
-        {reasoningPatterns.map((rp, idx) => (
-          <div key={rp.pattern} className="flex items-center gap-3" data-testid={`reasoning-pattern-${idx}`}>
-            <span className="text-sm w-56 shrink-0 truncate">{rp.pattern}</span>
-            <div className="flex-1">
-              <div className="w-full bg-muted rounded-full h-2.5">
-                <div
-                  className="h-2.5 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(rp.percentage, 100)}%`,
-                    backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
-                  }}
-                />
+        {reasoningPatterns.map((rp, idx) => {
+          const label =
+            rp.key === "mentionsTradeoffs" ? t("scenarioAnalytics.patternMentionsTradeoffs") :
+            rp.key === "identifiesStakeholders" ? t("scenarioAnalytics.patternIdentifiesStakeholders") :
+            rp.key === "considersRiskMitigation" ? t("scenarioAnalytics.patternConsidersRiskMitigation") :
+            rp.key === "usesCaseEvidence" ? t("scenarioAnalytics.patternUsesCaseEvidence") :
+            rp.key === "acknowledgesUncertainty" ? t("scenarioAnalytics.patternAcknowledgesUncertainty") :
+            rp.key === "reflectionPresent" ? t("scenarioAnalytics.patternReflectionPresent") :
+            (rp.key ?? "");
+          return (
+            <div key={rp.key ?? idx} className="flex items-center gap-3" data-testid={`reasoning-pattern-${idx}`}>
+              <span className="text-sm w-56 shrink-0 truncate">{label}</span>
+              <div className="flex-1">
+                <div className="w-full bg-muted rounded-full h-2.5">
+                  <div
+                    className="h-2.5 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(rp.percentage, 100)}%`,
+                      backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
+                    }}
+                  />
+                </div>
               </div>
+              <span className="text-sm font-medium shrink-0 w-12 text-right">{rp.percentage}%</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                ({rp.count})
+              </span>
             </div>
-            <span className="text-sm font-medium shrink-0 w-12 text-right">{rp.percentage}%</span>
-            <span className="text-xs text-muted-foreground shrink-0">
-              ({rp.count})
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );
@@ -1004,7 +1014,8 @@ function TeachingRecommendationsSection({ recommendations }: { recommendations?:
 function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
   const { t, language } = useTranslation();
   const { data, isLoading } = useQuery<CohortAnalyticsData>({
-    queryKey: ["/api/scenarios", scenarioId, "cohort-analytics"],
+    queryKey: ["/api/scenarios", scenarioId, "cohort-analytics", language],
+    queryFn: () => apiRequest("GET", `/api/scenarios/${scenarioId}/cohort-analytics?lang=${language}`).then(r => r.json()),
     enabled: !!scenarioId,
   });
 
@@ -1207,7 +1218,13 @@ function CohortAnalyticsView({ scenarioId }: { scenarioId: string }) {
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <IconComp className="w-5 h-5" />
-                    <p className="font-medium text-sm">{profile.label}</p>
+                    <p className="font-medium text-sm">{
+                    profile.key === "financial" ? t("scenarioAnalytics.profileFinancial") :
+                    profile.key === "people" ? t("scenarioAnalytics.profilePeople") :
+                    profile.key === "risk" ? t("scenarioAnalytics.profileRisk") :
+                    profile.key === "balanced" ? t("scenarioAnalytics.profileBalanced") :
+                    profile.label
+                  }</p>
                     <Badge variant="outline" className="ml-auto text-xs">
                       {profile.count} {profile.count !== 1 ? t("scenarioAnalytics.studentsCount") : t("scenarioAnalytics.studentCount")}
                     </Badge>

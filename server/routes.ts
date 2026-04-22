@@ -3250,28 +3250,37 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         ? Math.round((reflectionCount / completedReflections.length) * 100) : 0;
 
       const reasoningPatterns = [
-        { pattern: "Menciona trade-offs", percentage: pct(tradeOffCount), count: tradeOffCount },
-        { pattern: "Identifica stakeholders", percentage: pct(stakeholderCount), count: stakeholderCount },
-        { pattern: "Considera mitigación de riesgos", percentage: pct(riskCount), count: riskCount },
-        { pattern: "Usa evidencia del caso", percentage: pct(evidenceCount), count: evidenceCount },
-        { pattern: "Reconoce incertidumbre", percentage: pct(uncertaintyCount), count: uncertaintyCount },
-        { pattern: "Reflexión presente", percentage: reflectionPct, count: reflectionCount },
-      ].filter(p => p.count > 0 || p.pattern === "Menciona trade-offs" || p.pattern === "Reflexión presente");
+        { key: "mentionsTradeoffs", percentage: pct(tradeOffCount), count: tradeOffCount },
+        { key: "identifiesStakeholders", percentage: pct(stakeholderCount), count: stakeholderCount },
+        { key: "considersRiskMitigation", percentage: pct(riskCount), count: riskCount },
+        { key: "usesCaseEvidence", percentage: pct(evidenceCount), count: evidenceCount },
+        { key: "acknowledgesUncertainty", percentage: pct(uncertaintyCount), count: uncertaintyCount },
+        { key: "reflectionPresent", percentage: reflectionPct, count: reflectionCount },
+      ].filter(p => p.count > 0 || p.key === "mentionsTradeoffs" || p.key === "reflectionPresent");
 
       // 7. Teaching Recommendations (Section C)
+      const lang = (req.query.lang as string) === "en" ? "en" : "es";
       const teachingRecommendations: string[] = [];
 
       if (conceptGaps.length >= 2) {
         const topGaps = conceptGaps.slice(0, 2).map(g => g.concept);
-        teachingRecommendations.push(`Principales brechas conceptuales: ${topGaps.join(", ")}. Considere dedicar más tiempo a estos temas en clase.`);
+        teachingRecommendations.push(lang === "en"
+          ? `Main concept gaps: ${topGaps.join(", ")}. Consider dedicating more class time to these topics.`
+          : `Principales brechas conceptuales: ${topGaps.join(", ")}. Considere dedicar más tiempo a estos temas en clase.`);
       } else if (conceptGaps.length === 1) {
-        teachingRecommendations.push(`Brecha conceptual identificada: ${conceptGaps[0].concept}. Considere reforzar este concepto.`);
+        teachingRecommendations.push(lang === "en"
+          ? `Concept gap identified: ${conceptGaps[0].concept}. Consider reinforcing this concept.`
+          : `Brecha conceptual identificada: ${conceptGaps[0].concept}. Considere reforzar este concepto.`);
       } else {
         const highFrictionSteps = stuckNodes.filter(n => n.nudgeRate >= 30);
         if (highFrictionSteps.length > 0) {
-          teachingRecommendations.push(`Alta fricción en ${highFrictionSteps.length} punto(s) de decisión. Revise si los estudiantes tienen suficiente contexto previo.`);
+          teachingRecommendations.push(lang === "en"
+            ? `High friction at ${highFrictionSteps.length} decision point(s). Check whether students have sufficient prior context.`
+            : `Alta fricción en ${highFrictionSteps.length} punto(s) de decisión. Revise si los estudiantes tienen suficiente contexto previo.`);
         } else {
-          teachingRecommendations.push("Los estudiantes navegan la simulación sin brechas conceptuales significativas.");
+          teachingRecommendations.push(lang === "en"
+            ? "Students navigate the simulation without significant concept gaps."
+            : "Los estudiantes navegan la simulación sin brechas conceptuales significativas.");
         }
       }
 
@@ -3279,35 +3288,60 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         const totalValFriction = conceptGaps.reduce((s, g) => s + g.validationFriction, 0);
         const totalTimeFriction = conceptGaps.reduce((s, g) => s + g.timeFriction, 0);
         if (totalValFriction > totalTimeFriction && totalValFriction > 0) {
-          return "rechazo de respuestas (los estudiantes envían respuestas que requieren re-elaboración)";
+          return lang === "en"
+            ? "response rejection (students submit responses that need reworking)"
+            : "rechazo de respuestas (los estudiantes envían respuestas que requieren re-elaboración)";
         } else if (totalTimeFriction > 0) {
-          return "tiempo prolongado en decisiones (los estudiantes tardan más en formular respuestas)";
+          return lang === "en"
+            ? "extended decision time (students take longer to formulate responses)"
+            : "tiempo prolongado en decisiones (los estudiantes tardan más en formular respuestas)";
         }
         const highNudge = stuckNodes.filter(n => n.nudgeRate >= 40);
-        if (highNudge.length > 0) return "orientación frecuente (NUDGE) en puntos clave de decisión";
+        if (highNudge.length > 0) {
+          return lang === "en"
+            ? "frequent guidance (NUDGE) at key decision points"
+            : "orientación frecuente (NUDGE) en puntos clave de decisión";
+        }
         return null;
       })();
       if (topFrictionType) {
-        teachingRecommendations.push(`Fricción más común: ${topFrictionType}.`);
+        teachingRecommendations.push(lang === "en"
+          ? `Most common friction: ${topFrictionType}.`
+          : `Fricción más común: ${topFrictionType}.`);
       } else {
-        teachingRecommendations.push("No se detectó fricción significativa en las respuestas del grupo.");
+        teachingRecommendations.push(lang === "en"
+          ? "No significant friction was detected in group responses."
+          : "No se detectó fricción significativa en las respuestas del grupo.");
       }
 
       const weakestPattern = reasoningPatterns.length > 0
         ? reasoningPatterns.reduce((min, p) => p.percentage < min.percentage ? p : min, reasoningPatterns[0])
         : null;
       if (weakestPattern && weakestPattern.percentage < 30) {
-        const suggestions: Record<string, string> = {
-          "Menciona trade-offs": "Introduzca ejercicios de análisis de disyuntivas antes de la simulación.",
-          "Identifica stakeholders": "Realice un mapeo de stakeholders como actividad previa.",
-          "Considera mitigación de riesgos": "Agregue una actividad de identificación de riesgos en clase.",
-          "Usa evidencia del caso": "Enfatice la importancia de citar datos del caso en las respuestas.",
-          "Reconoce incertidumbre": "Fomente la reflexión sobre supuestos y limitaciones de información.",
-          "Reflexión presente": "Dedique más tiempo a la etapa de reflexión post-simulación.",
+        const suggestionsEs: Record<string, string> = {
+          mentionsTradeoffs: "Introduzca ejercicios de análisis de disyuntivas antes de la simulación.",
+          identifiesStakeholders: "Realice un mapeo de stakeholders como actividad previa.",
+          considersRiskMitigation: "Agregue una actividad de identificación de riesgos en clase.",
+          usesCaseEvidence: "Enfatice la importancia de citar datos del caso en las respuestas.",
+          acknowledgesUncertainty: "Fomente la reflexión sobre supuestos y limitaciones de información.",
+          reflectionPresent: "Dedique más tiempo a la etapa de reflexión post-simulación.",
         };
-        teachingRecommendations.push(`Próximo paso sugerido: ${suggestions[weakestPattern.pattern] || "Refuerce los patrones de razonamiento menos observados."}`);
+        const suggestionsEn: Record<string, string> = {
+          mentionsTradeoffs: "Introduce trade-off analysis exercises before the simulation.",
+          identifiesStakeholders: "Run a stakeholder-mapping activity beforehand.",
+          considersRiskMitigation: "Add a risk-identification activity in class.",
+          usesCaseEvidence: "Emphasize the importance of citing case data in responses.",
+          acknowledgesUncertainty: "Encourage reflection on assumptions and information limitations.",
+          reflectionPresent: "Dedicate more time to the post-simulation reflection stage.",
+        };
+        const suggestions = lang === "en" ? suggestionsEn : suggestionsEs;
+        teachingRecommendations.push(lang === "en"
+          ? `Suggested next step: ${suggestions[weakestPattern.key] || "Reinforce the least-observed reasoning patterns."}`
+          : `Próximo paso sugerido: ${suggestions[weakestPattern.key] || "Refuerce los patrones de razonamiento menos observados."}`);
       } else {
-        teachingRecommendations.push("El grupo muestra un buen balance en los patrones de razonamiento observados.");
+        teachingRecommendations.push(lang === "en"
+          ? "The group shows a good balance across the observed reasoning patterns."
+          : "El grupo muestra un buen balance en los patrones de razonamiento observados.");
       }
 
       const SIGNAL_CAP = 7;
@@ -5058,16 +5092,17 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
 
       const state = sessionData.session.currentState as any;
       const logs = state?.decisionEvidenceLogs || [];
-      const language = (state as any)?.language || "es";
-      const isEn = language === "en";
+      // Session language is kept so the frontend can show a language indicator
+      // on student-authored quotes that differ from the professor's UI language.
+      const sessionLanguage: "es" | "en" = (state as any)?.language || "es";
 
-      const signalNames = [
-        { key: "intent", name: "Strategic decision-making", nameEs: "Toma de decisiones estratégicas" },
-        { key: "justification", name: "Analytical reasoning", nameEs: "Razonamiento analítico" },
-        { key: "tradeoffAwareness", name: "Tradeoff awareness", nameEs: "Conciencia de tradeoffs" },
-        { key: "stakeholderAwareness", name: "Stakeholder consideration", nameEs: "Consideración de stakeholders" },
-        { key: "ethicalAwareness", name: "Ethical reasoning", nameEs: "Razonamiento ético" },
-      ];
+      const signalKeys = [
+        "intent",
+        "justification",
+        "tradeoffAwareness",
+        "stakeholderAwareness",
+        "ethicalAwareness",
+      ] as const;
 
       const signalAverages: Record<string, number> = {};
       const turnSignals: any[] = [];
@@ -5075,31 +5110,29 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
       // Phase 1a: averages now include MCQ turns. MCQ turns can carry meaningful
       // signals (e.g. tradeoffAwareness from option signatures) and excluding them
       // produced contradictions between this view and the framework detector view.
-      for (const sig of signalNames) {
-        const sum = logs.reduce((acc: number, l: any) => acc + (l.signals_detected?.[sig.key]?.quality ?? 0), 0);
-        signalAverages[sig.key === "justification" ? "analytical" : sig.key === "intent" ? "strategic" : sig.key === "tradeoffAwareness" ? "tradeoff" : sig.key === "stakeholderAwareness" ? "stakeholder" : "ethical"] = logs.length > 0 ? Math.round((sum / logs.length) * 10) / 10 : 0;
+      for (const key of signalKeys) {
+        const sum = logs.reduce((acc: number, l: any) => acc + (l.signals_detected?.[key]?.quality ?? 0), 0);
+        const avgKey = key === "justification" ? "analytical" : key === "intent" ? "strategic" : key === "tradeoffAwareness" ? "tradeoff" : key === "stakeholderAwareness" ? "stakeholder" : "ethical";
+        signalAverages[avgKey] = logs.length > 0 ? Math.round((sum / logs.length) * 10) / 10 : 0;
       }
 
       for (let i = 0; i < logs.length; i++) {
         const log = logs[i];
-        const signals = signalNames.map(sig => {
-          const quality = log.signals_detected?.[sig.key]?.quality ?? 0;
-          const extractedText = log.signals_detected?.[sig.key]?.extracted_text || "";
-          let level: string;
-          if (quality >= 2) level = "Demonstrated";
-          else if (quality >= 1) level = "Emerging";
-          else level = "Not evidenced";
+        const signals = signalKeys.map(key => {
+          const quality: number = log.signals_detected?.[key]?.quality ?? 0;
+          const extractedText: string = log.signals_detected?.[key]?.extracted_text || "";
 
           return {
-            name: isEn ? sig.name : sig.nameEs,
-            level,
-            explanation: extractedText || (isEn ? "No specific evidence extracted." : "No se extrajo evidencia específica."),
+            key,
+            quality,
+            extracted_text: extractedText,
+            sessionLanguage,
           };
         });
         turnSignals.push({ number: i + 1, signals });
       }
 
-      res.json({ signalAverages, turns: turnSignals });
+      res.json({ signalAverages, sessionLanguage, turns: turnSignals });
     } catch (error) {
       console.error("Error getting reasoning signals:", error);
       res.status(500).json({ message: "Failed to get reasoning signals" });
