@@ -114,13 +114,20 @@ CRITICAL RULES:
 - Score each signal INDEPENDENTLY — one signal's score does not affect another
 - If unsure between two levels, choose the LOWER level
 
+For every signal, return all four fields. 'confidence' reflects certainty in your quality assignment, not student confidence. 'marginal_evidence' names the specific word(s) or phrase(s) that tipped your decision.
+
 Return ONLY valid JSON:
 {
-  "intent": { "quality": 0-3, "extracted_text": "exact quote or '' if absent" },
-  "justification": { "quality": 0-3, "extracted_text": "exact quote or '' if absent" },
-  "tradeoffAwareness": { "quality": 0-3, "extracted_text": "exact quote or '' if absent" },
-  "stakeholderAwareness": { "quality": 0-3, "extracted_text": "exact quote or '' if absent" },
-  "ethicalAwareness": { "quality": 0-3, "extracted_text": "exact quote or '' if absent" }
+  "intent": {
+    "quality": 0-3,
+    "extracted_text": "exact quote from student response, or '' if absent",
+    "confidence": "high | medium | low — how confident you are in the quality score",
+    "marginal_evidence": "one short sentence describing what specific token/phrase drove the quality decision, or '' if the signal is clearly ABSENT"
+  },
+  "justification": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." },
+  "tradeoffAwareness": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." },
+  "stakeholderAwareness": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." },
+  "ethicalAwareness": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." }
 }`;
   }
 
@@ -177,13 +184,20 @@ REGLAS CRÍTICAS:
 - Puntúa cada señal INDEPENDIENTEMENTE — la puntuación de una señal no afecta a otra
 - Si no estás seguro entre dos niveles, elige el nivel MÁS BAJO
 
+Para cada señal, devuelve los cuatro campos. 'confidence' refleja qué tan seguro estás de la calidad asignada, no la confianza del estudiante. 'marginal_evidence' nombra el/los token(s) o frase(s) específicos que determinaron tu decisión. IMPORTANTE: el valor de 'confidence' debe ser literalmente "high", "medium" o "low" en inglés.
+
 Devuelve SOLO JSON válido:
 {
-  "intent": { "quality": 0-3, "extracted_text": "cita exacta o '' si ausente" },
-  "justification": { "quality": 0-3, "extracted_text": "cita exacta o '' si ausente" },
-  "tradeoffAwareness": { "quality": 0-3, "extracted_text": "cita exacta o '' si ausente" },
-  "stakeholderAwareness": { "quality": 0-3, "extracted_text": "cita exacta o '' si ausente" },
-  "ethicalAwareness": { "quality": 0-3, "extracted_text": "cita exacta o '' si ausente" }
+  "intent": {
+    "quality": 0-3,
+    "extracted_text": "cita exacta de la respuesta del estudiante, o '' si ausente",
+    "confidence": "high | medium | low — qué tan seguro estás de la calidad asignada",
+    "marginal_evidence": "una oración corta describiendo el token/frase específico que determinó la calidad, o '' si la señal está claramente AUSENTE"
+  },
+  "justification": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." },
+  "tradeoffAwareness": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." },
+  "stakeholderAwareness": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." },
+  "ethicalAwareness": { "quality": 0-3, "extracted_text": "...", "confidence": "high|medium|low", "marginal_evidence": "..." }
 }`;
 }
 
@@ -196,8 +210,14 @@ function clampQuality(val: any): SignalQuality {
 }
 
 function parseSignalResult(parsed: any): SignalExtractionResult {
-  // Phase 1c (Section 6.5): pass through optional confidence and marginal_evidence
-  // when the model returns them. Phase 4 wires the populator end-to-end.
+  // §6.5: pass through confidence and marginal_evidence. The prompt requests
+  // both on every signal; we're defensive here in case the LLM omits them.
+  const validConf = new Set(["high", "medium", "low"]);
+  const missingConf = ["intent","justification","tradeoffAwareness","stakeholderAwareness","ethicalAwareness"]
+    .filter(k => !validConf.has(parsed?.[k]?.confidence));
+  if (missingConf.length > 0) {
+    console.warn(`[signalExtractor] LLM did not return a valid confidence (high|medium|low) for: ${missingConf.join(", ")}`);
+  }
   const passOptional = (raw: any) => {
     const out: { confidence?: "high" | "medium" | "low"; marginal_evidence?: string } = {};
     if (raw?.confidence === "high" || raw?.confidence === "medium" || raw?.confidence === "low") {

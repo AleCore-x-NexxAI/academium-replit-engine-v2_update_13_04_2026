@@ -1,0 +1,68 @@
+FIX 2 — Wire confidence and marginal_evidence end-to-end in signalExtractor
+Context
+Packet §6.5 requires the signal extractor to return confidence and marginalEvidence per signal so the framework consistency check and the reasoning-signals UI can reason about signals more richly than a scalar quality score. The code has the ENDPOINT wiring (the reasoning-signals route forwards confidence and marginalEvidence if present) and the PARSER (passOptional helper in signalExtractor.ts:201), but the prompt itself never asks the LLM for these fields. Current JSON schema in the prompt (lines 119-123 EN and 182-186 ES):
+json{
+  "intent": { "quality": 0-3, "extracted_text": "exact quote or '' if absent" },
+  ...
+}
+As a result, passOptional() is a no-op in production. Every detection has confidence === undefined. A comment at line 200 acknowledges this: "Phase 4 wires the populator end-to-end." Phase 4 landed but the prompt update never did.
+Do
+Step 1: Update the EN prompt schema
+In server/agents/signalExtractor.ts, find the EN system prompt (around line 115–125). Locate the JSON shape block that currently lists quality and extracted_text per signal. Replace with:
+json{
+  "intent": {
+    "quality": 0-3,
+    "extracted_text": "exact quote from student response, or '' if absent",
+    "confidence": "high | medium | low — how confident you are in the quality score",
+    "marginal_evidence": "one short sentence describing what specific token/phrase drove the quality decision, or '' if the signal is clearly ABSENT"
+  },
+  "justification": { same 4 fields },
+  "tradeoffAwareness": { same 4 fields },
+  "stakeholderAwareness": { same 4 fields },
+  "ethicalAwareness": { same 4 fields }
+}
+Add one sentence of instruction before the JSON block: For every signal, return all four fields. 'confidence' reflects certainty in your quality assignment, not student confidence. 'marginal_evidence' names the specific word(s) or phrase(s) that tipped your decision.
+Step 2: Mirror in the ES prompt
+Same change in the Spanish prompt (lines ~178–188). Spanish JSON schema:
+json{
+  "intent": {
+    "quality": 0-3,
+    "extracted_text": "cita exacta de la respuesta del estudiante, o '' si ausente",
+    "confidence": "high | medium | low — qué tan seguro estás de la calidad asignada",
+    "marginal_evidence": "una oración corta describiendo el token/frase específico que determinó la calidad, o '' si la señal está claramente AUSENTE"
+  },
+  ...
+}
+Keep confidence values as English literals (high/medium/low) even in the Spanish prompt, because the downstream parser passOptional checks for exactly those three strings (line 203). Don't use Spanish confidence labels.
+Step 3: Remove the stale comment
+In parseSignalResult at line 199-200, update the comment:
+
+Was: // Phase 1c (Section 6.5): pass through optional confidence and marginal_evidence when the model returns them. Phase 4 wires the populator end-to-end.
+Now: // §6.5: pass through confidence and marginal_evidence. The prompt requests both on every signal; we're defensive here in case the LLM omits them.
+
+Step 4: Defensive default
+In parseSignalResult, after the object construction, log a one-time warning per extraction call if ANY of the five signals is missing confidence from the parsed response. This helps catch prompt-drift without breaking anything:
+tsconst missingConf = ["intent","justification","tradeoffAwareness","stakeholderAwareness","ethicalAwareness"]
+  .filter(k => !parsed?.[k]?.confidence);
+if (missingConf.length > 0) {
+  console.warn(`[signalExtractor] LLM did not return confidence for: ${missingConf.join(", ")}`);
+}
+Step 5: Schema interface update
+In the TypeScript interface for SignalExtractionResult (or wherever a single signal's shape is defined in signalExtractor.ts or types.ts), ensure confidence and marginal_evidence are declared as optional fields: confidence?: "high" | "medium" | "low"; marginal_evidence?: string;. They must remain OPTIONAL so the parser's defensive undefined-handling stays legal.
+Preserve
+
+The existing confidence-value validation at line 203 (raw?.confidence === "high" || ... === "low"). It's correct; don't relax it.
+The empty-string fallback for extracted_text at line 214.
+The defaultSignals() ABSENT fallback at line 241 — does NOT need confidence since it's a deterministic fallback, not an LLM result.
+All downstream consumers that already check confidence !== undefined. After this fix, confidence will populate on real extractions but may still be undefined on fallback paths.
+All FIX 1 changes.
+Porter regression, dashboardCache TTL, no .github/workflows/.
+
+Gate
+
+Run a real signal extraction (any student-turn simulation end-to-end on Replit). Inspect the logged decisionEvidenceLogs[N].signals_detected.intent — confidence field is present with one of "high", "medium", "low".
+Open the reasoning-signals tab for that session. The endpoint response (check browser network tab) includes confidence on each row of turns[].signals.
+Existing tests all still pass. npx tsc --noEmit clean.
+
+Report
+Sample parsed output from one real extraction showing confidence populated on all 5 signals. Confirmation the endpoint forwards it. Confirmation the warning log fires when the LLM (rarely) drops a field.

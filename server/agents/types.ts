@@ -17,6 +17,7 @@ export enum RDSBand {
 export interface SignalScore {
   quality: SignalQuality;
   extracted_text: string;
+  confidence?: "high" | "medium" | "low";
   marginal_evidence?: string;
 }
 
