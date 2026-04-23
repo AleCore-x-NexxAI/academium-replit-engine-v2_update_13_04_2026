@@ -17,6 +17,7 @@ import { DEFAULT_DECISIONS } from "./agents/constants";
 import type { HistoryEntry, InsertScenario, InitialState, DraftConversationMessage, GeneratedScenarioData, AgentPrompts, TurnResponse, SimulationState, PedagogicalIntent, CaseFramework } from "@shared/schema";
 import { pedagogicalIntentSchema, pedagogicalIntentPatchSchema } from "@shared/schema";
 import { mergeReflectionAnalytics } from "./mergeReflectionAnalytics";
+import { sessionWeightedScore, sessionAppliedCourseTheory, isSubstantiveExtractedText } from "./calibrationScoring";
 
 // Phase 1c (Section 6.4): inline assertion guard for mergeReflectionAnalytics.
 // Runs once at module load in non-production envs. Verifies the new
@@ -4293,17 +4294,7 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         for (const s of completed) {
           const state = s.session.currentState as any;
           const fwDetections = state?.framework_detections || [];
-          const hasApplied = fwDetections.some((turnDetections: any[]) =>
-            turnDetections?.some(
-              (d: any) => {
-                if (!eligibleIds.has(d.framework_id)) return false;
-                const dm = d.detection_method || "keyword";
-                if (dm === "signal_pattern" || dm === "consistency_promoted") return false;
-                return d.level === "explicit" ||
-                  (d.level === "implicit" && (d.confidence === "medium" || d.confidence === "high"));
-              },
-            ),
-          );
+          const hasApplied = sessionAppliedCourseTheory(eligibleIds as Set<string>, fwDetections);
           if (hasApplied) n++;
         }
         appliedCourseTheory = { n, m: completed.length };
@@ -4359,7 +4350,6 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
           const state = s.session.currentState as any;
           const fwDetections: any[][] = state?.framework_detections || [];
           let applied = false;
-          let sessionScore = 0;
           for (const turnDets of fwDetections) {
             const det = turnDets?.find((d: any) => d.framework_id === fw.id);
             if (det) {
@@ -4369,18 +4359,10 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
                 applied = true;
                 if (det.evidence) evidenceTexts.push(det.evidence);
               }
-              const dm = det.detection_method || "keyword";
-              if (dm !== "signal_pattern" && dm !== "consistency_promoted") {
-                if (det.level === "explicit" || (det.level === "implicit" && det.confidence === "high")) {
-                  sessionScore = Math.max(sessionScore, 1.0);
-                } else if (det.level === "implicit" && det.confidence === "medium") {
-                  sessionScore = Math.max(sessionScore, 0.5);
-                }
-              }
             }
           }
           if (applied) appliedCount++;
-          weightedSum += sessionScore;
+          weightedSum += sessionWeightedScore(fw.id, fwDetections);
         }
 
         const rate = completed.length > 0 ? appliedCount / completed.length : 0;
@@ -5100,14 +5082,7 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
               ...(marginalEvidence !== undefined ? { marginalEvidence } : {}),
             };
           })
-          .filter(sig => {
-            const txt = sig.extracted_text.trim();
-            if (txt.length === 0) return false;
-            const lower = txt.toLowerCase();
-            if (lower === "no specific evidence extracted." || lower === "no se extrajo evidencia específica.") return false;
-            if (txt.length <= 3) return false;
-            return true;
-          });
+          .filter(sig => isSubstantiveExtractedText(sig.extracted_text));
         if (signals.length > 0) {
           turnSignals.push({ number: i + 1, signals });
         }

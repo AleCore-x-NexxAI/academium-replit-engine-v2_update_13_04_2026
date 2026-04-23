@@ -1,0 +1,100 @@
+FIX 1 — Tighten calibration.semanticFloor test so it actually catches regressions
+Context
+The server/__tests__/calibration.semanticFloor.test.ts file contains a local applySemanticFloor helper function that re-encodes the Tier-2 semantic floor logic. The problem: when inputWordCount < 10, the test helper returns not_evidenced directly, but the real code in server/agents/frameworkDetector.ts:345-376 falls through to Tier 3 (signal-pattern) first, and only pushes not_evidenced if Tier 3 also fails. If someone accidentally breaks the Tier-3-fallthrough in the real code, this test would still pass — a false-negative regression risk.
+The other two calibration tests (calibration.moduleHealth.test.ts and calibration.appliedCourseTheory.test.ts) also re-encode production logic in local helpers rather than importing from routes.ts. They are byte-identical mirrors today, but the same regression risk applies.
+The real code for appliedCourseTheory and moduleHealth is embedded in large handler bodies in server/routes.ts. We can extract the pure scoring/filtering logic into a standalone module (like what was already done for mergeReflectionAnalytics.ts), then import it both in routes.ts and in the tests.
+Do
+Step 1: Extract calibration scoring to a standalone module
+Create server/calibrationScoring.ts that exports THREE pure functions:
+tsexport interface DetectionInput {
+  framework_id: string;
+  level: "explicit" | "implicit" | "not_evidenced";
+  confidence?: "high" | "medium" | "low";
+  detection_method?: string;
+  evidence?: string;
+}
+
+/**
+ * §T-003B: returns the weighted contribution of a single session toward a
+ * framework's Module Health score.
+ *
+ * Rule: find the highest-scoring detection for the framework in the session.
+ * signal_pattern and consistency_promoted never contribute regardless of
+ * level/confidence. Returns 1.0 for explicit or implicit-high, 0.5 for
+ * implicit-medium, 0.0 otherwise.
+ */
+export function sessionWeightedScore(
+  frameworkId: string,
+  framework_detections: DetectionInput[][],
+): number { ... }
+
+/**
+ * §T-003B: applies the Applied-Course-Theory rule to a single session.
+ * Returns true iff ANY detection for ANY eligible framework in the session
+ * is explicit OR (implicit AND confidence in {medium, high}) AND the
+ * detection_method is not signal_pattern or consistency_promoted.
+ */
+export function sessionAppliedCourseTheory(
+  eligibleFrameworkIds: Set<string>,
+  framework_detections: DetectionInput[][],
+): boolean { ... }
+
+/**
+ * §T-003B: maps a session's raw extracted_text signal to whether it should
+ * render in the reasoning-signals tab. Returns true iff the text is
+ * substantive (not empty, not a known placeholder, more than 3 chars after
+ * trimming).
+ */
+export function isSubstantiveExtractedText(text: string): boolean { ... }
+Implementation exactly mirrors the current inline logic at:
+
+server/routes.ts:4354-4387 for sessionWeightedScore
+server/routes.ts:4291-4309 for sessionAppliedCourseTheory
+server/routes.ts:5103-5110 for isSubstantiveExtractedText
+
+Step 2: Replace inline logic in routes.ts
+In server/routes.ts:
+
+Import the three functions at the top of the file with other imports.
+At line ~4354 (the for (const s of completed) loop inside Module Health), replace the inline session score computation with a call to sessionWeightedScore(fw.id, state?.framework_detections ?? []). Keep the existing methodDist aggregation and appliedCount tracking (those are separate concerns, leave them inline).
+At line ~4296 (inside class-stats hasApplied), replace the nested .some().some() block with a call to sessionAppliedCourseTheory(eligibleIds, state?.framework_detections ?? []).
+At line ~5103 (reasoning-signals .filter(sig => ...)), replace the inline body with a call to isSubstantiveExtractedText(sig.extracted_text).
+
+Confirm the handlers compile and behave identically (no behavior change — this is a pure refactor for testability).
+Step 3: Add a 4th test file that imports the real logic
+Create server/__tests__/calibration.semanticFloor.realpath.test.ts. This file must NOT re-encode the Tier-2 semantic floor. Instead, it exercises the real detectFrameworks function from server/agents/frameworkDetector.ts by STUBBING only the LLM call (semanticFrameworkCheck).
+Approach:
+
+Import detectFrameworks directly.
+Mock semanticFrameworkCheck to return a controllable verdict. The cleanest way: since semanticFrameworkCheck is module-scoped in frameworkDetector.ts, add an optional injection parameter _semanticCheckOverride to detectFrameworks signature that the test can pass in. When absent (production), behavior is unchanged.
+Write at minimum these 5 test cases:
+
+Input = 8 words, semantic LLM returns applied: true, confidence: medium, framework has a signalPattern that MATCHES. Expected: detection is implicit with detection_method: "signal_pattern" (Tier-3 caught it). Confirms floor rejects semantic AND falls through to Tier 3.
+Input = 8 words, semantic LLM returns applied: true, confidence: medium, framework has no signalPattern (or it doesn't match). Expected: detection is not_evidenced with reasoning containing "fewer than 10 words". Confirms the floor-specific reasoning lands.
+Input = 12 words, semantic LLM returns applied: true, confidence: medium. Expected: detection is implicit, detection_method: "semantic", confidence: "low" (Floor A downgraded from medium).
+Input = 20 words, semantic LLM returns applied: true, confidence: medium. Expected: detection is implicit, confidence: "medium" (unchanged).
+Input = 8 words, semantic LLM returns applied: false. Expected: detection is not_evidenced, reasoning DOES NOT contain "fewer than 10 words" (floor didn't trigger because LLM said no).
+
+
+
+Also update the existing server/__tests__/calibration.moduleHealth.test.ts and server/__tests__/calibration.appliedCourseTheory.test.ts: replace their local computeModuleHealth and computeAppliedCourseTheory helpers with direct calls to sessionWeightedScore and sessionAppliedCourseTheory from the new module. Keep all existing test cases — just route them through the real functions.
+Step 4: Delete the local helper in the old calibration.semanticFloor.test.ts
+Do NOT delete the file — it exercises the contract-level behavior cleanly for quick regressions. Just add a comment at the top stating: // Contract-level tests for the §T-003B semantic floor. See calibration.semanticFloor.realpath.test.ts for the production-integration tests that import the real detectFrameworks.
+Preserve (absolute)
+
+The three new calibration test files' existing assertions — all must keep passing.
+Porter regression test fail-loud behavior.
+dashboardCache TTL at 5 * 60 * 1000.
+No .github/workflows/.
+All other preserve items from Tasks A/B/C.
+
+Gate
+
+npm test — all existing tests pass (calibration.moduleHealth, calibration.appliedCourseTheory, calibration.semanticFloor, mergeReflectionAnalytics, dashboardCache.race).
+New calibration.semanticFloor.realpath.test.ts has 5 test cases, all pass.
+Break-test: temporarily comment out the if (globalInputWordCount < 15) { v.confidence = "low"; } line in frameworkDetector.ts and rerun calibration.semanticFloor.realpath.test.ts — test case 3 must FAIL. Restore the line and rerun — must PASS. This proves the test actually catches the regression.
+Break-test 2: temporarily comment out the if (globalInputWordCount < 10) block's semanticFloorRejected = true line so the code always pushes the semantic detection — rerun — test cases 1, 2, 5 must FAIL. Restore — must PASS.
+npx tsc --noEmit passes (no new TypeScript errors introduced).
+
+Report
+Diff stats per file. Confirmation of both break-tests. List of test case names in the new realpath test file.

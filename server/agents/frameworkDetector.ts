@@ -268,6 +268,7 @@ export async function detectFrameworks(
   signals: SignalExtractionResult,
   frameworks: CaseFramework[],
   language: "es" | "en" = "es",
+  _semanticCheckOverride?: typeof semanticFrameworkCheck,
 ): Promise<FrameworkDetection[]> {
   if (!frameworks || frameworks.length === 0) return [];
 
@@ -336,7 +337,8 @@ export async function detectFrameworks(
   let semantic: SemanticVerdict[] = [];
   if (needsSemantic.length > 0) {
     const hydrated = needsSemantic.map((fw) => hydrateFromRegistry(fw, language));
-    semantic = await semanticFrameworkCheck(studentInput, hydrated, language);
+    const checker = _semanticCheckOverride ?? semanticFrameworkCheck;
+    semantic = await checker(studentInput, hydrated, language);
   }
   const semanticById = new Map(semantic.map((v) => [v.framework_id, v]));
 

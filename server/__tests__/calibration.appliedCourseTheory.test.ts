@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { sessionAppliedCourseTheory, type DetectionInput } from "../calibrationScoring";
 
 function computeAppliedCourseTheory(
   eligibleIds: Set<string>,
@@ -7,19 +8,8 @@ function computeAppliedCourseTheory(
 ) {
   let n = 0;
   for (const s of sessions) {
-    const fwDetections = s.framework_detections || [];
-    const hasApplied = fwDetections.some((turnDetections) =>
-      turnDetections?.some(
-        (d) => {
-          if (!eligibleIds.has(d.framework_id)) return false;
-          const dm = d.detection_method || "keyword";
-          if (dm === "signal_pattern" || dm === "consistency_promoted") return false;
-          return d.level === "explicit" ||
-            (d.level === "implicit" && (d.confidence === "medium" || d.confidence === "high"));
-        },
-      ),
-    );
-    if (hasApplied) n++;
+    const fwDetections = (s.framework_detections || []) as DetectionInput[][];
+    if (sessionAppliedCourseTheory(eligibleIds, fwDetections)) n++;
   }
   return { n, m: sessions.length };
 }

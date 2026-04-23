@@ -1,3 +1,6 @@
+// Contract-level tests for the §T-003B semantic floor.
+// See calibration.semanticFloor.realpath.test.ts for the production-integration
+// tests that import the real detectFrameworks.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 

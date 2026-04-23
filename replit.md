@@ -36,7 +36,9 @@ The platform incorporates a robust turn processing pipeline, including a 6-gate 
 - **Applied Course Theory tightened**: Requires `explicit` or `implicit` with `confidence: "medium"|"high"`. Excludes `signal_pattern` and `consistency_promoted` detection methods. Implicit-low no longer counts.
 - **Semantic implicit floor (§T-003B)**: In `frameworkDetector.ts`, inputs <10 words have semantic verdicts rejected (falls through to Tier 3 signal-pattern). Inputs 10-14 words are downgraded to confidence "low". >=15 words unchanged.
 - **Compatibility manifest**: Version bumped to `v3.0-phase-6a`. Two new entries: `module-health.target-split`, `class-stats.applied-course-theory-strict`.
-- **Unit tests**: `server/__tests__/calibration.moduleHealth.test.ts` (10 tests), `calibration.appliedCourseTheory.test.ts` (9 tests), `calibration.semanticFloor.test.ts` (8 tests) — all pass.
+- **Unit tests**: `server/__tests__/calibration.moduleHealth.test.ts` (10 tests), `calibration.appliedCourseTheory.test.ts` (9 tests), `calibration.semanticFloor.test.ts` (8 tests, contract-level) — all pass.
+- **Calibration scoring module**: `server/calibrationScoring.ts` exports pure functions `sessionWeightedScore`, `sessionAppliedCourseTheory`, `isSubstantiveExtractedText`. Used by both routes.ts (Module Health, class-stats, reasoning-signals) and the calibration tests so a regression in routes can no longer pass while tests still mirror old logic.
+- **Realpath integration test**: `server/__tests__/calibration.semanticFloor.realpath.test.ts` (5 tests) imports the real `detectFrameworks` from `server/agents/frameworkDetector.ts` and stubs the LLM via the optional `_semanticCheckOverride` parameter. Catches regressions in the actual Tier-2/Tier-3 fallthrough logic.
 
 ### Pedagogical Intent Hardening (Task #92)
 - Required fields: teachingGoal (≥20 chars), targetDisciplines (≥1), courseContext (≥20 chars). Server validates at POST /api/canonical-case/generate with accumulated 400 errors. Client shows inline errors after first Generate attempt.

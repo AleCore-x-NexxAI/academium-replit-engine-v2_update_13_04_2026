@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { sessionWeightedScore, type DetectionInput } from "../calibrationScoring";
 
 function computeModuleHealth(
   frameworks: Array<{ id: string; canonicalId?: string; provenance?: string }>,
@@ -12,9 +13,8 @@ function computeModuleHealth(
     const methodDist: Record<string, number> = {};
 
     for (const session of completed) {
-      const fwDetections = session.framework_detections || [];
+      const fwDetections = (session.framework_detections || []) as DetectionInput[][];
       let applied = false;
-      let sessionScore = 0;
 
       for (const turnDets of fwDetections) {
         const det = turnDets?.find((d) => d.framework_id === fw.id);
@@ -24,18 +24,10 @@ function computeModuleHealth(
           if (det.level === "explicit" || det.level === "implicit") {
             applied = true;
           }
-          const dm = det.detection_method || "keyword";
-          if (dm !== "signal_pattern" && dm !== "consistency_promoted") {
-            if (det.level === "explicit" || (det.level === "implicit" && det.confidence === "high")) {
-              sessionScore = Math.max(sessionScore, 1.0);
-            } else if (det.level === "implicit" && det.confidence === "medium") {
-              sessionScore = Math.max(sessionScore, 0.5);
-            }
-          }
         }
       }
       if (applied) appliedCount++;
-      weightedSum += sessionScore;
+      weightedSum += sessionWeightedScore(fw.id, fwDetections);
     }
 
     const rate = completed.length > 0 ? appliedCount / completed.length : 0;
