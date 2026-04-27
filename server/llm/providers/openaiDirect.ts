@@ -33,9 +33,20 @@ export class OpenAIDirectProvider extends BaseProvider {
         messages,
         max_completion_tokens: options.maxTokens || 4096,
         ...(options.temperature !== undefined && { temperature: options.temperature }),
-        ...(options.responseFormat === "json" && {
-          response_format: { type: "json_object" },
-        }),
+        ...(options.responseFormat === "json" && (
+          options.jsonSchema
+            ? {
+                response_format: {
+                  type: "json_schema" as const,
+                  json_schema: {
+                    name: options.jsonSchema.name,
+                    schema: options.jsonSchema.schema,
+                    strict: options.jsonSchema.strict ?? true,
+                  },
+                },
+              }
+            : { response_format: { type: "json_object" as const } }
+        )),
       },
       { signal }
     );

@@ -1,7 +1,20 @@
-import type { ProviderAdapter } from "./types";
+import type { ProviderAdapter, ProviderType } from "./types";
 import { getEquivalentModel } from "./types";
 import { registry } from "./registry";
 import type { ChatMessage, CompletionOptions } from "../provider";
+
+/**
+ * Provider types that natively support OpenAI strict structured outputs
+ * (`response_format: { type: "json_schema", strict: true }`). When a caller
+ * passes `requireStructuredOutput: true`, the router restricts routing AND
+ * failover to this set so the strict-schema contract cannot silently degrade
+ * by falling over to a Gemini/Anthropic adapter that ignores `jsonSchema`.
+ */
+const STRUCTURED_OUTPUT_PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set<ProviderType>([
+  "replit-openai",
+  "openai-direct",
+  "openrouter",
+]);
 
 export interface RouteResult {
   result: string;
@@ -54,10 +67,27 @@ export async function routeRequest(
   messages: ChatMessage[],
   options: CompletionOptions
 ): Promise<RouteResult> {
-  const allProviders = registry.getProviders();
+  let allProviders = registry.getProviders();
 
   if (allProviders.length === 0) {
     throw new Error("No LLM providers configured. Set API keys in environment variables.");
+  }
+
+  // Honor `requireStructuredOutput`: restrict the entire candidate pool to
+  // providers that support OpenAI strict json_schema. This MUST happen
+  // BEFORE the failover loop so that a failed strict-mode call does not
+  // silently retry on Gemini/Anthropic where the schema is ignored.
+  if (options.requireStructuredOutput) {
+    const restricted = allProviders.filter((p) =>
+      STRUCTURED_OUTPUT_PROVIDER_TYPES.has(p.type)
+    );
+    if (restricted.length === 0) {
+      throw new Error(
+        "requireStructuredOutput=true but no OpenAI-compatible providers " +
+          "(replit-openai, openai-direct, openrouter) are configured."
+      );
+    }
+    allProviders = restricted;
   }
 
   const tried = new Set<string>();

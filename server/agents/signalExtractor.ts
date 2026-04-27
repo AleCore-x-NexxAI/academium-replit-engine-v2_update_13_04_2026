@@ -59,6 +59,51 @@ function detectMarginalEvidence(
   return { found: false, snippet: "" };
 }
 
+/**
+ * Strict JSON Schema for OpenAI structured outputs. When this is sent via
+ * `response_format: { type: "json_schema", strict: true }`, the model is
+ * forced to return all four fields (quality, extracted_text, confidence,
+ * marginal_evidence) on every signal — eliminating the silent-omission
+ * failure mode that FIX 2 tried to fix via prompt alone.
+ *
+ * Strict mode requires `additionalProperties: false` and a `required` array
+ * listing every property at every object level.
+ */
+const SIGNAL_OBJECT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["quality", "extracted_text", "confidence", "marginal_evidence"],
+  properties: {
+    quality: { type: "integer", enum: [0, 1, 2, 3] },
+    extracted_text: { type: "string" },
+    confidence: { type: "string", enum: ["high", "medium", "low"] },
+    marginal_evidence: { type: "string" },
+  },
+} as const;
+
+const SIGNAL_EXTRACTION_SCHEMA = {
+  name: "SignalExtractionResult",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "intent",
+      "justification",
+      "tradeoffAwareness",
+      "stakeholderAwareness",
+      "ethicalAwareness",
+    ],
+    properties: {
+      intent: SIGNAL_OBJECT_SCHEMA,
+      justification: SIGNAL_OBJECT_SCHEMA,
+      tradeoffAwareness: SIGNAL_OBJECT_SCHEMA,
+      stakeholderAwareness: SIGNAL_OBJECT_SCHEMA,
+      ethicalAwareness: SIGNAL_OBJECT_SCHEMA,
+    },
+  },
+} as const;
+
 function getSignalExtractionPrompt(language: "es" | "en"): string {
   if (language === "en") {
     return `You are a SIGNAL EXTRACTOR for an educational business simulation. You analyze student decision text to detect reasoning signals.
@@ -114,9 +159,16 @@ CRITICAL RULES:
 - Score each signal INDEPENDENTLY — one signal's score does not affect another
 - If unsure between two levels, choose the LOWER level
 
-For every signal, return all four fields. 'confidence' reflects certainty in your quality assignment, not student confidence. 'marginal_evidence' names the specific word(s) or phrase(s) that tipped your decision.
+RESPONSE CONTRACT (strict — non-negotiable):
+For every one of the 5 signals (intent, justification, tradeoffAwareness, stakeholderAwareness, ethicalAwareness), you MUST return all four fields:
+1. quality — integer 0, 1, 2, or 3
+2. extracted_text — string (verbatim student quote, or "" if signal absent)
+3. confidence — exactly one of: "high", "medium", "low"
+4. marginal_evidence — string describing the specific token(s) or phrase(s) that drove your quality decision (or "" if quality === 0)
 
-Return ONLY valid JSON:
+Returning a signal with fewer than four fields is a contract violation. If you are uncertain about confidence, return "low". If you cannot identify marginal_evidence on a present signal, return the same text as extracted_text.
+
+REQUIRED RESPONSE FORMAT — return EXACTLY this JSON shape:
 {
   "intent": {
     "quality": 0-3,
@@ -184,9 +236,16 @@ REGLAS CRÍTICAS:
 - Puntúa cada señal INDEPENDIENTEMENTE — la puntuación de una señal no afecta a otra
 - Si no estás seguro entre dos niveles, elige el nivel MÁS BAJO
 
-Para cada señal, devuelve los cuatro campos. 'confidence' refleja qué tan seguro estás de la calidad asignada, no la confianza del estudiante. 'marginal_evidence' nombra el/los token(s) o frase(s) específicos que determinaron tu decisión. IMPORTANTE: el valor de 'confidence' debe ser literalmente "high", "medium" o "low" en inglés.
+CONTRATO DE RESPUESTA (estricto — no negociable):
+Para cada una de las 5 señales (intent, justification, tradeoffAwareness, stakeholderAwareness, ethicalAwareness), DEBES devolver los cuatro campos:
+1. quality — entero 0, 1, 2 o 3
+2. extracted_text — string (cita textual del estudiante, o "" si la señal está ausente)
+3. confidence — exactamente uno de: "high", "medium", "low" (literal, en inglés)
+4. marginal_evidence — string describiendo el/los token(s) o frase(s) específicos que determinaron tu decisión de calidad (o "" si quality === 0)
 
-Devuelve SOLO JSON válido:
+Devolver una señal con menos de cuatro campos es una violación del contrato. Si no estás seguro de la confianza, devuelve "low". Si no puedes identificar marginal_evidence en una señal presente, devuelve el mismo texto que extracted_text.
+
+FORMATO DE RESPUESTA REQUERIDO — devuelve EXACTAMENTE esta forma JSON:
 {
   "intent": {
     "quality": 0-3,
@@ -210,13 +269,37 @@ function clampQuality(val: any): SignalQuality {
 }
 
 function parseSignalResult(parsed: any): SignalExtractionResult {
-  // §6.5: pass through confidence and marginal_evidence. The prompt requests
-  // both on every signal; we're defensive here in case the LLM omits them.
+  // §6.5: pass through confidence and marginal_evidence. The prompt + strict
+  // JSON Schema both require them; we're defensive here in case the model
+  // (or a non-OpenAI failover provider) omits them anyway.
   const validConf = new Set(["high", "medium", "low"]);
-  const missingConf = ["intent","justification","tradeoffAwareness","stakeholderAwareness","ethicalAwareness"]
-    .filter(k => !validConf.has(parsed?.[k]?.confidence));
-  if (missingConf.length > 0) {
-    console.warn(`[signalExtractor] LLM did not return a valid confidence (high|medium|low) for: ${missingConf.join(", ")}`);
+  const allKeys = ["intent","justification","tradeoffAwareness","stakeholderAwareness","ethicalAwareness"];
+  const missingConf = allKeys.filter(k => !validConf.has(parsed?.[k]?.confidence));
+  // Track marginal_evidence omissions on signals where quality > 0 (where the
+  // contract requires it). quality === 0 is allowed to have empty evidence.
+  const presentKeysMissingMev = allKeys.filter(k => {
+    const sig = parsed?.[k];
+    if (!sig) return false;
+    const q = typeof sig.quality === "number" ? sig.quality : parseInt(sig.quality, 10);
+    if (!q || q <= 0) return false;
+    const mev = sig.marginal_evidence;
+    return typeof mev !== "string" || mev.trim().length === 0;
+  });
+  if (missingConf.length > 0 || presentKeysMissingMev.length > 0) {
+    // Single aggregated warning per extraction call. If this fires, either
+    // the prompt strengthening didn't take (try logging the raw response by
+    // setting DEBUG_SIGNAL_EXTRACTOR=1) or the request landed on a provider
+    // that doesn't honor strict json_schema mode. With requireStructuredOutput
+    // pinning routing, the latter should be impossible — so a warning here
+    // is a real red flag.
+    const parts: string[] = [];
+    if (missingConf.length > 0) {
+      parts.push(`omitted confidence on ${missingConf.length}/5 signals (${missingConf.join(", ")})`);
+    }
+    if (presentKeysMissingMev.length > 0) {
+      parts.push(`omitted marginal_evidence on ${presentKeysMissingMev.length} present-quality signals (${presentKeysMissingMev.join(", ")})`);
+    }
+    console.warn(`[signalExtractor] CONTRACT BREACH — ${parts.join("; ")}.`);
   }
   const passOptional = (raw: any) => {
     const out: { confidence?: "high" | "medium" | "low"; marginal_evidence?: string } = {};
@@ -309,12 +392,26 @@ Extract the 5 signals. Return JSON only.`;
       ],
       {
         responseFormat: "json",
-        maxTokens: 512,
+        // Strict structured output. OpenAI-compatible providers (replit-openai,
+        // openai-direct, openrouter) send response_format json_schema and FORCE
+        // all four fields per signal at the API layer.
+        jsonSchema: SIGNAL_EXTRACTION_SCHEMA,
+        // Pin routing to the OpenAI-compatible group. Without this the LLM
+        // router can fail over to Gemini/Anthropic, which silently ignore
+        // jsonSchema — exactly the silent-failure mode FIX 2 set out to fix.
+        requireStructuredOutput: true,
+        // Slightly higher token budget — strict schema mode requires the model
+        // to emit every required field even when extracted_text is empty.
+        maxTokens: 768,
         model: "gpt-4o-mini",
         agentName: "signalExtractor",
         sessionId: parseInt(context.sessionId) || undefined,
       }
     );
+
+    if (process.env.DEBUG_SIGNAL_EXTRACTOR === "1") {
+      console.log("[signalExtractor] RAW LLM response:\n" + response);
+    }
 
     const parsed = JSON.parse(response);
     const signals = parseSignalResult(parsed);

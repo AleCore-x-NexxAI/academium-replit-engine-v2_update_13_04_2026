@@ -30,6 +30,12 @@ export async function generateChatCompletion(
     temperature?: number;
     maxTokens?: number;
     responseFormat?: "json" | "text";
+    jsonSchema?: {
+      name: string;
+      schema: Record<string, any>;
+      strict?: boolean;
+    };
+    requireStructuredOutput?: boolean;
     model?: SupportedModel;
     agentName?: string;
     sessionId?: number;
@@ -40,6 +46,8 @@ export async function generateChatCompletion(
     temperature: options?.temperature,
     maxTokens: options?.maxTokens,
     responseFormat: options?.responseFormat,
+    jsonSchema: options?.jsonSchema,
+    requireStructuredOutput: options?.requireStructuredOutput,
     model: options?.model,
     preferredProvider: "openai",
     agentName: options?.agentName,

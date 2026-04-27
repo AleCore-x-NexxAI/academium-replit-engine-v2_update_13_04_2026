@@ -40,6 +40,32 @@ export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "json" | "text";
+  /**
+   * Optional strict JSON Schema (OpenAI structured outputs). When supplied
+   * AND `responseFormat === "json"`, OpenAI-compatible providers send
+   * `response_format: { type: "json_schema", json_schema: ... }` instead of
+   * the loose `json_object` mode. Non-OpenAI providers (Gemini, Anthropic)
+   * ignore this and fall back to their native JSON behavior, so callers must
+   * still keep a self-describing JSON request in the prompt.
+   *
+   * Per OpenAI strict mode requirements: every object level must list all
+   * properties in `required` and set `additionalProperties: false`.
+   */
+  jsonSchema?: {
+    name: string;
+    schema: Record<string, any>;
+    strict?: boolean;
+  };
+  /**
+   * When true, restrict routing to providers that natively support OpenAI
+   * strict structured outputs (`response_format: json_schema`): currently
+   * `replit-openai`, `openai-direct`, `openrouter`. Failover stays inside
+   * that group; if every OpenAI-compatible provider fails the request fails
+   * loudly rather than silently degrading to Gemini/Anthropic where the
+   * `jsonSchema` field is ignored. Set this on every call where the strict
+   * schema is load-bearing for downstream parsing (e.g. signalExtractor).
+   */
+  requireStructuredOutput?: boolean;
   model?: SupportedModel;
   preferredProvider?: ProviderType;
   skipFailover?: boolean;
