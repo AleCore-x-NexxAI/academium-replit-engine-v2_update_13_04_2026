@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "yu-8iYN5Dvryn65azEHpO"
+uri = "file://attached_assets/recent-sessions-diagnosis.md"
+type = "text"
+title = "Recent sessions diagnostic report"

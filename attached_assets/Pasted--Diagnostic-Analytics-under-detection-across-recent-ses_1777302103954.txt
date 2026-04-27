@@ -1,0 +1,189 @@
+# Diagnostic — Analytics under-detection across recent sessions (Thursday → Monday)
+
+Do NOT fix anything in this task. This task is forensics only. The goal is to identify, with concrete data from real failed sessions, exactly why the analytics layer marked frameworks and competencies as absent when student reasoning was clearly present. Multiple sessions are involved across the last ~5 days — we need to see all of them, not just one, to spot whether this is a single regression, a per-scenario problem, or systemic.
+
+Once we know the root cause from real data, we'll write a targeted fix in a follow-up task. Do not theorize without data.
+
+## Background
+
+Multiple test runs across roughly Thursday April 23 through Monday April 27 produced working simulations: case generation, decision flow, KPI movement, and end-of-run narratives all worked. But the professor analytics dashboard repeatedly returned:
+- Cost-Benefit Analysis, Stakeholder Analysis, SWOT Analysis: marked **absent**
+- Tradeoff Awareness signal: correctly recognized
+- Applied Course Theory: 0/N
+- Analytical / Strategic / Stakeholder / Ethical reasoning: "Not Yet Evidenced"
+- Reasoning-depth: "surface-level" across the run
+
+Same pattern on the student-side results page. The diagnostic hypothesis is detector keyword-overreliance, but Tier 2 semantic detection has been shipped since commit `0c77c08`, so something else changed or never worked correctly for these frameworks. We need data, not theories.
+
+## What to do
+
+### Step 0 — Build a diagnostic script, not inline logging
+
+Create `server/scripts/diagnose_recent_sessions.ts`. Everything below is implemented in that script. Don't add `console.log`s anywhere in production code. The script reads from the database, reads from the existing handler functions where possible (importing them) or replicates their logic where they're not exported, and writes a single markdown report.
+
+Output the report to `attached_assets/recent-sessions-diagnosis.md`. Also paste the summary section inline in the agent reply.
+
+### Step 1 — Identify all completed sessions in the window
+
+Query the database for all sessions where `completed_at >= '2026-04-23 00:00:00 UTC'` AND `completed_at <= NOW()`. Order by `completed_at ASC`. For each session, capture:
+- session.id
+- session.scenarioId
+- session.completed_at
+- scenario.title
+- scenario.language
+- scenario.creator (or whatever field tells us who built it)
+- count of decisionPoints
+- per-turn `decisionPoints[i].format` (multiple_choice vs free_response)
+- length of `currentState.framework_detections` (should equal decisionPoints count if completed cleanly)
+
+Print this as a table at the top of the report. We need to see how many runs are in scope, which scenarios they map to, and whether the MCQ-only-override issue (Task #95) was active for runs before April 25 vs after.
+
+If zero sessions match, widen to last 14 days and note the widened window in the report. If still zero, stop and report — there's nothing to diagnose.
+
+### Step 2 — For each session, capture the full diagnostic input
+
+For every session from Step 1, capture and write to the report:
+
+**(a) Pedagogical intent for the scenario:**
+- pedagogicalIntent.teachingGoal (full text)
+- pedagogicalIntent.targetFrameworks (id + name + canonicalId for each)
+- pedagogicalIntent.targetCompetencies
+- pedagogicalIntent.targetDisciplines
+- pedagogicalIntent.courseContext
+- pedagogicalIntent.reasoningConstraint (if any)
+
+**(b) Scenario frameworks (the tracked array used by the detector):**
+- scenario.frameworks: for each entry, id, name, canonicalId, primaryDimension, provenance, and whether it has a registry match in `FRAMEWORK_REGISTRY` (look up by canonicalId; report `MATCHED` or `MISSING`).
+- For any with `MISSING`: print the full framework object so we can see why it didn't map. This catches registry hydration regressions.
+
+**(c) Per-turn student input:**
+- Turn number
+- Format (MCQ / free-response)
+- Decision prompt
+- For MCQ: chosen option text + any free-text justification
+- For free-response: full verbatim student response
+- Word count of student contribution
+
+**(d) Per-turn framework_detections:**
+- For each detection in `currentState.framework_detections[i]`: framework_id, framework_name, canonicalId, level, confidence, detection_method, evidence, reasoning. Lay this out as a table per turn.
+
+**(e) Per-turn signals_detected:**
+- For each of the 5 signals: quality, extracted_text (verbatim), confidence, marginal_evidence
+
+**(f) Final dashboard outputs:**
+- Call the actual handler functions or hit the endpoints with the scenario's professor user identity:
+  - `POST /api/scenarios/:scenarioId/module-health` — full response
+  - `POST /api/scenarios/:scenarioId/class-stats` — full response
+  - `GET /api/sessions/:sessionId/reasoning-signals` — full response
+- Print all three responses per session.
+
+**(g) Cache state:**
+- For each scenarioId, print the current `dashboardCache` contents for `module-health-${scenarioId}` and `class-stats-${scenarioId}`.
+- Print the version-token for the scenario and whether the cached value's version matches.
+- If the cached `completed_at` predates the session's actual completion, flag it.
+
+This produces a lot of output per session. That's fine. Group by session in the markdown with H2 headers per session and H3 headers per turn. The next steps walk this data; we need it all in front of us.
+
+### Step 3 — Tier-by-tier diagnosis per failed framework, per session
+
+For every session, pick the frameworks the diagnostic pack flagged as failing (Cost-Benefit, Stakeholder, SWOT, plus any other framework that the dashboard marked `absent` or `not_yet_evidenced` for that session). For each failed framework on each turn, walk the detector's three tiers and report what happened:
+
+**Tier 1 (keyword check):**
+- Print the framework's `domainKeywords[]` from `FRAMEWORK_REGISTRY`.
+- Intersect with lowercased student input.
+- If a multi-word keyword like "cost-benefit analysis" wasn't there but a single-word like "costs" was, note whether the multi-word-tightening rules accept single-word matches for that framework. Output: matched / not matched + which keywords matched if any.
+
+**Tier 2 (semantic check):**
+- Was this framework included in the `needsSemantic` batch passed to `semanticFrameworkCheck`? (Look at the call site in `frameworkDetector.ts`.) Output: yes / no.
+- If no, why not? Was it eliminated by an earlier filter? Did the registry hydration drop it?
+- If yes, what verdict did the LLM return? Reproduce by calling `semanticFrameworkCheck` directly with the same student input + framework rubric. Output: applied=true/false, confidence, quotedReasoning, explanation.
+- If LLM said `applied=true` with confidence medium+, did the §T-003B word-count floor reject it? Print word count and the floor decision (rejected via Floor B / downgraded via Floor A / passed unchanged).
+- Final answer: did Tier 2 push a detection?
+
+**Tier 3 (signal-pattern):**
+- Does the framework's registry entry have a `signalPattern`? Print it.
+- Did the required signals reach `minQuality`? Cross-reference with the per-turn `signals_detected` from Step 2(e). Output: matched / not matched.
+
+**End state:**
+- What is the actual recorded detection for this framework on this turn? (level, detection_method, reasoning)
+- Does this match what the tier walkthrough above says SHOULD have happened? If yes, the detector is doing what it's told and the issue is upstream (rubric / keywords / signal pattern). If no, there's a pipeline bug between the LLM verdict and the final push.
+
+Format like this per framework per turn (keep concise but complete):
+
+> **Cost-Benefit Analysis, Session abc-123, Turn 3 (free-response, 47 words):**
+> - Tier 1: domainKeywords=[...]. Student input matched [...] / no match. → no_match
+> - Tier 2: in batch=YES. LLM returned applied=true, confidence=medium, quoted="...". Word count=47, floor did not trigger. → SHOULD have pushed implicit/medium.
+> - Tier 3: signalPattern=[justification@2, tradeoff@2]. Actual signals: justification.quality=2, tradeoffAwareness.quality=3. → would have matched if Tier 2 hadn't fired.
+> - Recorded: not_evidenced, detection_method=none, reasoning="Tier 1 and Tier 2 returned no match."
+> - **Discrepancy: Tier 2 LLM said applied=true but final detection is not_evidenced. Pipeline bug.**
+
+That last line — discrepancy or no discrepancy — is what we need across all the sessions to find the pattern.
+
+### Step 4 — Cross-session pattern analysis
+
+After Step 3 has produced the per-session per-turn-per-framework walkthroughs, aggregate:
+
+**(a) Tier 2 firing rate:** Across all (session × turn × failed-framework) combinations, what fraction had Tier 2 actually run? If <100%, why is it not running on the rest? (Was the framework not in the batch? Did Tier 1 short-circuit it?)
+
+**(b) Tier 2 verdict-vs-detection alignment:** Of the cases where Tier 2 ran AND the LLM returned `applied=true` with confidence medium or high, what fraction made it to the final detections as `level=implicit`? Should be ~100%. If less, the pipeline is dropping detections — find out where.
+
+**(c) Tier 2 verdict-vs-rubric alignment:** Of the cases where Tier 2 ran AND the LLM returned `applied=false`, do the LLM's reasoning fields look correct given the student's actual input? Spot-check 5-10 of these. Output: rubric is too strict (LLM is rejecting reasoning a professor would accept) / rubric is right (the student really didn't apply this framework on this turn) / mixed.
+
+**(d) Floor false-positive rate:** Of cases where the §T-003B word-count floor fired (downgrade or reject), how many would have been correct detections without the floor? Output: count of probable false-positives where the input was short but reasoning was complete.
+
+**(e) Provenance distribution:** Across the failed sessions, what's the distribution of `scenario.frameworks[].provenance`? If many failed frameworks have `provenance="inferred"` or undefined (instead of "explicit"), they may have been treated as suggested rather than target — which means dashboard logic, not detector logic, is the bug.
+
+**(f) Cache staleness:** How many sessions have a cached dashboard value whose timestamp predates the session's own completion? If many, the bug is at least partially caching, and the caching could be hiding correct detection results.
+
+**(g) Time-bucket pattern:** Did failures cluster after a specific commit landed? Cross-reference session `completed_at` with commit timestamps in the last 5 days (`d454cfc` Apr 22, `4f7d956` Apr 23 FIX 1, `e05f1f2` Apr 24 FIX 2, `f21add4` Apr 25 FIX 3, `9706096` Apr 25 FIX 4, `d173499`/`9dc1eee` Apr 26+ Task #95 MCQ control). If failures started after a specific commit, that commit may be the regression.
+
+**(h) Per-framework breakdown:** Which specific frameworks failed most often across all sessions? Tradeoff Awareness was reported as working — but is it actually a SIGNAL, not a framework? Confirm: tradeoff is a SIGNAL (in `signals_detected`), not a framework. So when the diagnostic pack said "Tradeoff Awareness was the one signal that landed," they meant the tradeoffAwareness signal was the only one extracted correctly across the run, not that a framework named "Tradeoff" worked. Verify this distinction in the data.
+
+### Step 5 — Reasoning-depth diagnosis
+
+Find where reasoning-depth score is computed (likely in director.ts dashboard summary or analytics aggregator). Print:
+- The exact formula or LLM prompt that produces the reasoning-depth score.
+- For every session, the inputs that went into the score: word counts per turn, signal averages, framework detection counts.
+- The output: per-turn depth values that landed on the radar/graph.
+
+Specifically answer:
+- Does the formula multiply by word count, or use word count as a gate?
+- Does it include MCQ turns at full weight? Does it include the option text content of MCQ turns or only any free-text justification?
+- Is the formula treating "no framework detection" as "no reasoning"? If yes, it's compounding the detector bug — every failure to detect a framework also depresses reasoning-depth.
+
+### Step 6 — Confirm FIX 2 actually shipped
+
+Across all sessions, count how many of the 5 signals × N turns × M sessions have `signals_detected[i].<signal>.confidence` populated as `"high" | "medium" | "low"` vs undefined.
+
+If MOST are undefined, FIX 2 either didn't take effect or the signal extractor LLM is silently dropping the field. Distinguish: (a) does the prompt actually include the new schema with `confidence` and `marginal_evidence` (read it from `signalExtractor.ts`)? (b) is the parser populating it when present (read `parseSignalResult`)? (c) is the LLM returning it on real calls (look at the data)?
+
+### Step 7 — Summary
+
+After everything above, write a clear summary section answering:
+
+1. **How many sessions are in scope?** Window: Thursday Apr 23 → Monday Apr 27. Count + earliest + latest.
+2. **What fraction of (session × turn × failed-framework) pairs had Tier 2 semantic detection actually run?**
+3. **Of cases where Tier 2 ran and LLM said applied=true with confidence medium+, what fraction reached the dashboard as `implicit`?** Should be near 100%. If less, the pipeline is broken.
+4. **Is the failure pattern systemic across all sessions, or specific to certain scenarios/frameworks/users?**
+5. **Did failures correlate with a specific commit?** (cite the commit if yes)
+6. **Are dashboard caches stale on any of the failed sessions?** Count.
+7. **Is `confidence` populated on `signals_detected` after FIX 2?** Count populated vs undefined.
+8. **Is reasoning-depth computation word-count-driven, framework-detection-driven, or both?**
+9. **What is the single most likely root cause based on the data?** (commit to a hypothesis from the data, not a guess from the diagnostic pack)
+10. **What is the second most likely root cause?** (in case the first is wrong)
+
+## Constraints
+
+- DO NOT modify any production code in this task. No fixes, no refactors, no "while I'm here" cleanups. The only new code is the diagnostic script in `server/scripts/`.
+- If the script needs internal handler functions that aren't currently exported, refactor minimally to export them (read-only access to logic) — but do not change their behavior. Note any refactor in the report.
+- If any session's data is missing/null/malformed, list it explicitly. Don't fabricate.
+- Output everything to `attached_assets/recent-sessions-diagnosis.md`. Also paste the Step 7 summary directly in your reply.
+- If the script takes more than ~10 minutes to run on the available sessions, paginate or sample — but say so in the report. Do not silently truncate.
+- Real LLM calls in Step 3 (reproducing semantic verdicts) cost tokens. Cap to 100 reproductions max across all sessions; sample evenly if more cases exist. Note the sample method in the report.
+
+## Report
+
+Reply with:
+- Path to the report file
+- Number of sessions in scope
+- The full Step 7 summary section, inline in the chat reply
