@@ -1,0 +1,68 @@
+TASK 2 — Fix FIX 2's silent failure: signals never carry confidence or marginal_evidence
+Context
+FIX 2 (commit e05f1f2) updated the signal extractor's prompt schema to request confidence and marginal_evidence per signal, and the parser passes them through if present. But the forensic diagnostic measured 0/125 signal slots populated. The LLM is silently omitting both fields on every call.
+The most likely cause: the prompt asks for the fields but the model isn't compelled enough. The instruction is buried in a JSON schema example rather than declared as a hard requirement, and there's no structured-output enforcement.
+After TASK 1 lands, MCQ turns will be running this same extractor — the fix here applies to both MCQ and free-response.
+Do
+2.1 Inspect the current prompt and identify why it's being ignored
+Read server/agents/signalExtractor.ts. Find the system prompt for both EN and ES. Look at:
+
+How the JSON schema with the 4 fields per signal is presented (is it // example response shape style, or is it framed as a hard contract?).
+Whether the prompt has explicit "you MUST return all four fields" wording.
+Whether the response is parsed via JSON.parse(text) or via a structured-output API (response_format: {type: "json_schema"} for OpenAI, etc.).
+Whether the warning log added in FIX 2 ever fires in production logs (search Replit logs for [signalExtractor] LLM did not return confidence).
+
+Note the findings in your report.
+2.2 Tighten the prompt
+In both EN and ES system prompts, add a block immediately before the JSON schema example:
+EN:
+RESPONSE CONTRACT (strict — non-negotiable):
+For every one of the 5 signals (intent, justification, tradeoffAwareness, stakeholderAwareness, ethicalAwareness), you MUST return all four fields:
+1. quality — integer 0, 1, 2, or 3
+2. extracted_text — string (verbatim student quote, or "" if signal absent)
+3. confidence — exactly one of: "high", "medium", "low"
+4. marginal_evidence — string describing the specific token(s) or phrase(s) that drove your quality decision (or "" if quality === 0)
+
+Returning a signal with fewer than four fields is a contract violation. If you are uncertain about confidence, return "low". If you cannot identify marginal_evidence on a present signal, return the same text as extracted_text.
+ES: equivalent translation. Keep the confidence literal values in English (high/medium/low) — the parser checks for those exact strings.
+Also rename the JSON example heading from "Example:" or "Format:" to "REQUIRED RESPONSE FORMAT — return EXACTLY this JSON shape:". Subtle, but priming wording matters when the model is being lazy.
+2.3 Add structured-output enforcement if available
+Check what LLM provider/model the signal extractor uses. If it's OpenAI gpt-4o or gpt-4o-mini, use response_format: { type: "json_schema", json_schema: { ... strict: true ... } } with a JSON Schema declaring confidence and marginal_evidence as REQUIRED on every signal. Strict mode forces the model to return all required fields.
+If the provider doesn't support strict JSON schema (some older or non-OpenAI models), fall back to response_format: { type: "json_object" } plus the strengthened prompt above.
+If the underlying call is wrapped in a project-internal LLM client (e.g., server/llm/provider.ts), find the right place to plumb through the response_format option. Don't break other consumers of the same client.
+2.4 Verify the parser's pass-through logic still works
+parseSignalResult in signalExtractor.ts uses passOptional(raw). Currently:
+
+Copies confidence only if it's literally "high" | "medium" | "low".
+Copies marginal_evidence only if it's a non-empty string.
+
+After the prompt+schema tightening, the LLM should return both. The defensive logic is still good — keep it.
+Update the warning log threshold: instead of warning per-extraction-call when ANY signal is missing confidence, warn ONCE per extraction with the count of missing fields:
+tsif (missingConf.length > 0) {
+  console.warn(`[signalExtractor] LLM omitted confidence on ${missingConf.length}/5 signals: ${missingConf.join(", ")}. This indicates the prompt or response_format is not enforcing the contract.`);
+}
+2.5 Live verify
+Run a fresh student session (free-response, then MCQ). Pull signals_detected for any turn. Every signal has confidence: "high" | "medium" | "low" and marginal_evidence: <non-empty string when quality > 0>.
+If they don't, the LLM is still ignoring the contract. Diagnostic step: log the raw LLM response text BEFORE parseSignalResult runs, for one extraction. Inspect — is the model returning confidence literally? If yes, parser bug. If no, prompt/schema enforcement is still insufficient.
+Preserve
+
+passOptional parser helper — keep its defensive behavior.
+All TASK 1 changes (MCQ extraction).
+All FIX 1, FIX 3, FIX 4 changes.
+Porter regression, dashboardCache TTL, no .github/workflows/.
+defaultSignals() ABSENT fallback path — does not need confidence (it's a deterministic fallback, not an LLM result).
+
+Gate
+
+Live data shows populated fields. Run a free-response session. Pull signals_detected[turnNum-1]. All 5 signals have confidence and (where quality>0) marginal_evidence populated.
+Same for MCQ (depends on TASK 1 landing first).
+Warning log behavior. Force a model that doesn't honor strict mode (or temporarily revert one of the prompt strengthenings) — confirm the warning log fires with the count of missing fields. Restore.
+Coverage measurement. Run 5 fresh student sessions (mix of MCQ and FR). Re-run the forensic diagnostic script. The "FIX 2 confidence-field coverage" should now be ≥95% (some LLM noise tolerated, but not 0%).
+Existing tests pass.
+
+Report
+
+Before/after sample of one signal's parsed shape.
+Coverage % from the re-run forensic diagnostic.
+Diff stats.
+

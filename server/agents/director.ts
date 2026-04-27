@@ -331,6 +331,8 @@ function resolveOptionSignature(
   return decisionPoint.tradeoffSignature;
 }
 
+// LEGACY: kept as fallback for graceful degradation when extractSignals fails.
+// Primary path is real LLM extraction. See director.ts:740.
 function buildMcqSignals(studentInput: string, decisionPoint?: DecisionPoint): SignalExtractionResult {
   const tradeoffSignature = resolveOptionSignature(studentInput, decisionPoint);
   const hasTradeoff = tradeoffSignature &&
@@ -738,21 +740,84 @@ export async function processStudentTurn(
   let evidenceLog: DecisionEvidenceLog;
 
   if (isMcq) {
-    const mcqSignals = buildMcqSignals(context.studentInput, decisionPoint);
-    evidenceLog = {
-      signals_detected: mcqSignals,
-      rds_score: null,
-      rds_band: null,
-      competency_evidence: mapCompetencyEvidence(mcqSignals),
-      raw_signal_scores: {
-        intent: mcqSignals.intent.quality,
-        justification: mcqSignals.justification.quality,
-        tradeoffAwareness: mcqSignals.tradeoffAwareness.quality,
-        stakeholderAwareness: mcqSignals.stakeholderAwareness.quality,
-        ethicalAwareness: mcqSignals.ethicalAwareness.quality,
-      },
-      isMcq: true,
-    };
+    // Primary path: run the full LLM signal extractor on the chosen-option text
+    // (and any justification the student appended). The MCQ submissionText
+    // built by InputConsole.tsx already concatenates "<chosen option>\n\nJustification: <text>",
+    // so context.studentInput contains real, multi-sentence, analyzable prose.
+    //
+    // After extraction, apply the option-signature TRADEOFF FLOOR: an option
+    // with a structural tradeoffSignature literally encodes the trade-off, so
+    // tradeoffAwareness must never sit below PRESENT for that option, regardless
+    // of what the LLM returned. The floor can only BUMP, never demote.
+    const signalStart = Date.now();
+    let mcqSource: "mcq_full_extraction" | "mcq_signature_fallback" = "mcq_full_extraction";
+    let extractorErrorMessage: string | undefined;
+
+    try {
+      const candidate = await extractSignals(context);
+
+      // extractSignals has its own internal try/catch that swallows LLM/parse
+      // errors and returns all-ABSENT defaultSignals. Because this branch only
+      // runs after classifyInput PASSed (input is non-empty and on-topic), an
+      // all-ABSENT result almost certainly indicates extractor failure, not
+      // genuine analysis. Detect that fingerprint and route to the structural
+      // fallback so MCQs with a tradeoff signature still get the floor and we
+      // emit a diagnosable mcq_signature_fallback turn-event.
+      const sd = candidate.signals_detected;
+      const allAbsent =
+        sd.intent.quality === SignalQuality.ABSENT &&
+        sd.justification.quality === SignalQuality.ABSENT &&
+        sd.tradeoffAwareness.quality === SignalQuality.ABSENT &&
+        sd.stakeholderAwareness.quality === SignalQuality.ABSENT &&
+        sd.ethicalAwareness.quality === SignalQuality.ABSENT;
+      if (allAbsent) {
+        throw new Error("extractSignals returned all-ABSENT defaults (LLM/parse failure)");
+      }
+
+      evidenceLog = candidate;
+
+      const tradeoffSignature = resolveOptionSignature(context.studentInput, decisionPoint);
+      const hasTradeoff =
+        !!tradeoffSignature &&
+        !!tradeoffSignature.dimension &&
+        !!tradeoffSignature.cost &&
+        !!tradeoffSignature.benefit;
+      if (hasTradeoff && evidenceLog.signals_detected.tradeoffAwareness.quality < SignalQuality.PRESENT) {
+        evidenceLog.signals_detected.tradeoffAwareness = {
+          ...evidenceLog.signals_detected.tradeoffAwareness,
+          quality: SignalQuality.PRESENT,
+          extracted_text: `${tradeoffSignature!.dimension}: ${tradeoffSignature!.cost} vs ${tradeoffSignature!.benefit}`,
+        };
+        // Recompute downstream: RDS, band, competency, and raw_signal_scores
+        // must reflect the post-floor state.
+        evidenceLog.rds_score = computeRDS(evidenceLog.signals_detected);
+        evidenceLog.rds_band = classifyRDSBand(evidenceLog.rds_score);
+        evidenceLog.competency_evidence = mapCompetencyEvidence(evidenceLog.signals_detected);
+        evidenceLog.raw_signal_scores.tradeoffAwareness = SignalQuality.PRESENT;
+      }
+
+      evidenceLog.isMcq = true;
+    } catch (err) {
+      extractorErrorMessage = (err instanceof Error ? err.message : String(err)).slice(0, 200);
+      console.error("[director] MCQ signal extraction failed; falling back to mcq_signature stub:", extractorErrorMessage);
+      mcqSource = "mcq_signature_fallback";
+      const fallbackSignals = buildMcqSignals(context.studentInput, decisionPoint);
+      evidenceLog = {
+        signals_detected: fallbackSignals,
+        rds_score: null,
+        rds_band: null,
+        competency_evidence: mapCompetencyEvidence(fallbackSignals),
+        raw_signal_scores: {
+          intent: fallbackSignals.intent.quality,
+          justification: fallbackSignals.justification.quality,
+          tradeoffAwareness: fallbackSignals.tradeoffAwareness.quality,
+          stakeholderAwareness: fallbackSignals.stakeholderAwareness.quality,
+          ethicalAwareness: fallbackSignals.ethicalAwareness.quality,
+        },
+        isMcq: true,
+      };
+    }
+
     storage.createTurnEvent({
       sessionId: context.sessionId,
       eventType: "agent_call",
@@ -760,11 +825,15 @@ export async function processStudentTurn(
       rawStudentInput: context.studentInput,
       eventData: {
         agentName: "signalExtractor",
-        durationMs: 0,
-        source: "mcq_tradeoff_signature",
+        durationMs: Date.now() - signalStart,
+        source: mcqSource,
         isMcq: true,
         hasTradeoffSignature: !!decisionPoint?.tradeoffSignature,
+        rds_score: evidenceLog.rds_score,
+        rds_band: evidenceLog.rds_band,
         signals: evidenceLog.raw_signal_scores,
+        competency_evidence: evidenceLog.competency_evidence,
+        ...(extractorErrorMessage ? { errorMessage: extractorErrorMessage } : {}),
       },
     }).catch(err => console.error("[TurnEvent] Failed to log signalExtractor (MCQ):", err));
   } else {
@@ -799,7 +868,12 @@ export async function processStudentTurn(
   // Phase 6 §2: when narrator reads context.framework_detections[turnCount]
   // for the framework-response directive, it must see the CURRENT turn's
   // detections, not stale history. We append below after detection runs.
-  let frameworkDetections = !isMcq && scenarioFrameworks.length > 0
+  // Framework detection runs on BOTH MCQ and free-response turns. The detector
+  // operates on context.studentInput (which for MCQ already contains chosen
+  // option text + justification, see InputConsole.tsx:84) and on the extracted
+  // signals. The §T-003B word-count floor in frameworkDetector.ts continues to
+  // gate short MCQ-only picks correctly.
+  let frameworkDetections = scenarioFrameworks.length > 0
     ? await detectFrameworks(context.studentInput, evidenceLog.signals_detected, scenarioFrameworks, context.language)
     : [];
 
@@ -807,7 +881,7 @@ export async function processStudentTurn(
   // Promotes not_evidenced → implicit (low confidence) when the framework's
   // primary dimension shows PRESENT/STRONG signals. Never demotes. Logs a
   // disagreement event for observability.
-  if (!isMcq && scenarioFrameworks.length > 0) {
+  if (scenarioFrameworks.length > 0) {
     // Phase 6 §7: pedagogicalIntent now flows through AgentContext.scenario
     // and is forwarded to checkConsistency, which uses targetFrameworks to
     // scope strict consistency-promotion eligibility (Apéndice D §3).

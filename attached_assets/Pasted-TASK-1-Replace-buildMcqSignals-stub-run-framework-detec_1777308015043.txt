@@ -1,0 +1,100 @@
+TASK 1 — Replace buildMcqSignals stub + run framework detection on MCQ turns
+Context
+The MCQ analytics blackhole has two parts in server/agents/director.ts:
+
+Lines 740–769: when isMcq, the code calls buildMcqSignals(...) instead of extractSignals(...). The stub at lines 334–352 returns 4 ABSENT signals + 1 hardcoded PRESENT tradeoffAwareness if the option has a tradeoff signature. The full LLM signal extractor never sees the chosen option text or the student's justification.
+Line 802: let frameworkDetections = !isMcq && scenarioFrameworks.length > 0 ? await detectFrameworks(...) : [];. Framework detection is skipped on MCQ turns. Line 810's consistency check is also gated by !isMcq.
+
+Meanwhile the client (client/src/components/InputConsole.tsx:84–93) builds submissionText by concatenating the chosen option text plus any justification:
+submissionText = selectedOption
+if (requiresJustification && justification.trim()) {
+  submissionText += `\n\nJustification: ${justification.trim()}`
+}
+So context.studentInput on MCQ turns is real, multi-sentence, analyzable text. The data is arriving; the analytics pipeline throws it away.
+Do
+1.1 Run real signal extraction on MCQ turns
+In server/agents/director.ts, find the if (isMcq) block at line 740. Replace the entire branch with a flow that:
+
+Calls extractSignals(context) exactly the same way the free-response branch does (line 772).
+After extraction, if the decision has a tradeoff signature on the chosen option (resolveOptionSignature(context.studentInput, decisionPoint) returns truthy), POST-PROCESS the extracted signals: if the LLM returned tradeoffAwareness.quality < 2 (PRESENT), bump it to PRESENT and set extracted_text to ${tradeoffSignature.dimension}: ${tradeoffSignature.cost} vs ${tradeoffSignature.benefit}. Rationale: the option signature is structural ground truth — the option literally encodes a cost/benefit tradeoff. The LLM might miss it on terse picks; the option signature is a floor, not a ceiling. Never DOWNGRADE a signal the LLM scored higher.
+Update the turn-event logging block to reflect that MCQ is no longer a "stub" path: keep the source: "mcq_full_extraction" field for observability, but remove the durationMs: 0 lie and use the actual elapsed time the same way the free-response branch does (Date.now() - signalStart).
+Set evidenceLog.isMcq = true (preserved field; downstream consumers still need to know the turn was MCQ for UI rendering).
+The other evidenceLog fields (rds_score, rds_band, competency_evidence, raw_signal_scores) must be computed from the real extracted signals, NOT from the stub. The free-response branch's logic at extractSignals already populates these correctly — just use what it returns.
+
+The result: MCQ turns produce real signals_detected based on the actual chosen option text and justification, with the tradeoff floor preserved.
+Do NOT delete buildMcqSignals in this commit — leave it in the file but unreferenced. We may want to fall back to it if the signal extractor fails on a turn (see 1.4 graceful degradation). Add a TODO comment above its declaration: // LEGACY: kept as fallback for graceful degradation when extractSignals fails. Primary path is real LLM extraction. See director.ts:740.
+Do NOT delete resolveOptionSignature — it is still called from the new MCQ branch as the tradeoff floor.
+1.2 Run framework detection on MCQ turns
+Same file. Line 802:
+tslet frameworkDetections = !isMcq && scenarioFrameworks.length > 0
+  ? await detectFrameworks(context.studentInput, evidenceLog.signals_detected, scenarioFrameworks, context.language)
+  : [];
+Remove the !isMcq guard:
+tslet frameworkDetections = scenarioFrameworks.length > 0
+  ? await detectFrameworks(context.studentInput, evidenceLog.signals_detected, scenarioFrameworks, context.language)
+  : [];
+Same change at line 810 (the consistency check if (!isMcq && scenarioFrameworks.length > 0) becomes if (scenarioFrameworks.length > 0)).
+The framework detector already accepts the studentInput string and signals — it doesn't care about MCQ vs free-response. Tier 1 keyword and Tier 2 semantic both run on the concatenated option text + justification. The §T-003B word-count floor still applies (and correctly: a 13-word MCQ pick alone shouldn't sustain a medium-confidence implicit detection, but a 60-word MCQ + justification should).
+1.3 Verify nothing downstream relies on the MCQ stub's specific values
+Grep for consumers that read signals_detected and might break if MCQ signals are no longer all-zero:
+
+mapCompetencyEvidence — reads signals_detected, maps to competency tags. Expected behavior: produces real competency evidence on MCQ turns. Verify it doesn't blow up on richer signal data.
+computeRDS — pure sum, no MCQ branching. Safe.
+classifyRDSBand — pure thresholds. Safe.
+The dashboard module-health and class-stats handlers — they read framework_detections and don't branch on isMcq. Now that MCQ turns produce real detections, the dashboard will start showing them. Confirm weightedScore (FIX 1) and Applied Course Theory (FIX 1) still work end-to-end on a mixed-format scenario.
+Any UI rendering that special-cases MCQ — ScenarioDashboard.tsx's ReasoningSignalsTab. It currently filters by isSubstantiveExtractedText. Real MCQ extracted signals will have actual text — they'll start appearing. That's the desired behavior, but make sure the rendering doesn't crash.
+
+1.4 Graceful degradation — if extractSignals fails on an MCQ turn
+The free-response branch wraps extractSignals in nothing — failures propagate up. For MCQ, falling back to the old buildMcqSignals stub on signal extractor failure is better than producing no signals at all (the old behavior was at least non-crashing).
+Wrap the new MCQ extractSignals call in a try/catch:
+tslet evidenceLog: DecisionEvidenceLog;
+try {
+  const signalStart = Date.now();
+  evidenceLog = await extractSignals(context);
+  // ... post-process tradeoff floor here ...
+  // ... turn event logging here ...
+} catch (err) {
+  console.error("[director] MCQ signal extraction failed; falling back to mcq_signature stub:", err);
+  const fallbackSignals = buildMcqSignals(context.studentInput, decisionPoint);
+  evidenceLog = {
+    signals_detected: fallbackSignals,
+    rds_score: null,
+    rds_band: null,
+    competency_evidence: mapCompetencyEvidence(fallbackSignals),
+    raw_signal_scores: { /* ... */ },
+    isMcq: true,
+  };
+  // log fallback turn event with source: "mcq_signature_fallback"
+}
+Apply the same pattern to free-response if you want symmetry, but it's not required — free-response failure has always propagated up.
+1.5 Update the per-turn logging label
+Around line 762 the turn event logs source: "mcq_tradeoff_signature". Change to source: "mcq_full_extraction" on the new path, and source: "mcq_signature_fallback" on the catch path. We need to be able to tell from logs which path actually ran.
+Preserve (absolute)
+
+buildMcqSignals function definition itself — kept as fallback only.
+resolveOptionSignature — still called.
+The tradeoff floor (option signature can BUMP tradeoffAwareness, never demote).
+evidenceLog.isMcq = true — UI relies on this.
+All FIX 1, FIX 2, FIX 3, FIX 4 changes.
+Porter regression test fail-loud.
+dashboardCache TTL at 5 * 60 * 1000.
+buildEligibleSet legacy fallback in frameworkConsistency.ts:59.
+No .github/workflows/.
+The §T-003B word-count floors in frameworkDetector.ts — they apply to both MCQ and free-response now (correct behavior).
+
+Gate
+
+MCQ signal extraction runs. Pick any scenario with at least one MCQ turn. Run a fresh student session. After each MCQ turn, query decisionEvidenceLogs[turnNumber-1].signals_detected. At least one of intent, justification, stakeholderAwareness, ethicalAwareness has quality > 0 for a turn where the student wrote a non-trivial justification (>20 words). The all-zero-except-tradeoff pattern from the diagnostic is gone.
+Framework detection runs on MCQ. Same session. Check framework_detections[turnNumber-1] after each MCQ turn — it's a non-empty array (one entry per scenario framework, with level populated). The empty-array MCQ pattern is gone.
+Tradeoff floor preserved. A student picks an option with a tradeoff signature, writes no justification (or a 5-word one). tradeoffAwareness.quality >= 2 (PRESENT). The other 4 signals can be 0–1 (LLM extracted from short text). Tradeoff didn't get demoted.
+Mixed-format scenario end-to-end. Create a scenario with 2 MCQ + 3 free-response turns. Run a student session with substantive answers on all 5. Open the dashboard. Module Health shows non-zero detections from BOTH the MCQ and free-response turns. Reasoning-signals tab shows real signal rows from both MCQ and free-response turns (not just FR ones).
+Graceful degradation. Temporarily force extractSignals to throw on MCQ. Re-run a turn. The session does not crash; the fallback stub fires; turn-event log shows source: "mcq_signature_fallback". Restore.
+Existing tests pass. All 5 calibration / merge / cache tests still green.
+Re-run forensic diagnostic on a NEW MCQ-heavy session. Run a fresh 5-MCQ session like 41188a51's profile (60–90 word justifications per turn). The pipeline-bug candidates table from the diagnostic should be EMPTY for this new session — Tier 2 verdicts should match recorded detections.
+
+Report
+
+Diff summary per file.
+Inline paste of one new MCQ turn's signals_detected showing real (non-zero) values across multiple signals.
+Inline paste of one new MCQ turn's framework_detections showing populated detections.
+Confirmation gates 1–7 pass.

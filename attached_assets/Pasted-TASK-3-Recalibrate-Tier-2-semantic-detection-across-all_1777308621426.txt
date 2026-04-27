@@ -1,0 +1,206 @@
+TASK 3 — Recalibrate Tier 2 semantic detection across all 41 frameworks
+Context
+The current Tier 2 prompt (semanticFrameworkCheck in server/agents/frameworkDetector.ts:120-200) asks the LLM for a binary applied: true | false plus a confidence: high | medium | low. This two-axis design has two problems the diagnostic surfaced:
+
+False negatives — the spot-check at Step 4(c) showed plausible implicit applications being rejected as applied: false for SWOT, Porter, and others. Students who restructured a decision around a framework's reasoning pattern without naming the framework were classified as not-applied.
+No protection against false positives — if the LLM hallucinates (decides "this student must be applying SWOT because they mentioned a competitor"), there's no scale calibration that distinguishes "the student genuinely structured their reasoning around the framework" from "some keywords vaguely resemble the framework, so I'll say yes." The current confidence: low is the only output for "I'm not sure but I'll say yes" — and there's evidence the LLM is using it to default toward yes when in doubt.
+
+The fix is a four-tier scale that forces the LLM to commit to a positive evidence threshold per detection AND surfaces "the student definitely did NOT apply this" as a distinct first-class outcome, not just "applied: false." The four tiers also let downstream calibration (FIX 1's confidence-weighted scoring) treat each tier appropriately.
+This applies to ALL 41 frameworks in the registry, not just SWOT and Cost-Benefit. The current rubric's recognition signals are written at registry time and consumed by the same prompt for every framework. We're changing the prompt's decision scale, not individual framework rubrics — though we'll also tighten the registry-level recognition signals where they're vague.
+Do
+3.1 RE-MEASURE FIRST
+After TASK 1 + TASK 2 land and gates pass, run the forensic diagnostic script again on a fresh batch of 6+ sessions covering varied case profiles (MCQ-heavy, FR-heavy, mixed). Specifically capture:
+
+Tier 2 firing rate on (session × turn × framework) combinations across all 41 frameworks tracked in any session
+Tier 2 verdict-vs-detection alignment per framework
+Tier 2 verdict-vs-rubric alignment — manual spot-check of 30 cases (15 applied=true, 15 applied=false)
+Per-framework breakdown — which frameworks have the highest false-positive rate and which the highest false-negative rate
+A new section: count of confidence: low verdicts as a fraction of all applied: true verdicts. If this fraction is high (>40%), the LLM is using low as a hedge — confirming the calibration problem.
+
+Compare to the original numbers:
+
+Original: 18/80 Tier 2 applied=true (22.5%); 8/18 reached recorded detections (44.4%)
+After TASK 1: alignment should be near 100% (MCQ blackhole closed)
+The applied-true RATE should rise to 35-50% as MCQ turns now feed the LLM real text
+
+Decision tree based on re-measurement:
+
+If applied: true rate is >50% AND alignment >95% AND confidence: low fraction <30% → semantic tier is healthy. Skip 3.2-3.4. Document and stop.
+Otherwise → proceed to 3.2.
+
+3.2 Replace the binary scale with a four-tier evidence scale
+Edit server/agents/frameworkDetector.ts semanticFrameworkCheck function (lines 120-200). Replace the applied: boolean + confidence: high|medium|low schema with a four-tier evidence_level enum:
+"none"            — the student's reasoning shows NO structural alignment with this framework.
+                    The framework's reasoning pattern is absent. Student's text may discuss the
+                    same domain (e.g., a strategy decision) without using this specific framework.
+
+"weak_implicit"   — the student's reasoning faintly resembles part of the framework's pattern,
+                    but the alignment is incomplete or could be coincidental. One element of the
+                    framework appears; the rest do not. A reasonable observer might or might not
+                    call this an application.
+
+"strong_implicit" — the student's reasoning structure clearly mirrors the framework's pattern
+                    across multiple elements, even though the framework is not named. A reasonable
+                    observer would say "this student is using <framework>'s lens" with confidence.
+                    The reasoning is anchored in the framework's core concepts, just unnamed.
+
+"explicit"        — the student names the framework directly OR uses canonical framework
+                    vocabulary in a way that demonstrates correct application. Tier 1 (keyword)
+                    typically catches these; Tier 2 only emits "explicit" when Tier 1 missed
+                    a phrasing variation but the application is unambiguous.
+The corresponding level mapping in the detector pipeline:
+
+evidence_level: "none" → level: "not_evidenced" in the final detection
+evidence_level: "weak_implicit" → level: "implicit", confidence: "low"
+evidence_level: "strong_implicit" → level: "implicit", confidence: "medium"
+evidence_level: "explicit" → level: "explicit", confidence: "high"
+
+This is a structural change. Drop the old applied: bool and confidence fields from the LLM output schema. The downstream pipeline should map evidence_level to level + confidence at the boundary, not the LLM.
+3.3 Rewrite the system prompt with positive-evidence-required wording and false-positive guards
+Replace the EN system prompt (lines 162-170) with:
+You determine whether a student's reasoning APPLIES specific analytical frameworks. You do not judge whether the student is correct or wrong — only whether the framework's reasoning pattern shows up in their text. You do not need the student to name the framework.
+
+DECISION SCALE — pick exactly ONE for each framework:
+
+- "none": the framework's reasoning pattern is absent. The student may discuss the same problem domain without using this framework's lens. Default to "none" if uncertain.
+
+- "weak_implicit": one element of the framework's pattern appears, but the rest don't, or the alignment is partial enough that it could be coincidence. Use this when the student's reasoning hints at the framework but doesn't anchor on it.
+
+- "strong_implicit": the student's reasoning is clearly structured around this framework's pattern, with multiple elements present, even though they don't name it. A professor reading the response would say "this student is thinking like <framework>." Reserve this for unambiguous structural mirroring.
+
+- "explicit": the student names the framework directly, OR uses canonical framework vocabulary correctly. Most explicit cases are caught upstream (keyword tier); only emit "explicit" when you see a clear paraphrase of the framework's name or terminology that the keyword tier missed.
+
+CRITICAL RULES TO PREVENT MISCALIBRATION:
+
+1. POSITIVE EVIDENCE REQUIRED. To label "weak_implicit" or stronger, you MUST identify a specific phrase or sentence in the student's text that EXEMPLIFIES the framework's reasoning. Domain-shared vocabulary alone (e.g., "competitor" appearing in a Porter-eligible scenario) is NOT positive evidence — Porter's reasoning structure must show up.
+
+2. NO BIAS TOWARD APPLICATION. Default to "none" when in doubt. False positives (saying a student applied a framework they didn't) are as harmful as false negatives. The professor uses this signal to grade — getting it wrong in either direction misrepresents the student.
+
+3. MULTIPLE FRAMEWORKS, INDEPENDENT JUDGMENTS. The student's text may apply zero, one, or several frameworks. Judge each one independently. Do not assume that if one framework applies, others probably do too.
+
+4. quotedReasoning MUST be a verbatim substring of the student's input — no paraphrase, no summary. Empty if evidence_level is "none".
+
+5. explanation describes which conceptual element the student exercised (or, for "none", briefly says why the framework's pattern is absent). Observation only — never use evaluative language ("correct", "should have", "ideal", "missed an opportunity").
+ES: equivalent translation, with the same five critical rules in Spanish. Keep evidence_level literal values in English (none | weak_implicit | strong_implicit | explicit) — the parser checks for those exact strings.
+3.4 Update the user prompt JSON contract
+Change the JSON contract in the user prompt (lines 181-182) to:
+Return JSON: {
+  "verdicts": [
+    {
+      "framework_id": "<id from the list>",
+      "evidence_level": "none" | "weak_implicit" | "strong_implicit" | "explicit",
+      "quotedReasoning": "<verbatim substring from student input, or '' if evidence_level is none>",
+      "explanation": "<one short sentence — what conceptual element the student exercised, or why the pattern is absent>"
+    },
+    ...one verdict per framework, in the same order...
+  ]
+}
+ES: same with Spanish JSON keys' values.
+3.5 Update the parser
+Find where the LLM verdict is consumed in frameworkDetector.ts (probably the loop that pushes detections after semanticFrameworkCheck returns). The current code reads applied and confidence. Update it to read evidence_level and map to level + confidence per the table in 3.2:
+tsfunction mapEvidenceLevelToDetection(level: string): { level: "explicit" | "implicit" | "not_evidenced", confidence: "high" | "medium" | "low" | undefined } {
+  switch (level) {
+    case "explicit":         return { level: "explicit",      confidence: "high" };
+    case "strong_implicit":  return { level: "implicit",      confidence: "medium" };
+    case "weak_implicit":    return { level: "implicit",      confidence: "low" };
+    case "none":
+    default:                 return { level: "not_evidenced", confidence: undefined };
+  }
+}
+Apply the §T-003B word-count floors AFTER this mapping (they currently downgrade medium → low on <15-word inputs and reject applied=true entirely on <10-word inputs). The floors still apply correctly to strong_implicit → medium on short inputs.
+If a verdict has evidence_level: "none", do NOT push a not_evidenced detection from Tier 2 — fall through to Tier 3 signal-pattern as today. Keep Tier 3 fallthrough behavior (the existing test in calibration.semanticFloor.realpath.test.ts covers this).
+If a verdict has evidence_level: "weak_implicit" AND the §T-003B word-count floor reduces confidence to "low" on a <15-word input, the result is still a recorded implicit detection with confidence low. That's the correct behavior — short inputs with faint reasoning hints land at the bottom of the scale, not absent.
+3.6 Tighten registry recognitionSignals where vague
+For each of the 41 frameworks in server/agents/frameworkRegistry.ts, audit recognitionSignals[] against the new four-tier scale. The signal list is what the LLM uses to judge alignment. Vague signals invite false positives.
+Specific check per entry:
+
+Each recognitionSignals item should describe a specific reasoning move, not a domain or topic. Bad: "discusses competition." Good: "weighs internal capability vs. external opportunity."
+Each entry should have at least 3 recognition signals. If <3, expand. If signals are too narrow (only catch the explicit case), add 1-2 implicit-pattern signals describing how a student would reason WITHOUT naming the framework.
+
+Don't rewrite all 41 in one pass blindly. Do this work surgically:
+
+Run the re-measurement from 3.1 first to identify which frameworks have the worst false-negative rate (LLM saying "none" on plausible applications).
+For each framework with >30% spot-check false-negative rate, audit its recognitionSignals and tighten.
+Skip frameworks with healthy detection (don't fix what isn't broken).
+
+Document changes in docs/CHANGELOG.md per framework with the rationale.
+3.7 Add a regression test suite that protects BOTH directions
+Create server/__tests__/calibration.tier2Recalibration.test.ts. The test runs semanticFrameworkCheck directly with stubbed-LLM injection (use the existing _semanticCheckOverride parameter pattern — same approach as calibration.semanticFloor.realpath.test.ts).
+For the test, since we want to validate the PROMPT not just the parser, add an additional integration mode that uses the real LLM. This becomes a "live test" — gated behind OPENAI_API_KEY like the existing Porter regression. Don't make it part of npm run test:pure. Add it to a new script npm run test:tier2-live.
+Fixture structure: server/__tests__/fixtures/tier2_recalibration.json. For EVERY framework that's commonly tracked (start with 15: Porter Generic, Porter Five Forces, SWOT, PESTEL, Value Chain, Stakeholder, Cost-Benefit, BATNA, Blue Ocean, Ansoff, Balanced Scorecard, McKinsey 7S, 4Ps, NPV/IRR, Lean), populate:
+json{
+  "swot": {
+    "should_apply_strong": [
+      { "input": "<student text that strongly implicitly applies SWOT>", "rationale": "..." },
+      { "input": "...", "rationale": "..." }
+    ],
+    "should_apply_weak": [
+      { "input": "<student text with hints of SWOT but incomplete>", "rationale": "..." }
+    ],
+    "should_apply_explicit": [
+      { "input": "<student text naming SWOT or canonical SWOT vocab>", "rationale": "..." }
+    ],
+    "should_NOT_apply": [
+      { "input": "<student text discussing strategy in a domain SWOT-eligible scenario but NOT using SWOT logic>", "rationale": "negative holdout — guards against false positives" },
+      { "input": "<student text mentioning 'strengths' casually but not analytically>", "rationale": "..." }
+    ]
+  }
+}
+Each framework: 3-5 fixtures per tier (should_apply_strong, should_apply_weak, should_apply_explicit, should_NOT_apply). The should_NOT_apply fixtures are the critical false-positive guards — student text that LOOKS like it might trigger the framework (shares vocabulary, same domain) but doesn't actually apply the framework's reasoning.
+Test assertions per framework:
+
+should_apply_strong[i].input → real LLM should return evidence_level: "strong_implicit" or "explicit". ≥80% pass rate.
+should_apply_weak[i].input → real LLM should return "weak_implicit" or "strong_implicit". ≥75% pass rate.
+should_apply_explicit[i].input → real LLM should return "explicit". ≥90% pass rate (Tier 1 may catch some upstream — that's fine; just verify the result).
+should_NOT_apply[i].input → real LLM should return "none". ≥90% pass rate. False positives are the most dangerous failure mode.
+
+Failure of any threshold → test fails. The test report prints per-framework pass rates so you can see which frameworks need rubric work.
+3.8 Calibration documentation
+Update docs/CHANGELOG.md with a "Tier 2 four-tier recalibration" section listing:
+
+The old binary scale and why it was insufficient (cite Step 4(c) of the diagnostic).
+The new four-tier scale and the mapping to level + confidence.
+The fixture-based regression test and the pass-rate thresholds.
+Per-framework recognition-signal changes from 3.6.
+
+Preserve
+
+All TASK 1 + TASK 2 changes.
+The §T-003B word-count floors — they apply to the new mapping correctly. Keep them.
+Porter Generic Strategies and Porter's Five Forces rubrics — both detect at acceptable rates. Don't over-fit them while recalibrating others; only adjust if the re-measurement shows degradation.
+The existing calibration.semanticFloor.realpath.test.ts — the Tier 3 fallthrough on evidence_level: "none" must keep working. Update the test to use evidence_level: "none" instead of applied: false in its mocked LLM responses.
+Tier 1 keyword detection — unchanged.
+Tier 3 signal-pattern fallthrough — unchanged.
+The semanticFrameworkCheck function signature externally — same inputs, same output type can be remapped internally but the public verdict array shape stays compatible.
+All FIX 1, FIX 2, FIX 3, FIX 4.
+Porter regression test fail-loud behavior.
+dashboardCache TTL at 5 * 60 * 1000.
+No .github/workflows/.
+
+Gate
+
+Re-measurement done first. Forensic diagnostic re-run after TASK 1+2. Results pasted in the report. Decision (skip 3.2-3.4 or proceed) explicitly documented.
+If proceeded: schema change is clean. semanticFrameworkCheck returns the new evidence_level field. The mapping function correctly converts to level + confidence. npx tsc --noEmit passes.
+Existing regression unchanged. calibration.semanticFloor.realpath.test.ts still passes (updated to use evidence_level: "none" in mocks).
+New fixture test runs. npm run test:tier2-live runs against the real LLM. Per-framework pass-rate report prints. At least 12 of 15 frameworks meet all four threshold tiers (≥80% strong, ≥75% weak, ≥90% explicit, ≥90% NOT-apply).
+Frameworks below threshold get recognitionSignals audited. For each framework that fails any threshold, the report lists what was changed in its registry entry and the post-change pass rate.
+Third forensic diagnostic re-run. After 3.6 changes land, run the forensic diagnostic on 6 fresh sessions. Compare:
+
+Tier 2 applied: true rate (now: weak_implicit + strong_implicit + explicit aggregated).
+Tier 2 verdict-vs-detection alignment.
+Per-framework distribution of evidence_level returned. Should not be heavily skewed toward none (>70% none across all frameworks signals over-strict) or away from none (<10% none signals under-strict / false-positive risk).
+The dashboard for one MCQ-heavy session and one FR-heavy session shows reasonable detection counts that align with what a human reading the student's text would conclude.
+
+
+No regression on Porter. Porter Generic Strategies still detects correctly per its existing 3-case test.
+All existing tests pass.
+
+Report
+
+Re-measurement output before/after.
+Decision: was rubric work needed? Yes/no with rationale.
+If yes: per-framework pass-rate table from the new fixture test.
+List of recognitionSignals changes per framework (in 3.6).
+Third re-measurement output.
+One side-by-side example showing a student response classified differently under the old binary scale vs. the new four-tier scale.
+
