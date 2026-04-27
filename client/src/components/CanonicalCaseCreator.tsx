@@ -1110,7 +1110,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   const valid = topic.trim().length > 0
                     && teachingGoal.trim().length >= 20
                     && selectedDisciplines.length > 0
-                    && courseContext.trim().length >= 20;
+                    && courseContext.trim().length >= 20
+                    && multipleChoiceCount <= stepCount;
                   if (!valid) {
                     setShowValidation(true);
                     return;
@@ -1118,7 +1119,7 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   setShowValidation(false);
                   generateMutation.mutate();
                 }}
-                disabled={generateMutation.isPending}
+                disabled={generateMutation.isPending || multipleChoiceCount > stepCount}
                 className="w-full h-12 text-base"
                 data-testid="button-generate-draft"
               >
