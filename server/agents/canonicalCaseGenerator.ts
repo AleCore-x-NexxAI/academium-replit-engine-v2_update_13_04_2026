@@ -95,9 +95,109 @@ function offLanguageRatio(parsed: any, target: "es" | "en"): number {
   return off / total;
 }
 
-function buildCanonicalPromptEs(stepCount: number): string {
+/**
+ * Multiple-choice mix control: deterministically decide which decision
+ * numbers must be multiple_choice vs written, given the professor's
+ * chosen count and placement mode. Pure function — no IO, easy to test.
+ *
+ * - "first": positions 1..mcCount are multiple-choice.
+ * - "random": mcCount positions chosen via Fisher-Yates with the supplied
+ *   seed (UUID-derived in production; fixed string in tests). When at
+ *   least one written slot is available, the final integrative decision
+ *   (position == stepCount) is forced to remain written, since the prompt
+ *   structure relies on that decision being open-ended for synthesis.
+ *
+ * Returns a Map<number, "multiple_choice" | "written"> covering every
+ * decision in 1..stepCount.
+ */
+export type MultipleChoiceMode = "first" | "random";
+export type DecisionFormat = "multiple_choice" | "written";
+
+export function buildDecisionFormatPlan(
+  stepCount: number,
+  multipleChoiceCount: number,
+  mode: MultipleChoiceMode,
+  seed?: string,
+): Map<number, DecisionFormat> {
+  const safeCount = Math.max(0, Math.min(stepCount, Math.floor(multipleChoiceCount)));
+  const plan = new Map<number, DecisionFormat>();
+  for (let i = 1; i <= stepCount; i++) plan.set(i, "written");
+
+  if (safeCount === 0) return plan;
+  if (safeCount >= stepCount) {
+    for (let i = 1; i <= stepCount; i++) plan.set(i, "multiple_choice");
+    return plan;
+  }
+
+  if (mode === "first") {
+    for (let i = 1; i <= safeCount; i++) plan.set(i, "multiple_choice");
+    return plan;
+  }
+
+  // mode === "random" with at least one written slot available: keep the
+  // final integrative decision written, then place the MC count among the
+  // remaining positions using a seeded shuffle for determinism.
+  const eligible: number[] = [];
+  for (let i = 1; i <= stepCount - 1; i++) eligible.push(i);
+  // Seeded PRNG (mulberry32) for reproducibility in tests.
+  const seedNum = (() => {
+    const s = seed ?? `${Date.now()}-${Math.random()}`;
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  })();
+  let state = seedNum;
+  const next = () => {
+    state |= 0; state = (state + 0x6D2B79F5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = eligible.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    const tmp = eligible[i]; eligible[i] = eligible[j]; eligible[j] = tmp;
+  }
+  const picks = eligible.slice(0, safeCount).sort((a, b) => a - b);
+  for (const n of picks) plan.set(n, "multiple_choice");
+  return plan;
+}
+
+/**
+ * Render the format plan as a numbered list the LLM can read literally.
+ * Used inside both prompt builders so the model can no longer fall back
+ * to its own intuition about which decisions should be MC vs written.
+ */
+function renderFormatPlanBlock(plan: Map<number, DecisionFormat>, lang: "es" | "en"): string {
+  const lines: string[] = [];
+  const total = plan.size;
+  for (let i = 1; i <= total; i++) {
+    const fmt = plan.get(i) ?? "written";
+    if (lang === "en") {
+      lines.push(
+        fmt === "multiple_choice"
+          ? `- Decision ${i}: multiple_choice (3-4 equally defensible options, no preferred answer)`
+          : `- Decision ${i}: written (short justification, 5-7 lines, ask HOW and WHY)`,
+      );
+    } else {
+      lines.push(
+        fmt === "multiple_choice"
+          ? `- Decisión ${i}: multiple_choice (3-4 opciones igualmente defendibles, sin respuesta correcta)`
+          : `- Decisión ${i}: written (justificación escrita corta, 5-7 líneas, preguntar CÓMO y POR QUÉ)`,
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+function buildCanonicalPromptEs(stepCount: number, formatPlan: Map<number, DecisionFormat>): string {
   const durationMin = Math.round((stepCount / 3) * 20);
   const durationMax = Math.round((stepCount / 3) * 25);
+  const formatPlanBlock = renderFormatPlanBlock(formatPlan, "es");
+  const firstMc = Array.from(formatPlan.entries()).find(([, f]) => f === "multiple_choice")?.[0];
+  const firstWritten = Array.from(formatPlan.entries()).find(([, f]) => f === "written")?.[0];
   return `Eres un ARQUITECTO DE CASOS DE NEGOCIOS CANÓNICOS para Academium, una plataforma de simulación de negocios impulsada por IA para educación universitaria en América Latina.
 
 ${STRUCTURE_LOCK_NOTICE}
@@ -143,33 +243,25 @@ SECCIÓN 2 - DESAFÍO CENTRAL DE NEGOCIOS:
   * Qué es incierto
   * Cómo podría verse el éxito (sin definirlo)
 
-SECCIÓN 3 - DECISIÓN 1 (Decisión de Orientación):
-- Formato: Opción múltiple (3-4 opciones)
-- Cada opción representa una POSTURA ESTRATÉGICA, no una solución
-- REGLA CRÍTICA: NO hay opción correcta ni incorrecta
-- Cada opción DEBE ser:
-  * Defendible
-  * Con lógica racional
-  * Llevar a diferentes consecuencias downstream
+SECCIÓN 3 - PLAN DE FORMATO POR DECISIÓN (OBLIGATORIO):
+El profesor ya decidió el formato exacto de cada decisión. RESPETA este plan literalmente — no cambies el formato de ninguna decisión, no agregues "options" a decisiones written, no quites "options" de decisiones multiple_choice:
 
-DECISIONES 2 a ${stepCount - 1} (Decisiones Analíticas):
-- Formato: Justificación escrita corta (5-7 líneas)
-- Abierta, sin presión de conteo de palabras
-- El prompt debe:
-  * Preguntar CÓMO y POR QUÉ
-  * NUNCA preguntar cuál es la respuesta correcta
-  * Fomentar consideración de trade-offs
-- Cada decisión debe construir sobre las anteriores progresivamente
+${formatPlanBlock}
 
-DECISIÓN ${stepCount} (Decisión Integrativa Final):
-- Formato: Justificación escrita corta
-- DEBE forzar síntesis de:
-  * Información previa
-  * Trade-offs
-  * Consecuencias de decisiones anteriores
-- La decisión debe sentirse CONSEQUENCIAL
-- NO hay resultados de "equilibrio perfecto"
-- Ambigüedad realista es alentada
+REGLAS PARA DECISIONES multiple_choice:
+- 3-4 opciones, cada una una POSTURA ESTRATÉGICA, no una solución
+- TODAS las opciones igualmente legítimas; no existe opción "correcta"
+- Cada opción DEBE ser defendible, con lógica racional, y llevar a consecuencias downstream distintas
+
+REGLAS PARA DECISIONES written:
+- Justificación escrita corta (5-7 líneas), abierta, sin presión de conteo de palabras
+- El prompt debe preguntar CÓMO y POR QUÉ, nunca cuál es la respuesta correcta, y fomentar consideración de trade-offs
+- NO incluyas el campo "options" para estas decisiones
+
+REGLA DE PROGRESIÓN:
+- Cada decisión debe construir progresivamente sobre las anteriores
+- La decisión ${stepCount} debe sentirse CONSEQUENCIAL y forzar síntesis de información previa, trade-offs y consecuencias acumuladas
+- Ambigüedad realista es alentada${firstWritten === stepCount ? `\n- La decisión final (${stepCount}) es written y debe forzar síntesis integrativa` : ""}
 
 REFLEXIÓN (Ligera):
 - UN solo prompt opcional
@@ -233,10 +325,9 @@ IMPORTANTE: El thinkingScaffold NUNCA contiene verbos imperativos ni sugerencias
   "caseContext": "El contexto completo del caso (120-180 palabras) - estilo Harvard Business Case",
   "coreChallenge": "El desafío central de negocios claramente articulado",
   "decisionPoints": [
-    { "number": 1, "format": "multiple_choice", "prompt": "...", "options": ["A", "B", "C"], "requiresJustification": false, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] },
-    { "number": 2, "format": "written", "prompt": "...", "requiresJustification": true, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] },
-    // ... genera EXACTAMENTE ${stepCount} puntos de decisión en total
-    { "number": ${stepCount}, "format": "written", "prompt": "decisión integrativa final...", "requiresJustification": true, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] }
+    // Genera EXACTAMENTE ${stepCount} puntos de decisión, respetando el "PLAN DE FORMATO POR DECISIÓN" arriba.
+    // Ejemplo de una decisión multiple_choice: { "number": ${firstMc ?? 1}, "format": "multiple_choice", "prompt": "...", "options": ["A", "B", "C"], "requiresJustification": false, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] }
+    // Ejemplo de una decisión written:        { "number": ${firstWritten ?? stepCount}, "format": "written", "prompt": "...", "requiresJustification": true, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] }
   ],
   "reflectionPrompt": "Pregunta de reflexión al final de la simulación (Paso ${stepCount + 1}, separado de las decisiones)",
   "indicators": [
@@ -278,7 +369,7 @@ IMPORTANTE:
 - TODO el contenido DEBE estar en ESPAÑOL LATINOAMERICANO
 - El contexto del caso debe sentirse como un caso de Harvard Business School - profesional e inmersivo
 - NO incluir respuestas correctas implícitas
-- Cada opción de decisión 1 debe ser igualmente defendible`;
+- En cualquier decisión de opción múltiple, cada opción debe ser igualmente defendible`;
 }
 
 /**
@@ -287,9 +378,12 @@ IMPORTANTE:
  * instruction, label, and example is in English so the model never sees
  * conflicting language signals.
  */
-function buildCanonicalPromptEn(stepCount: number): string {
+function buildCanonicalPromptEn(stepCount: number, formatPlan: Map<number, DecisionFormat>): string {
   const durationMin = Math.round((stepCount / 3) * 20);
   const durationMax = Math.round((stepCount / 3) * 25);
+  const formatPlanBlock = renderFormatPlanBlock(formatPlan, "en");
+  const firstMc = Array.from(formatPlan.entries()).find(([, f]) => f === "multiple_choice")?.[0];
+  const firstWritten = Array.from(formatPlan.entries()).find(([, f]) => f === "written")?.[0];
   return `You are a CANONICAL BUSINESS CASE ARCHITECT for Academium, an AI-powered business simulation platform for university education.
 
 ${STRUCTURE_LOCK_NOTICE}
@@ -335,33 +429,25 @@ SECTION 2 — CORE BUSINESS CHALLENGE:
   * What is uncertain
   * What success could look like (without defining it)
 
-SECTION 3 — DECISION 1 (Orientation Decision):
-- Format: Multiple choice (3-4 options)
-- Each option represents a STRATEGIC STANCE, not a solution
-- CRITICAL RULE: All options are equally legitimate; no preferred option exists
-- Each option MUST be:
-  * Defensible
-  * Backed by clear rationale
-  * Lead to different downstream consequences
+SECTION 3 — PER-DECISION FORMAT PLAN (MANDATORY):
+The professor has already chosen the exact format for every decision. Follow this plan literally — do not change any decision's format, do not add "options" to written decisions, do not omit "options" from multiple_choice decisions:
 
-DECISIONS 2 to ${stepCount - 1} (Analytical Decisions):
-- Format: Short written justification (5-7 lines)
-- Open-ended, no word-count pressure
-- The prompt must:
-  * Ask HOW and WHY
-  * NEVER imply a preferred answer
-  * Encourage trade-off consideration
+${formatPlanBlock}
+
+RULES FOR multiple_choice DECISIONS:
+- 3-4 options, each one a STRATEGIC STANCE, not a solution
+- ALL options equally legitimate; no preferred option exists
+- Each option MUST be defensible, backed by clear rationale, and lead to different downstream consequences
+
+RULES FOR written DECISIONS:
+- Short written justification (5-7 lines), open-ended, no word-count pressure
+- The prompt must ask HOW and WHY, never imply a preferred answer, and encourage trade-off consideration
+- DO NOT include the "options" field for these decisions
+
+PROGRESSION RULE:
 - Each decision must build progressively on the previous ones
-
-DECISION ${stepCount} (Final Integrative Decision):
-- Format: Short written justification
-- MUST force synthesis of:
-  * Prior information
-  * Trade-offs
-  * Consequences of earlier decisions
-- The decision must feel CONSEQUENTIAL
-- No frictionless outcomes
-- Realistic ambiguity is encouraged
+- Decision ${stepCount} must feel CONSEQUENTIAL and force synthesis of prior information, trade-offs, and accumulated consequences
+- Realistic ambiguity is encouraged${firstWritten === stepCount ? `\n- The final decision (${stepCount}) is written and must force integrative synthesis` : ""}
 
 REFLECTION (Light):
 - ONE optional prompt
@@ -425,10 +511,9 @@ IMPORTANT: thinkingScaffold NEVER contains imperative verbs or action suggestion
   "caseContext": "Full case context (120-180 words) — Harvard Business Case style",
   "coreChallenge": "Core business challenge clearly articulated",
   "decisionPoints": [
-    { "number": 1, "format": "multiple_choice", "prompt": "...", "options": ["A", "B", "C"], "requiresJustification": false, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] },
-    { "number": 2, "format": "written", "prompt": "...", "requiresJustification": true, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] },
-    // ... generate EXACTLY ${stepCount} decision points in total
-    { "number": ${stepCount}, "format": "written", "prompt": "final integrative decision...", "requiresJustification": true, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] }
+    // Generate EXACTLY ${stepCount} decision points, respecting the "PER-DECISION FORMAT PLAN" above.
+    // Example multiple_choice decision: { "number": ${firstMc ?? 1}, "format": "multiple_choice", "prompt": "...", "options": ["A", "B", "C"], "requiresJustification": false, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] }
+    // Example written decision:        { "number": ${firstWritten ?? stepCount}, "format": "written", "prompt": "...", "requiresJustification": true, "includesReflection": false, "focusCue": "...", "thinkingScaffold": ["...", "...", "..."] }
   ],
   "reflectionPrompt": "Reflection question at the end of the simulation (Step ${stepCount + 1}, separate from decisions)",
   "indicators": [
@@ -470,7 +555,7 @@ IMPORTANT:
 - ALL content MUST be in ENGLISH (no Spanish words anywhere)
 - The case context must feel like a Harvard Business School case — professional and immersive
 - Do NOT include implicit preferred answers
-- Each option in decision 1 must be equally defensible`;
+- For any multiple_choice decision, each option must be equally defensible`;
 }
 
 export interface CanonicalCaseData {
@@ -879,12 +964,25 @@ export async function generateCanonicalCase(
   pedagogicalIntent: PedagogicalIntent,
   additionalContext?: string,
   stepCount?: number,
-  language?: "es" | "en"
+  language?: "es" | "en",
+  multipleChoiceCount?: number,
+  multipleChoiceMode?: MultipleChoiceMode,
 ): Promise<CanonicalCaseData> {
   const effectiveSteps = Math.min(MAX_DECISIONS, Math.max(MIN_DECISIONS, stepCount ?? DEFAULT_DECISIONS));
   const durationMin = Math.round((effectiveSteps / 3) * 20);
   const durationMax = Math.round((effectiveSteps / 3) * 25);
   const isEn = language === "en";
+
+  // Multiple-choice mix control: turn (count, mode) into a per-decision
+  // format plan that gets injected into the prompt AND enforced after the
+  // LLM responds, so the model can no longer drift toward all-MC.
+  // Default to (1, "first") which preserves the legacy "Decision 1 = MC,
+  // rest = written" structure for callers that don't pass the new args.
+  const safeMcCount = typeof multipleChoiceCount === "number" && Number.isFinite(multipleChoiceCount)
+    ? Math.max(0, Math.min(effectiveSteps, Math.floor(multipleChoiceCount)))
+    : 1;
+  const safeMcMode: MultipleChoiceMode = multipleChoiceMode === "random" ? "random" : "first";
+  const formatPlan = buildDecisionFormatPlan(effectiveSteps, safeMcCount, safeMcMode);
 
   // Phase 5 (§10.2): pre-assign per-decision academic dimensions before the
   // LLM call so the prompt can communicate them as hard constraints.
@@ -900,8 +998,8 @@ export async function generateCanonicalCase(
   // Phase 1b: pure-language prompts (no langDirective append). Each variant
   // is fully in its target language to eliminate cross-language leakage.
   const systemPrompt = isEn
-    ? buildCanonicalPromptEn(effectiveSteps)
-    : buildCanonicalPromptEs(effectiveSteps);
+    ? buildCanonicalPromptEn(effectiveSteps, formatPlan)
+    : buildCanonicalPromptEs(effectiveSteps, formatPlan);
 
   const baseUserPrompt = isEn
     ? `${intentBlock}\n\nCreate a canonical business case based on this topic/industry:\n\nTOPIC: ${topic}${contextAddition}\n\nGenerate a COMPLETE business case following the canonical structure, ALL in English.\nCase duration: ${durationMin}-${durationMax} minutes.\nRemember: exactly ${effectiveSteps} decision points, no preferred answer, mentoring tone. The pedagogical-intent block above OVERRIDES any conflicting default instructions in the system prompt.`
@@ -993,12 +1091,32 @@ export async function generateCanonicalCase(
     const llmFwIds = Array.isArray(dp.targetFrameworkIds)
       ? dp.targetFrameworkIds.filter((s: any) => typeof s === "string" && s.trim()).map((s: string) => s.trim())
       : [];
+
+    // Multiple-choice mix control: enforce the pre-computed format plan
+    // server-side so the LLM cannot drift toward all-MC (or all-written).
+    // When the plan demands multiple_choice but the LLM omitted options,
+    // fall back to the locale-aware default option list. When the plan
+    // demands written but the LLM provided options, drop them.
+    const plannedFormat = formatPlan.get(number) ?? (index === 0 ? "multiple_choice" : "written");
+    const llmFormat = dp.format === "multiple_choice" || dp.format === "written" ? dp.format : undefined;
+    if (llmFormat && llmFormat !== plannedFormat) {
+      console.warn(`[CanonicalCaseGenerator] Decision ${number} format drift: LLM=${llmFormat} → enforced=${plannedFormat}`);
+    }
+    const llmOptions = Array.isArray(dp.options)
+      ? dp.options.filter((o: any) => typeof o === "string" && o.trim()).map((o: string) => o.trim())
+      : [];
+    const enforcedOptions = plannedFormat === "multiple_choice"
+      ? (llmOptions.length >= 3 ? llmOptions : optionFallback)
+      : undefined;
+
     return {
       number,
-      format: dp.format || (index === 0 ? "multiple_choice" : "written"),
+      format: plannedFormat,
       prompt: dp.prompt || decisionPromptFallback(number),
-      options: dp.options || undefined,
-      requiresJustification: dp.requiresJustification ?? (index > 0),
+      options: enforcedOptions,
+      requiresJustification: plannedFormat === "written"
+        ? true
+        : (dp.requiresJustification ?? false),
       includesReflection: dp.includesReflection ?? false,
       focusCue: dp.focusCue || defaultFocusCues[index % defaultFocusCues.length],
       thinkingScaffold: Array.isArray(dp.thinkingScaffold) ? dp.thinkingScaffold : undefined,
@@ -1010,7 +1128,9 @@ export async function generateCanonicalCase(
         : fallbackRationale(primary),
       targetFrameworkIds: llmFwIds.length > 0 ? llmFwIds : intentTargetIds,
       reviewCompleted: false,
-      qualityFlags: [],
+      qualityFlags: enforcedOptions && llmOptions.length < 3 && plannedFormat === "multiple_choice"
+        ? ["fallback_options"]
+        : [],
     };
   });
 
@@ -1018,12 +1138,13 @@ export async function generateCanonicalCase(
     const num = decisionPoints.length + 1;
     const dim = dimByNumber.get(num);
     const primary = dim?.primaryDimension ?? "strategic";
+    const plannedFormat = formatPlan.get(num) ?? "written";
     decisionPoints.push({
       number: num,
-      format: num === 1 ? "multiple_choice" : "written",
+      format: plannedFormat,
       prompt: writtenPromptFallback(num),
-      options: num === 1 ? optionFallback : undefined,
-      requiresJustification: num > 1,
+      options: plannedFormat === "multiple_choice" ? optionFallback : undefined,
+      requiresJustification: plannedFormat === "written",
       includesReflection: false,
       focusCue: defaultFocusCues[(num - 1) % defaultFocusCues.length],
       thinkingScaffold: scaffoldFallback,
@@ -1193,6 +1314,14 @@ export async function generateCanonicalCase(
   const primaryTargetCanonical = pedagogicalIntent.targetFrameworks?.[0]?.canonicalId;
   const runRegenForDecision = async (dpNum: number, hint: string, flagOnFail: string) => {
     try {
+      // Multiple-choice mix control: pin the regenerated decision to the
+      // pre-computed format from `formatPlan` so gate-level regens cannot
+      // re-introduce drift. Falls back to the existing decision's format
+      // (which itself was already enforced from the plan in the main
+      // mapping) so this is safe even if a future plan lookup misses.
+      const planned = formatPlan.get(dpNum)
+        ?? decisionPoints.find((d) => d.number === dpNum)?.format
+        ?? "written";
       const fresh = await regenerateSingleDecision({
         caseContext: parsed.caseContext ?? "",
         coreChallenge: parsed.coreChallenge ?? "",
@@ -1201,6 +1330,7 @@ export async function generateCanonicalCase(
         decisionNumber: dpNum,
         language: effectiveLang,
         hint,
+        enforcedFormat: planned,
       });
       const idx = decisionPoints.findIndex((d) => d.number === dpNum);
       if (idx >= 0) decisionPoints[idx] = fresh;
@@ -1398,8 +1528,17 @@ export async function regenerateSingleDecision(args: {
   decisionNumber: number;
   language: "es" | "en";
   hint?: string;
+  /**
+   * Multiple-choice mix control: when provided, the regenerated decision's
+   * format is forced to this value regardless of what the LLM returns.
+   * Defaults to preserving the previous decision's format so existing
+   * regen flows (gates, single-decision regen route) cannot drift the
+   * professor-chosen MC/written mix. Pass explicitly when the caller
+   * already knows the planned format.
+   */
+  enforcedFormat?: DecisionFormat;
 }): Promise<DecisionPoint> {
-  const { caseContext, coreChallenge, pedagogicalIntent, existingDecisions, decisionNumber, language, hint } = args;
+  const { caseContext, coreChallenge, pedagogicalIntent, existingDecisions, decisionNumber, language, hint, enforcedFormat } = args;
   const isEn = language === "en";
   const dimensions = assignDecisionDimensions(pedagogicalIntent, existingDecisions.length);
   const target = dimensions.find((d) => d.decisionNumber === decisionNumber) ?? dimensions[Math.max(0, decisionNumber - 1)];
@@ -1434,12 +1573,36 @@ export async function regenerateSingleDecision(args: {
       } as TradeoffSignature
     : undefined;
   const previous = existingDecisions.find((d) => d.number === decisionNumber);
+
+  // Multiple-choice mix control: pin the format to the caller's enforced
+  // value (gate regen + draft regen route) or, if none, the previous
+  // decision's format. Without this, an LLM that returns "multiple_choice"
+  // for a decision the professor chose to keep "written" would silently
+  // flip the mix server-side. After pinning, sanitize options so a
+  // multiple_choice always carries options and a written never does.
+  const llmFormat: DecisionFormat | undefined =
+    parsed.format === "multiple_choice" || parsed.format === "written" ? parsed.format : undefined;
+  const finalFormat: DecisionFormat =
+    enforcedFormat ?? previous?.format ?? (llmFormat ?? "written");
+  if (llmFormat && llmFormat !== finalFormat) {
+    console.warn(`[regenerateSingleDecision] Decision ${decisionNumber} format drift: LLM=${llmFormat} → enforced=${finalFormat}`);
+  }
+  const llmOptions = Array.isArray(parsed.options)
+    ? parsed.options.filter((o: any) => typeof o === "string" && o.trim()).map((o: string) => o.trim())
+    : [];
+  const previousOptions = previous?.options ?? [];
+  const finalOptions = finalFormat === "multiple_choice"
+    ? (llmOptions.length >= 3 ? llmOptions : (previousOptions.length >= 3 ? previousOptions : undefined))
+    : undefined;
+
   return {
     number: decisionNumber,
-    format: parsed.format === "multiple_choice" ? "multiple_choice" : (previous?.format ?? "written"),
+    format: finalFormat,
     prompt: typeof parsed.prompt === "string" && parsed.prompt.trim() ? parsed.prompt.trim() : (previous?.prompt ?? ""),
-    options: Array.isArray(parsed.options) ? parsed.options.filter((o: any) => typeof o === "string") : previous?.options,
-    requiresJustification: parsed.requiresJustification ?? (previous?.requiresJustification ?? true),
+    options: finalOptions,
+    requiresJustification: finalFormat === "written"
+      ? true
+      : (parsed.requiresJustification ?? previous?.requiresJustification ?? false),
     includesReflection: previous?.includesReflection ?? false,
     focusCue: typeof parsed.focusCue === "string" ? parsed.focusCue : previous?.focusCue,
     thinkingScaffold: Array.isArray(parsed.thinkingScaffold) ? parsed.thinkingScaffold : previous?.thinkingScaffold,

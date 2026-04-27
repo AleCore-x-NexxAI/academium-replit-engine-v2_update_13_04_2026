@@ -1907,6 +1907,12 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
     customTradeoff: z.string().optional(),
     stepCount: z.number().int().min(3).max(10).optional(),
     language: z.enum(["es", "en"]).optional(),
+    // Multiple-choice mix control: count = how many of the N decisions
+    // should be multiple_choice; mode = where to place them (first N
+    // positions vs randomly distributed). Both default to legacy behavior
+    // (1 / "first") when omitted so existing callers don't change shape.
+    multipleChoiceCount: z.number().int().min(0).max(10).optional(),
+    multipleChoiceMode: z.enum(["first", "random"]).optional(),
     // Phase 3 (Apéndice C): pedagogical intent must accompany every generation.
     pedagogicalIntent: pedagogicalIntentSchema,
   });
@@ -1925,7 +1931,7 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
         return res.status(400).json({ message: "Datos inválidos", errors: parseResult.error.errors });
       }
 
-      const { topic, additionalContext, tradeoffFocus, customTradeoff, stepCount, language: caseLang, pedagogicalIntent } = parseResult.data;
+      const { topic, additionalContext, tradeoffFocus, customTradeoff, stepCount, language: caseLang, multipleChoiceCount, multipleChoiceMode, pedagogicalIntent } = parseResult.data;
 
       const fieldErrors: Record<string, string> = {};
       if (!topic || topic.trim().length === 0) {
@@ -1939,6 +1945,9 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
       }
       if (!pedagogicalIntent.courseContext || pedagogicalIntent.courseContext.trim().length < 20) {
         fieldErrors.courseContext = "canonicalCase.validationCourseContextRequired";
+      }
+      if (typeof multipleChoiceCount === "number" && typeof stepCount === "number" && multipleChoiceCount > stepCount) {
+        fieldErrors.multipleChoiceCount = "canonicalCase.validationMultipleChoiceCountTooHigh";
       }
       if (Object.keys(fieldErrors).length > 0) {
         return res.status(400).json({ message: "Validation failed", errors: fieldErrors });
@@ -1964,7 +1973,7 @@ Proporciona una pista de andamiaje que ayude al estudiante a reflexionar sobre e
       // weighting, decision design with per-dimension constraints, reasoning
       // constraint, no-correct-answer lexicon) is injected by the generator
       // itself. The route only forwards tradeoff-focus / additional context.
-      const canonicalCase = await generateCanonicalCase(topic, pedagogicalIntent, builtContext || undefined, stepCount, caseLang);
+      const canonicalCase = await generateCanonicalCase(topic, pedagogicalIntent, builtContext || undefined, stepCount, caseLang, multipleChoiceCount, multipleChoiceMode);
       // Phase 5: persist the RESOLVED effective language (never undefined)
       // so downstream regenerate flows can read it deterministically from
       // generatedScenario.language / initialState.language.
@@ -2382,6 +2391,13 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         (initial?.language as "es" | "en" | undefined) ??
         (generated.language as "es" | "en" | undefined);
       const language: "es" | "en" = persistedLang === "en" ? "en" : "es";
+      // Multiple-choice mix control: pin the regenerated decision to the
+      // existing decision's format so a regen request cannot silently flip
+      // a written decision into multiple_choice (or vice versa). The
+      // professor's chosen mix is preserved across regeneration cycles.
+      const existingDecision = decisions.find((d) => d.number === decisionNumber);
+      const enforcedFormat: "multiple_choice" | "written" =
+        existingDecision?.format === "multiple_choice" ? "multiple_choice" : "written";
       const newDecision = await regenerateSingleDecision({
         caseContext: initial.caseContext ?? generated.description ?? "",
         coreChallenge: initial.coreChallenge ?? "",
@@ -2390,6 +2406,7 @@ Responde en español. Retorna solo JSON: {"keywords":["..."],"coreConcepts":["..
         decisionNumber,
         language,
         hint: typeof req.body?.hint === "string" ? req.body.hint : undefined,
+        enforcedFormat,
       });
 
       const updatedDecisions = decisions.map((d) => (d.number === decisionNumber ? newDecision : d));

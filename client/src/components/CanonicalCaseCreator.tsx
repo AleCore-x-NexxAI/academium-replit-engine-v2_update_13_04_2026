@@ -185,6 +185,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
   const [reasoningConstraint, setReasoningConstraint] = useState("");
   const [targetLevel, setTargetLevel] = useState("Pregrado");
   const [stepCount, setStepCount] = useState(3);
+  const [multipleChoiceCount, setMultipleChoiceCount] = useState(1);
+  const [multipleChoiceMode, setMultipleChoiceMode] = useState<"first" | "random">("first");
   const [language, setLanguage] = useState<"es" | "en">("es");
   const [draftId, setDraftId] = useState<string | null>(null);
   const [canonicalCase, setCanonicalCase] = useState<CanonicalCaseData | null>(null);
@@ -322,6 +324,8 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
         topic,
         targetLevel,
         stepCount,
+        multipleChoiceCount,
+        multipleChoiceMode,
         language,
         pedagogicalIntent: {
           teachingGoal: teachingGoal.trim(),
@@ -1021,7 +1025,14 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                 <Label className="text-base font-semibold">{t("canonicalCase.numberOfDecisions")}</Label>
                 <HelpIcon content={t("canonicalCase.decisionsHelp")} />
               </div>
-              <Select value={String(stepCount)} onValueChange={(v) => setStepCount(Number(v))}>
+              <Select
+                value={String(stepCount)}
+                onValueChange={(v) => {
+                  const n = Number(v);
+                  setStepCount(n);
+                  if (multipleChoiceCount > n) setMultipleChoiceCount(n);
+                }}
+              >
                 <SelectTrigger className="w-[200px]" data-testid="select-step-count">
                   <SelectValue />
                 </SelectTrigger>
@@ -1033,6 +1044,64 @@ const CanonicalCaseCreator = forwardRef<CanonicalCaseCreatorRef, CanonicalCaseCr
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-base font-semibold">{t("canonicalCase.multipleChoiceCount")}</Label>
+                <HelpIcon content={t("canonicalCase.multipleChoiceCountHelp")} />
+              </div>
+              <div className="flex flex-row flex-wrap items-center gap-3">
+                <Select
+                  value={String(multipleChoiceCount)}
+                  onValueChange={(v) => setMultipleChoiceCount(Number(v))}
+                >
+                  <SelectTrigger className="w-[200px]" data-testid="select-mc-count">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: stepCount + 1 }, (_, i) => i).map((n) => (
+                      <SelectItem key={n} value={String(n)} data-testid={`option-mc-count-${n}`}>
+                        {n === 0
+                          ? t("canonicalCase.multipleChoiceCountNone")
+                          : n === stepCount
+                            ? t("canonicalCase.multipleChoiceCountAll").replace("{n}", String(n))
+                            : t("canonicalCase.multipleChoiceCountSome").replace("{n}", String(n)).replace("{total}", String(stepCount))}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {multipleChoiceCount > 0 && multipleChoiceCount < stepCount && (
+                  <div className="flex flex-row items-center gap-2">
+                    <Label className="text-sm text-muted-foreground">{t("canonicalCase.multipleChoiceMode")}:</Label>
+                    <div className="flex flex-row gap-1">
+                      <Button
+                        type="button"
+                        variant={multipleChoiceMode === "first" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setMultipleChoiceMode("first")}
+                        data-testid="button-mc-mode-first"
+                      >
+                        {t("canonicalCase.multipleChoiceModeFirst")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={multipleChoiceMode === "random" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setMultipleChoiceMode("random")}
+                        data-testid="button-mc-mode-random"
+                      >
+                        {t("canonicalCase.multipleChoiceModeRandom")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {multipleChoiceCount > stepCount && (
+                <p className="text-sm text-destructive" data-testid="text-mc-count-error">
+                  {t("canonicalCase.validationMultipleChoiceCountTooHigh")}
+                </p>
+              )}
             </div>
 
             <div className="pt-4">

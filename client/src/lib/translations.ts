@@ -745,6 +745,15 @@ const translations = {
     validationTeachingGoalRequired: { es: "El objetivo de enseñanza debe tener al menos 20 caracteres.", en: "Teaching goal must be at least 20 characters." },
     validationDisciplineRequired: { es: "Selecciona al menos una disciplina.", en: "Select at least one discipline." },
     validationCourseContextRequired: { es: "El contexto del curso debe tener al menos 20 caracteres.", en: "Course context must be at least 20 characters." },
+    validationMultipleChoiceCountTooHigh: { es: "El número de decisiones de opción múltiple no puede superar el total de decisiones.", en: "The number of multiple-choice decisions can't exceed the total number of decisions." },
+    multipleChoiceCount: { es: "Decisiones de opción múltiple", en: "Multiple-choice decisions" },
+    multipleChoiceCountHelp: { es: "Cuántos puntos de decisión serán de opción múltiple. El resto serán escritos (justificación libre).", en: "How many decision points will be multiple-choice. The rest will be written (open justification)." },
+    multipleChoiceCountNone: { es: "0 — todas escritas", en: "0 — all written" },
+    multipleChoiceCountAll: { es: "{n} — todas de opción múltiple", en: "{n} — all multiple-choice" },
+    multipleChoiceCountSome: { es: "{n} de {total}", en: "{n} of {total}" },
+    multipleChoiceMode: { es: "Ubicación", en: "Placement" },
+    multipleChoiceModeFirst: { es: "Primeras N", en: "First N" },
+    multipleChoiceModeRandom: { es: "Aleatoria", en: "Random" },
   },
 
   scenarioObjectives: {
