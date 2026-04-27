@@ -26,15 +26,33 @@ const baseFramework = (overrides: Partial<CaseFramework> = {}): CaseFramework =>
   ...overrides,
 } as CaseFramework);
 
-const fakeVerdict = (applied: boolean, confidence: "high" | "medium" | "low" = "medium") => async () => [
-  {
-    framework_id: "porter",
-    applied,
-    confidence,
-    quotedReasoning: "niche market focus",
-    explanation: "Student implicitly references competitive positioning.",
-  },
-];
+// TASK 3 §3.2: Tier 2 LLM contract is now the four-tier evidence_level enum.
+// Translate the legacy (applied, confidence) test inputs into evidence_level so
+// these realpath tests still exercise the §T-003B floors:
+//   - applied=false  → evidence_level: "none"            (Tier 3 fallthrough)
+//   - applied=true + confidence "low"    → "weak_implicit"   (maps to implicit/low)
+//   - applied=true + confidence "medium" → "strong_implicit" (maps to implicit/medium)
+//   - applied=true + confidence "high"   → "explicit"        (maps to explicit/high)
+const fakeVerdict = (
+  applied: boolean,
+  confidence: "high" | "medium" | "low" = "medium",
+) => {
+  const evidence_level = !applied
+    ? "none"
+    : confidence === "high"
+      ? "explicit"
+      : confidence === "medium"
+        ? "strong_implicit"
+        : "weak_implicit";
+  return async () => [
+    {
+      framework_id: "porter",
+      evidence_level,
+      quotedReasoning: applied ? "niche market focus" : "",
+      explanation: "Student implicitly references competitive positioning.",
+    },
+  ];
+};
 
 describe("§T-003B realpath — semantic implicit floor via real detectFrameworks", () => {
   it("8 words + signal-pattern matches → Tier 3 catches it (signal_pattern)", async () => {

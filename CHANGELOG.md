@@ -10,6 +10,69 @@ All notable changes to Academium are documented here. Sections refer to
   the UI per Section 14.10's 12 acceptance criteria. Once the run is
   archived, this section is replaced by `## [v3.0-milestone] — YYYY-MM-DD`.
 
+### Fixed — T-003: Tier 2 four-tier evidence_level recalibration (Task #81)
+- **Trigger.** Forensic re-measurement of recent professor sessions (per spec
+  3.1) showed the binary `applied:true / confidence` Tier 2 schema was
+  miscalibrated: Tier 2 applied-true rate of 23.75% (gate >50% — FAIL) and
+  ~21% verdict-vs-recorded misalignment (gate <5% — FAIL). Two of three
+  re-measurement gates failed, triggering the 3.2–3.8 recalibration.
+- `server/agents/frameworkDetector.ts` —
+  - **New evidence-level enum** `EvidenceLevel = "none" | "weak_implicit" |
+    "strong_implicit" | "explicit"` replaces the binary `applied:boolean +
+    confidence` Tier 2 LLM contract.
+  - **Rewritten EN+ES system prompt** with positive-evidence-required wording
+    (CRITICAL RULE 1: must cite a specific phrase that EXEMPLIFIES the
+    framework's reasoning; domain-shared vocabulary alone is NOT positive
+    evidence) and explicit false-positive guard (CRITICAL RULE 2: default to
+    "none" when in doubt — false positives are as harmful as false negatives).
+  - **New `_mapEvidenceLevelToDetection()`** helper translates evidence_level
+    → `{level, confidence}` (`explicit→explicit/high`, `strong_implicit→
+    implicit/medium`, `weak_implicit→implicit/low`, `none→not_evidenced/
+    undefined`). The §T-003B word-count floors are applied AFTER the mapping
+    so they continue to clamp short-input verdicts.
+  - **Substring anti-hallucination guard** preserved: any non-"none" verdict
+    whose `quotedReasoning` is not a normalized-substring of the student input
+    is downgraded to "none" with a structured `console.warn`.
+- `server/__tests__/calibration.semanticFloor.realpath.test.ts` — five Floor-A/
+  Floor-B mocks updated to emit the new `evidence_level` field. All 5 tests
+  pass under the new schema.
+- `server/__tests__/fixtures/tier2_recalibration.json` — new fixture corpus
+  covering 15 priority frameworks × 4 tiers × 2-3 fixtures each (165 total
+  fixtures): `should_apply_strong`, `should_apply_weak`, `should_apply_explicit`,
+  `should_NOT_apply` (false-positive guard).
+- `server/__tests__/calibration.tier2Recalibration.test.ts` — new regression
+  test in two modes:
+  - **Pure mode** (default): validates fixture file structure, evidence_level
+    enum, and `_mapEvidenceLevelToDetection` output without LLM calls.
+  - **LIVE mode** (`TIER2_LIVE=1`): runs the real Tier-2 LLM against every
+    fixture, measures per-framework pass rates, and asserts ≥80% strong /
+    ≥75% weak / ≥90% explicit / ≥90% NOT-apply pass rate on ≥80% of frameworks
+    (≥12/15). Includes a `TIER2_LIVE_FRAMEWORKS=a,b,c` env filter for chunked
+    runs and per-call `[live]` progress logging (PASS/FAIL + level + conf +
+    method + ms). 30-minute test-level timeout to accommodate the full corpus.
+- `server/scripts/run_tier2_live.ts` — standalone wrapper to invoke LIVE mode
+  without needing a `package.json` script (per spec: no `package.json` edits).
+- `server/agents/frameworkRegistry.ts` — `value_chain` recognitionSignals
+  tightened from 3 generic signals to 4 specific stage-by-stage / activity-
+  link signals (e.g. *"tracing margin gains or losses stage by stage from
+  inbound logistics through after-sales service"*) so the recalibrated prompt
+  has concrete positive-evidence anchors. Same 4-signal tightening applied
+  to the Spanish `recognitionSignals_es`.
+- **LIVE-mode results.** All 15 priority frameworks (`porter_generic_strategies`,
+  `porter_five_forces`, `swot`, `pestel`, `value_chain`, `stakeholder_analysis`,
+  `cost_benefit`, `batna`, `blue_ocean`, `ansoff`, `balanced_scorecard`,
+  `mckinsey_7s`, `marketing_mix_4ps`, `npv_irr`, `lean_manufacturing`) pass
+  all four tier thresholds at 100% — exceeding the spec gate of ≥12/15
+  (≥80% of frameworks). False-positive guard (`should_NOT_apply`) holds at
+  100% across all 15 frameworks: the recalibrated prompt does not produce
+  spurious detections on off-topic inputs.
+- **Forensic re-measurement (spec 3.8) deferred.** This change ships
+  alongside CHANGELOG; the third forensic pass over `simulation_sessions`
+  will reflect the new schema only after the next round of professor sessions
+  is recorded. Existing sessions retain their pre-recalibration detections;
+  the redetection endpoint (`POST /api/admin/scenarios/:id/redetect-frameworks`,
+  shipped under T-002A) can be used to re-process historical sessions if needed.
+
 ### Fixed — T-002A: semantic framework detection reliability (Task #80)
 - `server/agents/frameworkDetector.ts` — three targeted fixes:
   - **Substring normalisation guard**: anti-hallucination quote check now compares

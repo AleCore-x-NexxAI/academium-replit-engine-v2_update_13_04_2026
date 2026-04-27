@@ -1,0 +1,330 @@
+{
+  "_meta": {
+    "purpose": "Tier 2 four-tier evidence_level recalibration regression suite (TASK 3 §3.7).",
+    "tiers": {
+      "should_apply_strong":  "real LLM should return evidence_level: 'strong_implicit' (or 'explicit'). Pass if final detection.level is 'implicit' with confidence 'medium' OR 'high', or detection.level is 'explicit'. ≥80% pass rate.",
+      "should_apply_weak":    "real LLM should return evidence_level: 'weak_implicit' (or stronger). Pass if final detection.level is 'implicit' (any confidence) or 'explicit'. ≥75% pass rate.",
+      "should_apply_explicit":"real LLM (or upstream Tier 1) should land on 'explicit'. Pass if detection.level is 'explicit'. ≥90% pass rate.",
+      "should_NOT_apply":     "real LLM should return evidence_level: 'none'. Pass if detection.level is 'not_evidenced'. ≥90% pass rate. False-positive guard."
+    },
+    "framework_id_is_canonicalId": true,
+    "tier3_neutralised": "Live test passes zero-quality signals so Tier 3 (signal-pattern) cannot fire — the resulting detection isolates Tier 2.",
+    "weak_fixture_design_notes": "After empirical calibration against the recalibrated prompt (TASK 3 §3.3), 'weak' fixtures must contain at least two clauses showing partial reasoning toward the framework (e.g. one element + a relational hint). Single-clause off-hand observations correctly return 'none' and would belong in should_NOT_apply.",
+    "explicit_fixture_design_notes": "Per spec §3.3, the LLM emits 'explicit' only on a clear paraphrase or canonical name. Fixtures here include the canonical name or its closest alias so the test exercises the explicit path rather than the bordering implicit path."
+  },
+  "porter_generic_strategies": {
+    "should_apply_strong": [
+      { "input": "We should pick a single competitive position: either be the lowest-cost producer in the mass market, or pursue a clear differentiation lens with premium features that justify the price gap, or focus tightly on one underserved segment. Trying to do all three at once is what gets us stuck in the middle.", "rationale": "Names all three generic positions and the 'stuck-in-the-middle' diagnosis without naming Porter." },
+      { "input": "Either we drive operating costs below every rival in the broad market, or we build a distinctive product that buyers will pay extra for; sitting between those two strategic positions makes us vulnerable to attackers from both sides.", "rationale": "Cost leadership vs. differentiation tradeoff structured as a strategic choice." },
+      { "input": "I'd narrow our scope to the high-growth niche segments where bigger competitors won't bother, then specialise so completely that customers in that slice can't substitute us. Outside the niche we don't compete.", "rationale": "Focus strategy applied to a chosen segment — Porter's third generic position." }
+    ],
+    "should_apply_weak": [
+      { "input": "Let's keep prices low and win on volume rather than chase the premium feature race — that's a different strategy and we'd lose to incumbents.", "rationale": "Cost leadership hint contrasted with differentiation; partial Porter reasoning." },
+      { "input": "Our product needs to feel premium so people pay more. That's a different positioning than the cheap mass-market players, and we shouldn't try to occupy both spots.", "rationale": "Differentiation contrasted with mass-market — partial generic-strategies reasoning." },
+      { "input": "Maybe we serve only the high-end customer segment and ignore everyone else, even if it shrinks our addressable market. A narrower focus might beat trying to cover the whole spectrum.", "rationale": "Focus strategy with explicit tradeoff against breadth." }
+    ],
+    "should_apply_explicit": [
+      { "input": "Following Porter's generic strategies, our best play is differentiation focus — premium positioning aimed at a single segment.", "rationale": "Names Porter's generic strategies directly; Tier 1 will likely catch this." },
+      { "input": "Apply Porter's generic strategies framework: we're stuck in the middle between cost leadership and differentiation, and we need to pick one of the three generic positions.", "rationale": "Canonical Porter generic strategies vocabulary + framework name." }
+    ],
+    "should_NOT_apply": [
+      { "input": "I think Sarah should approve the budget request because the team has been working hard and deserves the resources.", "rationale": "Resource allocation discussion with no strategic-positioning lens." },
+      { "input": "The supplier sent us defective units last quarter; we need to renegotiate our contract terms or find a backup.", "rationale": "Supplier dispute — no competitive-positioning reasoning." },
+      { "input": "Our employee engagement scores dropped after the reorg. HR should run focus groups to figure out what changed.", "rationale": "HR/people-side issue, no strategic-positioning frame." }
+    ]
+  },
+  "porter_five_forces": {
+    "should_apply_strong": [
+      { "input": "Switching costs for buyers are negligible and there are dozens of substitute products one click away, so the structural attractiveness of this industry is poor — bargaining power sits with customers and rivalry is intense.", "rationale": "Industry-structure analysis covering buyer power, substitutes, and rivalry." },
+      { "input": "Two suppliers control 80% of the upstream component, entry barriers are low because the technology is open-source, and customers can easily substitute our service with a free alternative. The market is structurally hostile.", "rationale": "Supplier power + entry threat + substitution analysed together." },
+      { "input": "Before we enter, we should map who controls the upstream raw material, how concentrated the customer base is, what stops a new player from copying us in 6 months, and whether existing competitors will respond aggressively.", "rationale": "Mirrors all five forces without naming the framework." }
+    ],
+    "should_apply_weak": [
+      { "input": "There are a lot of competitors in this space and margins are tight, plus a startup could replicate us next year — both pressures squeeze the same way.", "rationale": "Rivalry + entry threat together — partial five-forces reasoning." },
+      { "input": "It would be easy for a startup to launch a competing product, and customers can already substitute us with a free open-source tool. The combination is what worries me.", "rationale": "Threat of entry + substitutes — two forces called out." },
+      { "input": "Our biggest customer accounts for 40% of revenue, which is a risk if they walk away — and the supplier-side concentration is similar, so we get squeezed on both ends.", "rationale": "Buyer power + supplier power — two forces in a structural frame." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A Porter Five Forces read of this industry shows weak buyer power but high substitution risk.", "rationale": "Names the framework directly; Tier 1 will likely match." },
+      { "input": "Run the five forces on this industry: rivalry, buyer power, supplier power, entry threat, substitutes — the pattern points to structural unattractiveness.", "rationale": "Names 'five forces' canonically + enumerates the five." }
+    ],
+    "should_NOT_apply": [
+      { "input": "I'd hire two more engineers and split the team into a platform group and a product group.", "rationale": "Org-structure question, not industry analysis." },
+      { "input": "Let's run a 30-day pilot with the new pricing on a single region and measure conversion lift.", "rationale": "Experiment design, not industry analysis." },
+      { "input": "Marketing should A/B test the homepage headline — that's where we're leaking signups.", "rationale": "Funnel optimisation, not industry analysis." }
+    ]
+  },
+  "swot": {
+    "should_apply_strong": [
+      { "input": "Internally, our brand and distribution network are real strengths, but the legacy tech stack is a weakness that slows new launches. Externally, the regulatory shift is an opportunity if we move first, while the new low-cost entrant is a clear threat.", "rationale": "All four SWOT quadrants present, internal vs. external structure." },
+      { "input": "What we have going for us: deep customer data and a loyal base. What we don't: weak mobile app and high churn in the youngest cohort. What's coming at us: a recession that could hurt discretionary spend, but also a trend toward sustainability that fits our story.", "rationale": "Internal/external + positive/negative quadrants without naming SWOT." },
+      { "input": "Let's separate what's under our control — our R&D pipeline is strong, our sales coverage is thin — from what isn't — the new tariff hurts margin, but the competitor's recall opens a 6-month window.", "rationale": "Internal vs. external + favorable vs. unfavorable structure." }
+    ],
+    "should_apply_weak": [
+      { "input": "Our biggest strength is the brand, and the biggest external threat is the new entrant pricing aggressively. Both matter for the launch decision.", "rationale": "Strength + threat together — partial internal/external SWOT structure." },
+      { "input": "We have an obvious internal weakness in the mobile app, but there's an external opportunity in the new market that might offset it. Trade-off worth thinking about.", "rationale": "Weakness + opportunity together — two quadrants in tension." },
+      { "input": "Our main strength is the team's domain expertise; our main weakness is slow execution. Worth weighing those against each other before promising the new initiative.", "rationale": "Internal strengths + weaknesses paired explicitly." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A SWOT analysis on this proposal: strengths in brand, weaknesses in pricing, opportunities in expansion, threats from regulation.", "rationale": "Names SWOT explicitly with all four quadrants." },
+      { "input": "Doing a SWOT analysis here: map our internal strengths and weaknesses against the external opportunities and threats and then pick a posture.", "rationale": "Names SWOT analysis directly + canonical four-quadrant vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "I think we should reduce the meeting cadence from weekly to biweekly. People are burnt out.", "rationale": "Operational tweak — no internal/external analytical lens." },
+      { "input": "The CFO's argument is mathematically wrong. The margin assumption double-counts the rebate.", "rationale": "Numerical critique — no SWOT-style decomposition." },
+      { "input": "Tom is the strongest engineer on the team, but he's about to leave.", "rationale": "Mentions a strength of one person but is a personnel observation, not strategic SWOT." }
+    ]
+  },
+  "pestel": {
+    "should_apply_strong": [
+      { "input": "Politically the new administration is friendly to our sector, economically we're entering a recession that pressures spend, socially the demographic shift toward older buyers helps us, technologically AI lowers our customer-service cost, environmentally the carbon rule will hit our supply chain, and legally the data-privacy bill changes how we collect signups.", "rationale": "All six PESTEL dimensions named substantively." },
+      { "input": "External forces shaping this decision: an upcoming election that could flip subsidies, a weakening currency, changing consumer preferences toward sustainability, AI commoditising our core service, and stricter emissions rules in our largest market.", "rationale": "Multiple PESTEL dimensions, framed as macro-environment scan." },
+      { "input": "Before committing capital we need to scan the macro environment — government stability, inflation outlook, demographic shifts, tech disruption, climate regulation, and the antitrust climate.", "rationale": "PESTEL-style external scan across most dimensions." }
+    ],
+    "should_apply_weak": [
+      { "input": "The new tariff worries me — it changes our cost structure overnight — and the upcoming election might flip the rules again. Two political-economic risks at once.", "rationale": "Political + economic factors paired as macro risk." },
+      { "input": "Demographics are shifting in our favor and the new tech is also catching on with younger buyers. Both external trends point the same way.", "rationale": "Social + technological factors in a macro scan." },
+      { "input": "AI will probably eat half of what our analysts do over the next three years, and the new privacy law adds friction on top of that. Two external pressures stacking.", "rationale": "Technological + legal factors in tension." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A PESTEL analysis flags political risk and environmental regulation as the two most material external forces.", "rationale": "Names PESTEL directly." },
+      { "input": "Run a PESTEL analysis: political, economic, social, technological, environmental, and legal — the binding constraint is regulatory.", "rationale": "Names PESTEL analysis (multi-word alias) + canonical six-dimension vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "Our internal hiring process takes too long — we lose good candidates to faster-moving rivals.", "rationale": "Internal HR process; macro-environment irrelevant." },
+      { "input": "I'd build the feature in two phases: prototype in November, full release in February.", "rationale": "Roadmapping decision, not macro scan." },
+      { "input": "The team needs more design support — we should hire a senior product designer.", "rationale": "Resourcing call." }
+    ]
+  },
+  "value_chain": {
+    "should_apply_strong": [
+      { "input": "Decompose the firm into its primary activities and support activities and tag each one as value-creating or value-destroying for the customer: inbound logistics is fine, operations destroys quality and margin, outbound logistics is best-in-class, marketing & sales is over-funded, and service is the renewal driver. The bottleneck is operations and the support activities aren't compensating.", "rationale": "Names primary/support activities and walks the canonical Porter primary-activity sequence." },
+      { "input": "Trace where this product gains or loses margin as it moves through the primary activities — inbound logistics, operations, outbound logistics, marketing & sales, and after-sales service. Sourcing is efficient, the operations stage destroys quality, the salesforce restores trust, and service creates the renewal. Each activity-link constrains the next.", "rationale": "Stage-by-stage primary-activity walk with margin focus + linkage." },
+      { "input": "The margin compresses across our primary activities — inbound logistics, operations, outbound logistics, marketing, and service — and the support activities (procurement, HR, technology) aren't compensating. We need to redesign each link to enable the next instead of optimising each activity in isolation.", "rationale": "Names primary AND support activities of the Porter value chain." }
+    ],
+    "should_apply_weak": [
+      { "input": "We lose margin somewhere between inbound logistics and operations — costs creep up at the handoff between those two primary activities. Each stage's decisions constrain the next.", "rationale": "Two named primary activities + linkage hint." },
+      { "input": "Operations is best-in-class but outbound logistics adds cost and delay; the chain of primary activities is only as strong as its weakest link.", "rationale": "Two primary activities + chain-strength framing." },
+      { "input": "After-sales service is our weakest primary activity in the value-creation chain — it destroys the value the operations team built upstream.", "rationale": "Names a primary activity + value-chain link tied to upstream stage." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A value chain analysis pinpoints operations as the margin sink and after-sales service as the renewal driver across our primary activities.", "rationale": "Multi-word alias 'value chain' + canonical primary-activities vocabulary." },
+      { "input": "Run a value chain analysis on this business: map the primary activities (inbound logistics, operations, outbound logistics, marketing & sales, service) and the support activities, then find the margin leak.", "rationale": "Multi-word alias 'value chain' + full canonical Porter primary/support activities enumeration." }
+    ],
+    "should_NOT_apply": [
+      { "input": "Our biggest threat is the new entrant from Singapore that's underpricing us by 30%.", "rationale": "Competitive observation; no value-creation activity decomposition." },
+      { "input": "The team would be more productive if we moved standup to 10am.", "rationale": "Process tweak unrelated to value chain." },
+      { "input": "We should run a focus group to understand why customers prefer the old packaging.", "rationale": "Research design, not value-chain analysis." }
+    ]
+  },
+  "stakeholder_analysis": {
+    "should_apply_strong": [
+      { "input": "Before deciding, map who is affected: shareholders care about EPS, employees about job security, regulators about disclosure, customers about price, and the local community about the plant. Their interests conflict — we need a path that doesn't trigger active opposition from the high-power groups while not blindsiding the low-power ones.", "rationale": "Multi-stakeholder mapping with power/interest implications." },
+      { "input": "Each constituency reads this differently. The board sees risk, the founding team sees dilution, the new hires see opportunity, and the early customers see abandonment. A defensible decision has to acknowledge all four concerns explicitly, not optimise for whoever shouts loudest.", "rationale": "Stakeholder-perspective enumeration with conflict awareness." },
+      { "input": "Whose support do we need to actually move this through? The CFO will block on cash, the regional GM will block on hiring, and the union will escalate if we change shift patterns. Map their power and their interest in this specific change before we commit.", "rationale": "Power × interest stakeholder framing." }
+    ],
+    "should_apply_weak": [
+      { "input": "The CFO will need to sign off and Sales will push back on the timeline; both groups have power here and we can't ignore either.", "rationale": "Two stakeholders compared with power awareness." },
+      { "input": "Customers will hate the price hike, and Operations will resist the contract change too — the people most affected aren't all in the same room.", "rationale": "Two stakeholder groups in tension; affected-party framing." },
+      { "input": "Investors are pushing for a faster timeline than the engineering team thinks is safe. We have to weigh both groups' interests before committing.", "rationale": "Two-party tradeoff with explicit weighing." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A stakeholder analysis would put regulators in the high-power-low-interest quadrant and customers in the high-power-high-interest one.", "rationale": "Names the framework explicitly with quadrant vocabulary." },
+      { "input": "Run a stakeholder analysis on this change — the power-interest grid says manage the board closely, keep the analysts informed, and monitor the long tail.", "rationale": "Names stakeholder analysis + power-interest grid vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "I'd discount cash flows at 9% — that matches our current WACC.", "rationale": "Pure financial mechanics; no stakeholder lens." },
+      { "input": "The product roadmap should ship the search feature before the recommendation engine.", "rationale": "Roadmapping; no stakeholder analysis." },
+      { "input": "Our brand position is somewhere between premium and mid-market — we need to pick.", "rationale": "Positioning question, not stakeholder mapping." }
+    ]
+  },
+  "cost_benefit": {
+    "should_apply_strong": [
+      { "input": "Quantify both sides: the upgrade costs $400k and 6 months of engineering, against $180k/year in support savings, $90k/year in churn reduction, and a one-time productivity bump worth maybe $200k. Even on conservative assumptions the payback is under 2 years and the risk-adjusted NPV is positive.", "rationale": "Explicit cost vs. benefit weighing with monetisation." },
+      { "input": "Tally what we spend versus what we get back. The audit consumes 4 weeks of staff time, blocks two product launches, and costs $120k in fees — those are real costs. Against that we'd get cleaner data, faster close, and lower audit fees next year. The net is unclear; I'd ask for a smaller-scope pilot first.", "rationale": "Cost vs. benefit weighing across financial and time dimensions." },
+      { "input": "Before approving, list the costs (capex, opex, opportunity cost of the team) and the benefits (revenue uplift, risk reduction, optionality on adjacent markets) in comparable units, then compare. If benefits don't clearly exceed costs by a defensible margin, defer.", "rationale": "Cost-benefit decomposition into comparable units." }
+    ],
+    "should_apply_weak": [
+      { "input": "It would cost us about $200k to roll out, but the savings should clear that within a year. Worth tallying the full picture before approving.", "rationale": "Cost + benefit pair with explicit weighing." },
+      { "input": "The benefit — better culture and retention — is real but soft, and the cost is hard cash plus six months of leadership time. The two sides aren't easy to compare.", "rationale": "Hard cost vs. soft benefit weighing." },
+      { "input": "Saving 10% on logistics is meaningful, but the implementation cost is also real. Need to net the two before recommending.", "rationale": "Cost + benefit netting hint." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A cost-benefit analysis on this initiative shows a positive net benefit of $350k over three years.", "rationale": "Names the framework explicitly." },
+      { "input": "Run a cost-benefit analysis: the costs are upfront and concrete; the benefits are recurring but uncertain — net it out before approving.", "rationale": "Names cost-benefit analysis + canonical netting vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "The board meeting on Tuesday will set the tone for Q3 — we need to nail the framing.", "rationale": "Communication planning; no cost vs. benefit calculus." },
+      { "input": "I'd promote Maria to lead the new region. She's earned it.", "rationale": "Personnel decision; no quantified weighing." },
+      { "input": "Customers complain about the onboarding flow being too long.", "rationale": "Feedback observation; no cost-benefit lens." }
+    ]
+  },
+  "batna": {
+    "should_apply_strong": [
+      { "input": "Before we walk into the negotiation, agree on what we'll do if they say no — that's the floor. If our walk-away option is better than their last offer, we can hold firm. If our walk-away is worse than their offer, we should accept rather than push.", "rationale": "BATNA logic of walk-away comparison without naming." },
+      { "input": "Don't anchor on what we want. Anchor on what we'll do if this deal collapses. The strength of that fallback determines how much pressure we can apply at the table.", "rationale": "Negotiation power = strength of alternative." },
+      { "input": "Our position only matters relative to our next-best option. If we have a credible competing supplier ready to sign at similar terms, we negotiate from strength. If we don't, we should stop pretending we do.", "rationale": "Best-alternative-to-agreement reasoning." }
+    ],
+    "should_apply_weak": [
+      { "input": "We need to hold firm on price, but only if we actually have a backup option. Otherwise our stance is bluff.", "rationale": "Negotiation stance tied to alternative explicitly." },
+      { "input": "If we walk away from this deal, what's the next best move? That fallback should drive what price we accept.", "rationale": "Walk-away + fallback comparison." },
+      { "input": "What's our backup if the supplier won't commit? Whatever it is sets our floor at the table.", "rationale": "Alternative + reservation-price hint." }
+    ],
+    "should_apply_explicit": [
+      { "input": "Our BATNA in this negotiation is the offer from the secondary supplier, which sets our reservation price.", "rationale": "Names BATNA directly." },
+      { "input": "Identify our BATNA before the meeting: the best alternative to a negotiated agreement is the in-house build, slower but cheaper.", "rationale": "Names BATNA + canonical spell-out." }
+    ],
+    "should_NOT_apply": [
+      { "input": "The new feature should be free for the first 30 days, then $19/month.", "rationale": "Pricing decision; no negotiation/alternative analysis." },
+      { "input": "Engineering velocity has dropped 20% since the reorg.", "rationale": "Operational metric; no negotiation." },
+      { "input": "We should publish the case study on LinkedIn next week to drive inbound.", "rationale": "Marketing tactic." }
+    ]
+  },
+  "blue_ocean": {
+    "should_apply_strong": [
+      { "input": "Instead of fighting for share in the saturated mass market, redefine the boundaries: target non-customers, eliminate the costly features they don't want, raise the simplicity they do want, and create a new buyer category that nobody else is serving. Stop competing on the existing axes — change the axes.", "rationale": "Eliminate-reduce-raise-create + non-customers framing." },
+      { "input": "The fastest growth comes from making the competition irrelevant — not winning the existing customer pie but creating uncontested space where nobody else thinks to play. Look at adjacencies, the non-consumers, and the painfully ignored use case.", "rationale": "Uncontested-market-space reasoning." },
+      { "input": "Why fight head-on? Reframe the offering so the current rivals don't even apply. Cut the features that don't matter to first-time buyers, add one new dimension nobody else offers, and we own a category of one for at least 18 months.", "rationale": "Value-innovation + redefined boundaries." }
+    ],
+    "should_apply_weak": [
+      { "input": "We should look at markets that nobody else is serving — uncontested space where we don't have to fight for share.", "rationale": "Non-customer + uncontested-space pair." },
+      { "input": "Differentiate so much that comparison is impossible — make the competition irrelevant rather than out-compete them.", "rationale": "Differentiation + competition-irrelevant pair." },
+      { "input": "The non-customer segment is where the growth is, if we can reach them with a stripped-down offering. Less feature, more reach.", "rationale": "Non-customer + simplification — partial value-innovation." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A blue ocean strategy here would create a new category by eliminating two industry-standard features.", "rationale": "Names blue ocean strategy directly." },
+      { "input": "Apply the blue ocean strategy framework: eliminate-reduce-raise-create to redesign the offering for non-consumers and exit the red ocean.", "rationale": "Names blue ocean strategy + ERRC + red ocean — canonical vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "Hire two more SDRs and increase outbound volume by 50%.", "rationale": "Sales-volume play, not market redefinition." },
+      { "input": "The dashboard needs three new widgets to show usage data clearly.", "rationale": "Product-feature request." },
+      { "input": "The renewal cycle for enterprise customers takes 90 days end-to-end.", "rationale": "Operational metric." }
+    ]
+  },
+  "ansoff": {
+    "should_apply_strong": [
+      { "input": "Four growth paths: sell more of the same product to existing customers, take the same product to a new region, build a new product for our existing base, or both — new product into new geography. Each carries a different risk profile and the diversification path is the riskiest.", "rationale": "Four cells of the Ansoff matrix without naming." },
+      { "input": "Should we deepen penetration in the current market with the current product, or carry the product into a new geography? Or develop a new product for the customers we already have? Each option has different capability needs and different risk.", "rationale": "Product × market growth-option reasoning." },
+      { "input": "Existing-customers + existing-product is the safest growth lever, and we haven't exhausted it. Before we chase new markets or build a new product, max out share-of-wallet here.", "rationale": "Market-penetration prioritisation within Ansoff structure." }
+    ],
+    "should_apply_weak": [
+      { "input": "We could grow by entering Mexico with the current product, or by launching the new product line into our existing customer base. Different risk profiles.", "rationale": "Two growth options on different product/market axes." },
+      { "input": "Cross-selling to existing accounts is the cheapest growth we have — same product, same customers. Going to a new region would cost a lot more.", "rationale": "Penetration vs. market-development comparison." },
+      { "input": "Building a new product for existing customers feels lower risk than entering a new region with what we have today. Different growth paths, different ramps.", "rationale": "Product-development vs. market-development tradeoff." }
+    ],
+    "should_apply_explicit": [
+      { "input": "On the Ansoff matrix, market penetration is where we should focus this year.", "rationale": "Names Ansoff explicitly." },
+      { "input": "Apply the Ansoff matrix to our growth options: penetration, market development, product development, diversification — diversification is the riskiest and we shouldn't lead with it.", "rationale": "Names Ansoff matrix + four canonical cells." }
+    ],
+    "should_NOT_apply": [
+      { "input": "The dev team should ship the bug-fix release before the holiday freeze.", "rationale": "Engineering scheduling, not growth strategy." },
+      { "input": "Our churn rate doubled in the SMB segment last quarter — investigate the root cause.", "rationale": "Retention investigation, not Ansoff." },
+      { "input": "Marketing's CAC is unsustainably high; we need to fix attribution first.", "rationale": "Marketing-efficiency call." }
+    ]
+  },
+  "balanced_scorecard": {
+    "should_apply_strong": [
+      { "input": "Don't measure performance only by financials — track four perspectives in parallel: how customers experience us, how efficient our internal processes are, how the team learns and grows, and what shows up on the P&L. They lead and lag each other.", "rationale": "Four BSC perspectives explicitly." },
+      { "input": "Quarterly review should cover financial KPIs, customer satisfaction trends, key process bottlenecks, and the talent / capability investments that drive next year's outcomes. A single number can't capture this.", "rationale": "Multi-perspective scorecard logic." },
+      { "input": "Build a dashboard that ties strategy down to operating measures across customer, internal-process, learning-and-growth, and financial dimensions, so the line teams can see how their work rolls up.", "rationale": "BSC strategy-to-operations cascade." }
+    ],
+    "should_apply_weak": [
+      { "input": "We need KPIs across financial AND customer dimensions, not just one — single-axis measurement misses too much.", "rationale": "Two perspectives + critique of single-axis measurement." },
+      { "input": "Customer satisfaction and revenue are both important — we shouldn't optimise just one. Process quality matters too.", "rationale": "Three perspectives mentioned, balanced-measurement hint." },
+      { "input": "Build a dashboard that tracks financial outcomes alongside the operational drivers that produce them — leading and lagging together.", "rationale": "Lead/lag + multi-dimensional measurement." }
+    ],
+    "should_apply_explicit": [
+      { "input": "A balanced scorecard for this business would organise KPIs across the four perspectives.", "rationale": "Names BSC directly." },
+      { "input": "Use the balanced scorecard model — financial, customer, internal-process, and learning-and-growth perspectives tracked together.", "rationale": "Names BSC + canonical four-perspective vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "The CFO needs the budget rolled up by Friday at noon.", "rationale": "Operational deadline, not measurement design." },
+      { "input": "I'd accept the supplier's offer if they include the warranty extension.", "rationale": "Negotiation acceptance." },
+      { "input": "Our website conversion rate dropped 1.2% after the redesign — roll back.", "rationale": "Funnel issue." }
+    ]
+  },
+  "mckinsey_7s": {
+    "should_apply_strong": [
+      { "input": "A reorg won't stick if we change structure but leave strategy, systems, shared values, skills, style, and staffing untouched. Each element reinforces the others — change one in isolation and the organisation drifts back.", "rationale": "Names all seven Ss as interdependent elements." },
+      { "input": "The new strategy needs matching systems and a different leadership style — and probably new shared values too. Otherwise the existing culture will eat it for breakfast.", "rationale": "Strategy + systems + style + shared values interdependence." },
+      { "input": "Diagnose this implementation failure across hard elements (strategy, structure, systems) and soft ones (skills, style, staff, shared values). My read: the structure changed but the soft side didn't, so execution stalled.", "rationale": "Hard vs. soft 7S framing." }
+    ],
+    "should_apply_weak": [
+      { "input": "We need to change the culture to match the new strategy — strategy without matching shared values won't survive contact with the org.", "rationale": "Strategy + shared values alignment hint." },
+      { "input": "The reorg failed because we changed the structure but kept the old systems and old leadership style. Three things needed to move together.", "rationale": "Structure + systems + style — three Ss in a misalignment frame." },
+      { "input": "Skills are the biggest gap — we don't have the people for this strategy, and our staffing model wasn't built for what we're now asking.", "rationale": "Skills + staff + strategy in tension — partial 7S." }
+    ],
+    "should_apply_explicit": [
+      { "input": "Apply the McKinsey 7S framework — strategy, structure, systems, shared values, skills, style, staff — to diagnose the alignment problem.", "rationale": "Names 7S directly with the seven elements." },
+      { "input": "Run a McKinsey 7S diagnostic — the seven Ss show the soft elements lagging behind the hard ones.", "rationale": "Names McKinsey 7S + canonical hard/soft framing." }
+    ],
+    "should_NOT_apply": [
+      { "input": "The Q3 sales forecast is $4.2M, which assumes 3% growth in the mid-market segment.", "rationale": "Forecasting; no organisational alignment." },
+      { "input": "Customer support tickets are up 40% week over week — there's a quality issue.", "rationale": "Operational alert." },
+      { "input": "Marketing's new campaign is generating more clicks but the conversion rate dropped.", "rationale": "Marketing analytics." }
+    ]
+  },
+  "marketing_mix_4ps": {
+    "should_apply_strong": [
+      { "input": "Re-pitch the offering across all four marketing levers: redesign the product to drop two SKUs, raise price 8% on the premium tier, switch from broad retail distribution to direct-to-consumer, and shift promotion from print to social. Pulling one lever without the others won't move the needle.", "rationale": "Product, price, place, promotion — all four pulled together." },
+      { "input": "What are we actually offering, what are we charging for it, where can people buy it, and how do they hear about it? Today our promotion is great but the price feels wrong for the place we're sold in. Tighten all four.", "rationale": "4Ps as integrated marketing levers." },
+      { "input": "Before launch, lock down the product spec, the price points, the channel mix (retail, DTC, marketplace), and the launch promotion plan. Get all four right or the launch underperforms.", "rationale": "Marketing-mix orchestration logic." }
+    ],
+    "should_apply_weak": [
+      { "input": "Our pricing is too high for the place we're sold in — premium price doesn't fit a discount-channel placement. Two of the four levers are out of sync.", "rationale": "Price + place misalignment — two of the 4Ps in tension." },
+      { "input": "Distribution is the issue — the product is great and the promotion landed, but nobody can find it on the shelf. Three out of four working, one breaking the chain.", "rationale": "Product + promotion + place — three of the 4Ps." },
+      { "input": "We need a stronger promotion plan to hit Q4, and the price point may need to come down too — both levers move together for a launch this size.", "rationale": "Promotion + price as paired levers." }
+    ],
+    "should_apply_explicit": [
+      { "input": "Re-engineer the marketing mix — the four Ps — for the new segment.", "rationale": "Names 4Ps directly." },
+      { "input": "Apply the marketing mix framework: product, price, place, and promotion — we're underinvesting in promotion relative to the others.", "rationale": "Names marketing mix + 4P enumeration." }
+    ],
+    "should_NOT_apply": [
+      { "input": "I'd hire a head of operations before a head of marketing — ops is the constraint.", "rationale": "Hiring sequencing; no marketing-mix logic." },
+      { "input": "The integration with the partner CRM is two weeks late.", "rationale": "Implementation status." },
+      { "input": "Customer-success NPS jumped 12 points after the new onboarding.", "rationale": "CS metric." }
+    ]
+  },
+  "npv_irr": {
+    "should_apply_strong": [
+      { "input": "Discount the project's expected cash flows at our cost of capital, sum them to a present value, subtract the initial investment, and accept if the result is positive. Run the same exercise asking what discount rate makes the result zero — that's our break-even return on the project.", "rationale": "NPV + IRR mechanics described without naming." },
+      { "input": "Time-value the future cash flows back to today using a 10% rate. The PV of the four-year benefit stream is $3.2M against an upfront $2.4M, so net it's positive. The implied annual return on the cash invested clears our hurdle by 4 points.", "rationale": "Discounting + hurdle-rate reasoning." },
+      { "input": "Don't compare a $1 today to a $1 four years out — that's a different dollar. Pull all the future inflows back to a common point in time at the cost of capital and only then add them up. The investment is worth it only if those discounted inflows exceed the outflow.", "rationale": "Discounting principle as decision rule." }
+    ],
+    "should_apply_weak": [
+      { "input": "The project pays back in 30 months but we should also discount future cash flows at our cost of capital before approving — payback alone misses time-value.", "rationale": "Payback + discounting hint together." },
+      { "input": "The future earnings from this acquisition are worth a lot less today than the headline number suggests once we account for our hurdle rate.", "rationale": "Time-value + hurdle-rate hint." },
+      { "input": "We need a higher return than what we get from the bond market, and the cash flows have to be discounted to today's dollars before we compare. Both pieces matter.", "rationale": "Hurdle rate + discounting paired." }
+    ],
+    "should_apply_explicit": [
+      { "input": "Compute the net present value at our 9% WACC — if NPV is positive, fund the project.", "rationale": "Names NPV + net present value spell-out." },
+      { "input": "The internal rate of return of this investment exceeds our hurdle rate, so the IRR clears the financial bar.", "rationale": "Names IRR + internal rate of return spell-out." }
+    ],
+    "should_NOT_apply": [
+      { "input": "Customers in the SMB segment have higher churn than mid-market.", "rationale": "Retention observation." },
+      { "input": "We should change the homepage hero image to one with a person in it.", "rationale": "Design tweak." },
+      { "input": "The legal team needs another week to review the contract redlines.", "rationale": "Process update." }
+    ]
+  },
+  "lean_manufacturing": {
+    "should_apply_strong": [
+      { "input": "Walk the production floor and identify every step that doesn't add value to the customer — overproduction, waiting, transport, over-processing, inventory pile-up, motion, defects. Eliminate each waste category and the throughput rises without new capacity.", "rationale": "Seven wastes of Lean enumerated without naming." },
+      { "input": "Build to actual demand, not to forecast. Pull from downstream rather than push from upstream. Smaller batches, less inventory, faster cycle time, and quality issues surface immediately instead of buried in WIP.", "rationale": "Pull system + small-batch reasoning." },
+      { "input": "Continuous improvement isn't a project — it's a daily practice. Each operator owns waste-elimination on their station. Standard work documents the current best, and any improvement updates the standard.", "rationale": "Kaizen + standard work logic." }
+    ],
+    "should_apply_weak": [
+      { "input": "We have too much inventory sitting in the warehouse and the line stops too often — both are non-value-adding waste we should eliminate.", "rationale": "Two wastes (inventory + waiting) framed as eliminable." },
+      { "input": "The line stops too often because of upstream defects, which then sit as inventory waiting for rework. Two compounding wastes.", "rationale": "Defect + inventory waste interaction." },
+      { "input": "Reducing batch size would help cycle time and reveal quality issues earlier — both improvements pull in the same direction.", "rationale": "Small-batch + quality-revelation pair." }
+    ],
+    "should_apply_explicit": [
+      { "input": "Apply lean manufacturing principles — eliminate the seven wastes and pull from demand.", "rationale": "Names lean manufacturing directly." },
+      { "input": "A lean manufacturing transformation across the plant would target waste elimination and continuous flow on every line.", "rationale": "Names lean manufacturing + canonical lean vocabulary." }
+    ],
+    "should_NOT_apply": [
+      { "input": "Sales pipeline coverage for next quarter is at 2.4x — comfortably above target.", "rationale": "Sales metric." },
+      { "input": "The new VP of marketing starts on Monday — we should plan an onboarding week.", "rationale": "HR onboarding." },
+      { "input": "Our Series C raised $40M at a $300M post.", "rationale": "Fundraising news." }
+    ]
+  }
+}

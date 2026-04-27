@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { CaseFramework, FrameworkDetection } from "@shared/schema";
 import type { SignalExtractionResult } from "./types";
 import { generateChatCompletion } from "../openai";
@@ -100,12 +101,61 @@ function isTier1Keyword(kw: string): boolean {
   return kw.trim().includes(" ");
 }
 
+/**
+ * Tier 2 four-tier evidence scale (TASK 3 §3.2).
+ *
+ *   "none"            — framework's reasoning pattern is absent.
+ *   "weak_implicit"   — one element of the pattern appears; rest do not.
+ *   "strong_implicit" — multiple elements present; structurally mirrors the framework.
+ *   "explicit"        — the student names the framework or canonical vocabulary
+ *                       (rare in Tier 2 — Tier 1 normally catches this).
+ *
+ * The LLM returns `evidence_level`. The downstream pipeline maps it to
+ * `{ level, confidence }` via `_mapEvidenceLevelToDetection`. The §T-003B
+ * word-count floors are applied AFTER the mapping.
+ */
+export type EvidenceLevel = "none" | "weak_implicit" | "strong_implicit" | "explicit";
+
+/**
+ * Zod schema for the LLM's per-framework verdict (TASK 3 §3.4).
+ * Used by `semanticFrameworkCheck` to fail-loud on malformed LLM output rather
+ * than silently coercing — a malformed verdict surfaces a structured warning
+ * and is treated as `evidence_level: "none"` (the safe default per §3.3 rule 2).
+ */
+const _SemanticVerdictSchema = z.object({
+  framework_id: z.string().min(1),
+  evidence_level: z.enum(["none", "weak_implicit", "strong_implicit", "explicit"]),
+  quotedReasoning: z.string().default(""),
+  explanation: z.string().default(""),
+});
+
 interface SemanticVerdict {
   framework_id: string;
-  applied: boolean;
-  confidence: "high" | "medium" | "low";
+  evidence_level: EvidenceLevel;
   quotedReasoning: string;
   explanation: string;
+}
+
+/**
+ * Map the LLM's four-tier evidence_level to the FrameworkDetection
+ * (level, confidence) pair used downstream. Exported for unit testing only —
+ * not part of the public API.
+ */
+export function _mapEvidenceLevelToDetection(level: string): {
+  level: "explicit" | "implicit" | "not_evidenced";
+  confidence: "high" | "medium" | "low" | undefined;
+} {
+  switch (level) {
+    case "explicit":
+      return { level: "explicit", confidence: "high" };
+    case "strong_implicit":
+      return { level: "implicit", confidence: "medium" };
+    case "weak_implicit":
+      return { level: "implicit", confidence: "low" };
+    case "none":
+    default:
+      return { level: "not_evidenced", confidence: undefined };
+  }
 }
 
 /**
@@ -117,7 +167,7 @@ interface SemanticVerdict {
  * recognitionSignals after registry hydration) are excluded from the LLM call
  * and logged so the gap is visible.
  */
-async function semanticFrameworkCheck(
+export async function semanticFrameworkCheck(
   studentInput: string,
   frameworks: CaseFramework[],
   language: "es" | "en",
@@ -160,26 +210,58 @@ async function semanticFrameworkCheck(
     .join("\n");
 
   const systemPrompt = isEn
-    ? `You determine whether a student's reasoning APPLIES specific analytical frameworks, even when the student does not name them. You judge ONLY conceptual application, not correctness.
+    ? `You determine whether a student's reasoning APPLIES specific analytical frameworks. You do not judge whether the student is correct or wrong — only whether the framework's reasoning pattern shows up in their text. You do not need the student to name the framework.
 
-Rules:
-- "applied: true" only if the student's reasoning structure matches the framework's recognition signals.
-- "quotedReasoning" MUST be an exact substring of the student's input (verbatim, no paraphrase).
-- "explanation" describes which conceptual element of the framework the student exercised. Observation only — never use evaluative language (correct, wrong, should, optimal, best practice).
-- "confidence": high = clear structural match, medium = partial alignment, low = faint resemblance.
-- If unrelated, return applied=false with quotedReasoning="" and a one-line explanation.`
-    : `Determinas si el razonamiento del estudiante APLICA marcos analíticos específicos, incluso cuando el estudiante no los nombra. Juzgas SOLO la aplicación conceptual, no la corrección.
+DECISION SCALE — pick exactly ONE for each framework:
 
-Reglas:
-- "applied: true" solo si la estructura del razonamiento del estudiante coincide con las señales de reconocimiento del marco.
-- "quotedReasoning" DEBE ser una subcadena exacta del input del estudiante (literal, sin paráfrasis).
-- "explanation" describe qué elemento conceptual del marco ejercitó el estudiante. Solo observación — nunca uses lenguaje evaluativo (correcto, incorrecto, debería, óptimo, mejor práctica).
-- "confidence": high = coincidencia estructural clara, medium = alineación parcial, low = parecido tenue.
-- Si no se relaciona, devuelve applied=false con quotedReasoning="" y una explicación de una línea.`;
+- "none": the framework's reasoning pattern is absent. The student may discuss the same problem domain without using this framework's lens. Default to "none" if uncertain.
+
+- "weak_implicit": one element of the framework's pattern appears, but the rest don't, or the alignment is partial enough that it could be coincidence. Use this when the student's reasoning hints at the framework but doesn't anchor on it.
+
+- "strong_implicit": the student's reasoning is clearly structured around this framework's pattern, with multiple elements present, even though they don't name it. A professor reading the response would say "this student is thinking like <framework>." Reserve this for unambiguous structural mirroring.
+
+- "explicit": the student names the framework directly, OR uses canonical framework vocabulary correctly. Most explicit cases are caught upstream (keyword tier); only emit "explicit" when you see a clear paraphrase of the framework's name or terminology that the keyword tier missed.
+
+CRITICAL RULES TO PREVENT MISCALIBRATION:
+
+1. POSITIVE EVIDENCE REQUIRED. To label "weak_implicit" or stronger, you MUST identify a specific phrase or sentence in the student's text that EXEMPLIFIES the framework's reasoning. Domain-shared vocabulary alone (e.g., "competitor" appearing in a Porter-eligible scenario) is NOT positive evidence — Porter's reasoning structure must show up.
+
+2. NO BIAS TOWARD APPLICATION. Default to "none" when in doubt. False positives (saying a student applied a framework they didn't) are as harmful as false negatives. The professor uses this signal to grade — getting it wrong in either direction misrepresents the student.
+
+3. MULTIPLE FRAMEWORKS, INDEPENDENT JUDGMENTS. The student's text may apply zero, one, or several frameworks. Judge each one independently. Do not assume that if one framework applies, others probably do too.
+
+4. quotedReasoning MUST be a verbatim substring of the student's input — no paraphrase, no summary. Empty if evidence_level is "none".
+
+5. explanation describes which conceptual element the student exercised (or, for "none", briefly says why the framework's pattern is absent). Observation only — never use evaluative language ("correct", "should have", "ideal", "missed an opportunity").`
+    : `Determinas si el razonamiento del estudiante APLICA marcos analíticos específicos. No juzgas si el estudiante está en lo correcto o equivocado — solo si el patrón de razonamiento del marco aparece en su texto. No es necesario que el estudiante nombre el marco.
+
+ESCALA DE DECISIÓN — elige exactamente UNA para cada marco:
+
+- "none": el patrón de razonamiento del marco está ausente. El estudiante puede discutir el mismo dominio sin usar la lente de este marco. Por defecto usa "none" cuando haya duda.
+
+- "weak_implicit": aparece un elemento del patrón del marco, pero los demás no, o la alineación es lo suficientemente parcial como para ser coincidencia. Úsalo cuando el razonamiento del estudiante insinúa el marco pero no se ancla en él.
+
+- "strong_implicit": el razonamiento del estudiante está claramente estructurado en torno al patrón de este marco, con varios elementos presentes, aunque no lo nombre. Un profesor que lea la respuesta diría "este estudiante está pensando como <marco>". Reserva esta etiqueta para un reflejo estructural inequívoco.
+
+- "explicit": el estudiante nombra el marco directamente, O usa vocabulario canónico del marco de forma correcta. La mayoría de los casos explícitos los captura el filtro de palabras clave; solo emite "explicit" cuando veas una paráfrasis clara del nombre o terminología del marco que el tier de palabras clave dejó pasar.
+
+REGLAS CRÍTICAS PARA EVITAR MISCALIBRACIÓN:
+
+1. EVIDENCIA POSITIVA OBLIGATORIA. Para etiquetar "weak_implicit" o superior, DEBES identificar una frase u oración específica del texto del estudiante que EJEMPLIFIQUE el razonamiento del marco. El vocabulario compartido del dominio por sí solo (p. ej., "competidor" en un escenario apto para Porter) NO es evidencia positiva — la estructura de razonamiento de Porter debe aparecer.
+
+2. SIN SESGO HACIA LA APLICACIÓN. Por defecto usa "none" cuando haya duda. Los falsos positivos (decir que un estudiante aplicó un marco que no usó) son tan dañinos como los falsos negativos. El profesor usa esta señal para calificar — equivocarse en cualquier dirección tergiversa al estudiante.
+
+3. VARIOS MARCOS, JUICIOS INDEPENDIENTES. El texto del estudiante puede aplicar cero, uno o varios marcos. Juzga cada uno de forma independiente. No asumas que si un marco aplica, los demás probablemente también.
+
+4. quotedReasoning DEBE ser una subcadena literal del input del estudiante — sin paráfrasis, sin resumen. Cadena vacía si evidence_level es "none".
+
+5. explanation describe qué elemento conceptual ejercitó el estudiante (o, para "none", explica brevemente por qué el patrón del marco está ausente). Solo observación — nunca uses lenguaje evaluativo ("correcto", "debería haber", "ideal", "perdió la oportunidad").
+
+NOTA: los valores literales de evidence_level ("none", "weak_implicit", "strong_implicit", "explicit") DEBEN devolverse en inglés tal cual; el parser los compara como cadenas exactas.`;
 
   const userPrompt = isEn
-    ? `Student input:\n"""${studentInput}"""\n\nFrameworks to evaluate:\n${list}\n\nReturn JSON: {"verdicts":[{"framework_id":"...","applied":true|false,"confidence":"high|medium|low","quotedReasoning":"...","explanation":"..."}]}`
-    : `Input del estudiante:\n"""${studentInput}"""\n\nMarcos a evaluar:\n${list}\n\nDevuelve JSON: {"verdicts":[{"framework_id":"...","applied":true|false,"confidence":"high|medium|low","quotedReasoning":"...","explanation":"..."}]}`;
+    ? `Student input:\n"""${studentInput}"""\n\nFrameworks to evaluate:\n${list}\n\nReturn JSON: {\n  "verdicts": [\n    {\n      "framework_id": "<id from the list>",\n      "evidence_level": "none" | "weak_implicit" | "strong_implicit" | "explicit",\n      "quotedReasoning": "<verbatim substring from student input, or '' if evidence_level is none>",\n      "explanation": "<one short sentence — what conceptual element the student exercised, or why the pattern is absent>"\n    }\n    // ...one verdict per framework, in the same order...\n  ]\n}`
+    : `Input del estudiante:\n"""${studentInput}"""\n\nMarcos a evaluar:\n${list}\n\nDevuelve JSON: {\n  "verdicts": [\n    {\n      "framework_id": "<id de la lista>",\n      "evidence_level": "none" | "weak_implicit" | "strong_implicit" | "explicit",\n      "quotedReasoning": "<subcadena literal del input del estudiante, o '' si evidence_level es none>",\n      "explanation": "<una oración corta — qué elemento conceptual ejercitó el estudiante, o por qué el patrón está ausente>"\n    }\n    // ...un veredicto por marco, en el mismo orden...\n  ]\n}`;
 
   const maxTokens = Math.min(1024, 128 + usable.length * 96);
 
@@ -207,37 +289,54 @@ Reglas:
 
   const verdicts: SemanticVerdict[] = [];
   for (const v of parsed.verdicts) {
-    if (!v || typeof v.framework_id !== "string") continue;
-    const fw = usable.find((f) => f.id === v.framework_id);
+    // TASK 3 §3.4: validate the LLM's per-framework verdict against the Zod
+    // schema. A schema violation (missing field, unknown evidence_level, wrong
+    // type) surfaces a structured warning and the verdict is dropped — the
+    // framework will be reported as missing in the post-loop "no verdict
+    // returned" warning, which is the safe default per CRITICAL RULE 2.
+    const validation = _SemanticVerdictSchema.safeParse(v);
+    if (!validation.success) {
+      const fid = typeof v?.framework_id === "string" ? v.framework_id : "<unknown>";
+      const issues = validation.error.issues
+        .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+        .join("; ");
+      console.warn(
+        `[semanticFrameworkCheck] Schema-invalid verdict for framework_id="${fid}" — dropping. issues=[${issues}]`,
+      );
+      continue;
+    }
+    const parsedVerdict = validation.data;
+    const fw = usable.find((f) => f.id === parsedVerdict.framework_id);
     if (!fw) continue;
 
-    const applied = v.applied === true;
-    const confidence: "high" | "medium" | "low" =
-      v.confidence === "high" || v.confidence === "medium" || v.confidence === "low" ? v.confidence : "low";
-    let quoted = typeof v.quotedReasoning === "string" ? v.quotedReasoning.trim() : "";
-    const explanation = sanitizeExplanation(typeof v.explanation === "string" ? v.explanation : "", language);
+    const evidenceLevel: EvidenceLevel = parsedVerdict.evidence_level;
+    const quoted = parsedVerdict.quotedReasoning.trim();
+    const explanation = sanitizeExplanation(parsedVerdict.explanation, language);
 
-    // Anti-hallucination guard: reject the verdict if the (normalised) quote is
-    // not found in the (normalised) student input.  We normalise both sides so
-    // that smart quotes, capitalisation differences, collapsed whitespace, and
-    // trailing punctuation introduced by the LLM do not discard valid verdicts.
-    if (applied) {
-      if (!normalizedIncludes(studentInput, quoted)) {
-        console.warn(
-          `[semanticFrameworkCheck] Rejecting verdict for ${fw.name}: quotedReasoning not found in student input (even after normalisation). quote="${quoted.substring(0, 60)}"`,
-        );
-        verdicts.push({
-          framework_id: fw.id,
-          applied: false,
-          confidence: "low",
-          quotedReasoning: "",
-          explanation,
-        });
-        continue;
-      }
+    // Anti-hallucination guard: any non-"none" verdict must cite a quote that is
+    // a substring of the student's input (after typographic normalisation). When
+    // the quote is missing or hallucinated, downgrade the verdict to "none" so
+    // it falls through to Tier 3 — preserving the same downstream behaviour the
+    // old "applied=false" verdict produced.
+    if (evidenceLevel !== "none" && !normalizedIncludes(studentInput, quoted)) {
+      console.warn(
+        `[semanticFrameworkCheck] Rejecting verdict for ${fw.name}: quotedReasoning not found in student input (even after normalisation). quote="${quoted.substring(0, 60)}"`,
+      );
+      verdicts.push({
+        framework_id: fw.id,
+        evidence_level: "none",
+        quotedReasoning: "",
+        explanation,
+      });
+      continue;
     }
 
-    verdicts.push({ framework_id: fw.id, applied, confidence, quotedReasoning: quoted, explanation });
+    verdicts.push({
+      framework_id: fw.id,
+      evidence_level: evidenceLevel,
+      quotedReasoning: evidenceLevel === "none" ? "" : quoted,
+      explanation,
+    });
   }
 
   // Warn for any usable framework that got no verdict back from the LLM.
@@ -349,28 +448,43 @@ export async function detectFrameworks(
   for (const fw of needsSemantic) {
     const v = semanticById.get(fw.id);
     let semanticFloorRejected = false;
-    if (v && v.applied) {
+
+    // TASK 3 §3.5: map evidence_level → {level, confidence}, then apply
+    // §T-003B word-count floors AFTER the mapping. Verdicts with
+    // evidence_level "none" (whether returned by the LLM or downgraded by
+    // the anti-hallucination guard) fall through to Tier 3.
+    if (v && v.evidence_level !== "none") {
+      const mapped = _mapEvidenceLevelToDetection(v.evidence_level);
+
       if (globalInputWordCount < 10) {
-        console.info(`[frameworkDetector] §T-003B floor: rejected ${fw.name} semantic verdict (input too short, word count=${globalInputWordCount}).`);
+        console.info(
+          `[frameworkDetector] §T-003B floor: rejected ${fw.name} semantic verdict (input too short, word count=${globalInputWordCount}, evidence_level=${v.evidence_level}).`,
+        );
         semanticFloorRejected = true;
       } else {
-        if (globalInputWordCount < 15) {
-          v.confidence = "low";
-          console.info(`[frameworkDetector] §T-003B floor: downgraded ${fw.name} to low confidence (input word count=${globalInputWordCount}).`);
+        // Floor B: downgrade medium → low on short (<15-word) inputs.
+        // weak_implicit (already low) and explicit (high) are unchanged here.
+        let confidence: "high" | "medium" | "low" | undefined = mapped.confidence;
+        if (globalInputWordCount < 15 && confidence === "medium") {
+          confidence = "low";
+          console.info(
+            `[frameworkDetector] §T-003B floor: downgraded ${fw.name} to low confidence (input word count=${globalInputWordCount}, evidence_level=${v.evidence_level}).`,
+          );
         }
 
+        const detectionLevel = mapped.level === "not_evidenced" ? "implicit" : mapped.level;
         detections.push({
           framework_id: fw.id,
           framework_name: fw.name,
-          level: "implicit",
+          level: detectionLevel,
           evidence: language === "en"
-            ? `Student wrote: "${v.quotedReasoning}" — applying ${fw.name} conceptually without naming it.`
-            : `El estudiante escribió: "${v.quotedReasoning}" — aplicando ${fw.name} conceptualmente sin nombrarlo.`,
-          confidence: v.confidence,
+            ? `Student wrote: "${v.quotedReasoning}" — ${detectionLevel === "explicit" ? `using ${fw.name} terminology directly` : `applying ${fw.name} conceptually without naming it`}.`
+            : `El estudiante escribió: "${v.quotedReasoning}" — ${detectionLevel === "explicit" ? `usando terminología del marco ${fw.name} directamente` : `aplicando ${fw.name} conceptualmente sin nombrarlo`}.`,
+          confidence: confidence ?? "low",
           detection_method: "semantic",
           reasoning: v.explanation || (language === "en"
-            ? `Semantic alignment with ${fw.name}.`
-            : `Alineación semántica con ${fw.name}.`),
+            ? `Semantic alignment with ${fw.name} (evidence_level=${v.evidence_level}).`
+            : `Alineación semántica con ${fw.name} (evidence_level=${v.evidence_level}).`),
           canonicalId: fw.canonicalId || fw.id,
         });
         continue;
